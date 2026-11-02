@@ -68,14 +68,59 @@ The rules that follow from tracking by index:
 
 ## Reserved tables
 
-Table names starting with `_actuate_` belong to the runtime (`_actuate_runs`, `_actuate_steps`, `_actuate_events`, `_actuate_migrations`, `_actuate_logs`). Any query or migration whose SQL mentions `_actuate_` is refused with an `ActuatorError`. Don't use the prefix for your own tables.
+Table names starting with `_actuate_` belong to the runtime (`_actuate_runs`, `_actuate_steps`, `_actuate_events`, `_actuate_migrations`, `_actuate_logs`). Any query or migration whose SQL mentions `_actuate_` is refused with an `ActuatorError`. Don't use the prefix for your own tables. On the platform, `_cf_` and `sqlite_` tables are refused too.
+
+## What the platform refuses
+
+On the hosted platform, every statement is checked by the host before it runs, outside your code, so it cannot be bypassed. A single SQLite statement can do unbounded work, so these are refused with a readable error:
+
+| Refused | Examples |
+| --- | --- |
+| Recursive queries | `WITH RECURSIVE ...` |
+| Generator and file functions | `randomblob()`, `zeroblob()`, `printf()`, `format()`, `load_extension()`, `readfile()`, `writefile()` |
+| Database commands | `PRAGMA`, `ATTACH`, `DETACH`, `VACUUM`, `REINDEX` |
+| Runtime and system tables | `_actuate_*`, `_cf_*`, `sqlite_*` |
+
+And these limits apply:
+
+| Limit | Value |
+| --- | --- |
+| Bound parameters | 1 MiB in total per statement |
+| SQL text | 100,000 characters per statement |
+| One step's stored result | 1 MiB |
+| Rows read per pass | 5,000,000 |
+| Rows written per pass | 20,000 |
+| Database size | Your plan's per-actuator limit, checked before each run and again after every statement |
+
+When a statement would push the database over its size limit, the statement fails and the run fails with it. Rows read and written also count toward your plan's [monthly budgets](/docs/reference/limits/#plans).
+
+`actuate dev` and the open-source runtime only enforce the `_actuate_` rule, so test against these limits before you rely on SQL that the platform refuses.
+
+### Instead of a recursive query
+
+Recursive CTEs are mostly used to generate a series: dates, slots, numbers. Generate it in TypeScript inside a step instead:
+
+```ts
+// 30 daily slots from the appointment date, written once.
+await ctx.step.do("create-slots", async () => {
+  const start = Date.parse(input.fromIso);
+  for (let day = 0; day < 30; day++) {
+    const date = new Date(start + day * 86_400_000).toISOString().slice(0, 10);
+    await ctx.db.sql`INSERT OR IGNORE INTO slots (date, status) VALUES (${date}, 'OPEN')`;
+  }
+});
+```
+
+For a series you query often, keep a small numbers table (`CREATE TABLE numbers (n INTEGER PRIMARY KEY)`, filled once in a step) and join against it. For tree-shaped data such as categories or replies, walk the levels in a loop with one query per level, or store each row's full path (`/1/4/9/`) and match with `LIKE '/1/4/%'`.
+
+Build formatted strings (the job of `printf` or `format`) in TypeScript, not in SQL.
 
 ## Browsing and exporting
 
 Your tables are yours to read outside of runs:
 
 - **Dashboard:** the platform has a table browser for each actuator and an **Export .sqlite / .csv** button.
-- **Runtime API:** `GET /tables` lists your tables (runtime tables excluded), and `GET /tables/<name>` returns `{ columns, rows }`. Add `?format=csv` to download CSV, and page with `?limit=` (default 100, at most 10,000) and `?offset=`. See [Runtime HTTP API](/docs/reference/runtime-http/#tables).
+- **Runtime API:** `GET /tables` lists your tables (runtime tables excluded), and `GET /tables/<name>` returns `{ columns, rows }`. Add `?format=csv` to download CSV (text cells starting with `=`, `+`, `-` or `@` are prefixed with `'` so spreadsheets don't run them as formulas), and page with `?limit=` (default 100, at most 10,000) and `?offset=`. See [Runtime HTTP API](/docs/reference/runtime-http/#tables).
 
 ```bash
 curl 'localhost:8787/tables/bookings?format=csv' -o bookings.csv

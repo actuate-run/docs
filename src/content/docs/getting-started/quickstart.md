@@ -129,7 +129,7 @@ curl 'localhost:8787/tables/greetings?format=csv'
 ## 5. Deploy
 
 ```bash
-npx actuate login     # paste an API token from the dashboard's settings
+npx actuate login     # paste a full API token from the dashboard's settings
 npx actuate deploy
 ```
 

@@ -107,6 +107,8 @@ The payload is a `PaymentEvent`:
 
 Check `status`: a provider can report a failed or expired bill under the same key.
 
+ToyyibPay's callbacks are not signed, so Actuate never trusts what the callback says. It re-queries the transaction with your ToyyibPay credentials and builds the event only from that answer: the event key uses the re-queried transaction's reference, and the amount is the re-queried amount. A callback that doesn't match a transaction on your account is rejected.
+
 When you run locally with `actuate dev`, the payment provider is a fake: the bill's `url` points at your actuator's `/events/payment.<referenceId>`, so opening it in a browser "pays" the bill with the payload `{ provider: "dev", status: "paid", referenceId, via: "GET" }`. Messages are printed in the terminal instead of being sent.
 
 ## llm
@@ -149,6 +151,16 @@ export default defineActuator({
 - Entries are exact hostnames (`api.github.com`) or wildcards (`*.example.com`). A wildcard matches subdomains, not the apex: `*.example.com` allows `api.example.com` but not `example.com`.
 - Only `https://` URLs are allowed.
 - Redirects are not followed. A `3xx` comes back as a response for you to inspect.
-- An actuator cannot call its own URL, which stops webhook loops.
+- An actuator cannot call its own URL, which stops webhook loops. Hostnames are compared case-insensitively and without a trailing dot, so `API.Example.com.` is the same host as `api.example.com`.
+- IP addresses (`https://1.2.3.4/`, `https://[::1]/`) are refused when you call them. Use a hostname.
+
+On the platform, `http.allow` is also checked when you deploy. The deploy is refused if the list:
+
+- has more than 20 entries;
+- contains an IP address or anything that isn't a hostname;
+- names the platform itself (`actuate.run` or any subdomain);
+- uses a wildcard that is too broad: a bare or public-suffix wildcard such as `*.com`, `*.co.uk` or `*.com.my`, or a shared-hosting zone where other people's sites live, such as `*.github.io`, `*.pages.dev`, `*.workers.dev`, `*.vercel.app` or `*.amazonaws.com`.
+
+A wildcard must sit under a domain you control: `*.example.com`, or list the exact hosts (`myorg.github.io`).
 
 There is no raw `fetch` in a hosted actuator; `ctx.http` is the way out.

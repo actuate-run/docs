@@ -66,11 +66,16 @@ Each firing starts a run with **the input `{}`**, parsed by your input schema. S
 
 Cron expressions use the standard five fields. On Cloudflare they run in UTC.
 
+On the platform, schedules are checked when you deploy:
+
+- At most 3 schedules per actuator on the Sandbox and 5 on other plans.
+- The plan's shortest interval (1 hour on the Sandbox, 1 minute otherwise) applies to all of an actuator's schedules **together**. Two hourly schedules offset by 30 minutes fire every 30 minutes, so the Sandbox refuses them.
+
 Locally, `actuate dev` registers the schedules. To fire one without waiting, call wrangler's test route: `curl 'localhost:8787/__scheduled?cron=0+1+*+*+*'`.
 
 ## MCP tool calls
 
-On the platform every actuator is also an MCP tool. An agent's tool call is validated against the input schema and starts a run with `trigger.kind = "mcp"`. A retried tool call returns the first call's receipt instead of running twice. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
+On the platform every actuator is also an MCP tool. An agent's tool call is validated against the input schema and starts a run with `trigger.kind = "mcp"`. A retried tool call returns the first call's receipt instead of running twice. Use the streamable HTTP endpoint; legacy SSE sessions are capped per account (Sandbox 2, Maker 5, Agency 20 open at once), and a session over the cap is refused with `429`. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
 
 ## Events are not triggers
 

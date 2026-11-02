@@ -45,7 +45,7 @@ The first time a run reaches `waitForApproval`:
 
 1. The runtime writes a `WAITING_APPROVAL` row to the journal and suspends the run.
 2. It signs two tokens, approve and reject, with HMAC-SHA256. Each token names the run, the step and the decision, and expires with the timeout.
-3. It sends both links to `notify` through the actuator's messaging provider. The links are also attached to the run's log entry `Approval requested for "<step>"`, so you can always find them with `actuate logs <runId>`, in `GET /runs/<runId>` (the entry's `data`), or in the dashboard.
+3. It sends both links to `notify` through the actuator's messaging provider, and logs `Approval requested for "<step>"` with the step and expiry, but not the links.
 
 Replays do not send the links again.
 
@@ -70,8 +70,18 @@ curl -X POST localhost:8787/runs/<runId>/approvals/manager-ok/approve \
 
 Use `/reject` to reject. A step that has already been decided returns `{ "ok": false, "reason": ... }`.
 
+## Getting the links
+
+The links are **never written to run logs**. Anything that can read a run, such as an agent holding a run token, could otherwise approve its own gate. As the owner you get them from:
+
+- the messaging notification sent to `notify`;
+- the dashboard's approval queue;
+- the API, with a full token: `GET /v1/actuators/<name>/runs/<runId>/approvals/<step>/links`. In the open-source runtime it is [`GET /runs/<runId>/approvals/<step>/links`](/docs/reference/runtime-http/#approvals), behind `ACTUATE_TOKEN`.
+
+Each returns `{ approveUrl, rejectUrl, expiresAt }` while the step is waiting.
+
 ## Delivering the links
 
 On the platform, links are delivered by email or by your messaging provider. When you run locally with `actuate dev`, they are printed in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is set, and to the console otherwise.
 
-If delivery fails, the error is written to the run's log and the run keeps waiting; the links attached to the log entry still work.
+If delivery fails, the error is written to the run's log and the run keeps waiting; fetch the links from the dashboard or the links route instead.

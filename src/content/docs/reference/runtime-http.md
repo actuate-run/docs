@@ -11,8 +11,10 @@ All responses are JSON unless noted. Trailing slashes are ignored.
 
 Routes are either **public** or **admin**.
 
-- **Admin** routes require `Authorization: Bearer <ACTUATE_TOKEN>` when `ACTUATE_TOKEN` is set, and return `401 {"error":"unauthorized"}` otherwise. **When `ACTUATE_TOKEN` is unset, admin routes are open**, which is only appropriate for local development.
-- **Public** routes never need the token. `/webhook` has its own optional secret, and `/approve` is protected by the signed token in the link.
+- **Admin** routes require `Authorization: Bearer <ACTUATE_TOKEN>` and return `401 {"error":"unauthorized"}` without it.
+- **Public** routes never need the token. `/webhook` needs its own secret, and `/approve` is protected by the signed token in the link.
+
+The runtime **fails closed**. If `ACTUATE_TOKEN` is not set, every admin route answers `503 {"error":"Set ACTUATE_TOKEN to use the admin API."}`. If `ACTUATE_WEBHOOK_SECRET` is not set, `/webhook` answers `503`. The only exception is `ACTUATE_DEV=1`, which `actuate dev` sets for you: then routes whose secret is unset are open, for local use. Never set `ACTUATE_DEV` in production. Tokens and secrets are compared in constant time.
 
 ## Routes
 
@@ -30,6 +32,7 @@ Routes are either **public** or **admin**.
 | `POST` | [`/runs/:runId/cancel`](#cancel-and-resume) | admin | Cancel a run |
 | `POST` | [`/runs/:runId/resume`](#cancel-and-resume) | admin | Run another pass now |
 | `GET` | [`/approvals`](#approvals) | admin | Pending approvals |
+| `GET` | [`/runs/:runId/approvals/:step/links`](#approvals) | admin | The signed approve and reject links of a waiting step |
 | `POST` | [`/runs/:runId/approvals/:step/approve`](#approvals) | admin | Approve directly |
 | `POST` | [`/runs/:runId/approvals/:step/reject`](#approvals) | admin | Reject directly |
 | `POST`, `GET` | [`/events/:key`](#events) | admin | Post an event |
@@ -82,7 +85,7 @@ Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500
 
 `POST /webhook` starts a run with the JSON body as input and `trigger.kind = "webhook"`. Same validation, responses and `Idempotency-Key` handling as [`POST /run`](#run).
 
-When `ACTUATE_WEBHOOK_SECRET` is set, the request must carry it as the `x-actuate-secret` header or the `secret` query parameter, or it gets `401`. The admin token is not required.
+The request must carry `ACTUATE_WEBHOOK_SECRET` as the `x-actuate-secret` header or the `secret` query parameter, or it gets `401`. If the secret is not set at all, the route answers `503` (except under `ACTUATE_DEV=1`). The admin token is not required.
 
 ## Provider webhooks
 
@@ -159,6 +162,14 @@ The request returns once the first pass ends, so a run that does not wait comes 
 [{ "runId": "run_...", "step": "manager-ok", "message": "Refund RM80 to Aina?", "expiresAt": 1793664000000, "since": 1793577600000 }]
 ```
 
+`GET /runs/:runId/approvals/:step/links` returns the signed links for a step that is waiting for a decision, for an owner who has no messaging channel:
+
+```json
+{ "approveUrl": "https://bot.example.com/approve?token=...", "rejectUrl": "https://bot.example.com/approve?token=...", "expiresAt": 1793664000000 }
+```
+
+It returns `404` if that step is not waiting. The links are never written to run logs, so this route (behind `ACTUATE_TOKEN`) and the messaging notification are the only ways to get them.
+
 `POST /runs/:runId/approvals/:step/approve` (or `/reject`) decides without the signed link. An optional JSON body `{"note": "..."}` is stored in the result's `note`. Returns `{"ok": true, "runId", "step", "approved"}`, or `{"ok": false, "reason"}` if the step is not waiting for a decision.
 
 ## Events
@@ -187,7 +198,7 @@ The response returns after the resumed runs' next pass.
 | --- | --- | --- |
 | `limit` | `100` | 1 to 10,000 rows |
 | `offset` | `0` | Rows to skip |
-| `format` | JSON | `csv` returns a CSV download named `<name>.csv` |
+| `format` | JSON | `csv` returns a CSV download named `<name>.csv`. Text cells that start with `=`, `+`, `-`, `@`, a tab or a carriage return are prefixed with `'`, so a spreadsheet never runs them as formulas |
 
 An unknown table returns `404 {"error":"Unknown table"}`.
 
@@ -196,10 +207,11 @@ An unknown table returns `404 {"error":"Unknown table"}`.
 | Variable | Meaning |
 | --- | --- |
 | `ACTUATE_CONFIG` | JSON object of configuration, validated against the actuator's `config` schema. Default `{}`. Invalid JSON or values set `configError` and fail every run |
-| `ACTUATE_TOKEN` | Bearer token for the admin routes. Unset means open: local development only |
-| `ACTUATE_WEBHOOK_SECRET` | Shared secret for `POST /webhook`, sent as `x-actuate-secret` or `?secret=`. Unset means the webhook is open |
+| `ACTUATE_TOKEN` | Bearer token for the admin routes. Required: unset, admin routes answer `503` |
+| `ACTUATE_WEBHOOK_SECRET` | Shared secret for `POST /webhook`, sent as `x-actuate-secret` or `?secret=`. Required to accept webhooks: unset, `/webhook` answers `503` |
 | `ACTUATE_APPROVAL_SECRET` | HMAC secret for approval links. If unset, one is generated on first start and kept in the Durable Object's storage |
-| `ACTUATE_PUBLIC_URL` | Public origin used in approval links, e.g. `https://bot.example.com`. If unset, the origin of the first request is used and remembered |
+| `ACTUATE_PUBLIC_URL` | Public origin used in approval links and for the self-call check, e.g. `https://bot.example.com`. If unset, the origin of the first request is used and remembered. **Set it in production** |
+| `ACTUATE_DEV` | `1` only for local development (set by `actuate dev`): routes whose secret is unset are served open instead of answering `503` |
 
 Set the secrets with `wrangler secret put` rather than in a config file.
 

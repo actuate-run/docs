@@ -63,13 +63,13 @@ export const ActuatorObject = runtime.ActuatorObject;
 ## 4. Set secrets and deploy
 
 ```bash
-npx wrangler secret put ACTUATE_TOKEN            # bearer token for the admin API
-npx wrangler secret put ACTUATE_WEBHOOK_SECRET   # if you use POST /webhook
+npx wrangler secret put ACTUATE_TOKEN            # required: bearer token for the admin API
+npx wrangler secret put ACTUATE_WEBHOOK_SECRET   # required to accept POST /webhook
 npx wrangler secret put ACTUATE_APPROVAL_SECRET  # optional: generated if unset
 npx wrangler deploy
 ```
 
-**Always set `ACTUATE_TOKEN` in production.** Without it, anyone who knows the URL can start runs, post events and read your tables. The full list of variables is in the [runtime HTTP API reference](/docs/reference/runtime-http/#environment-variables).
+The runtime fails closed: without `ACTUATE_TOKEN` the admin API answers `503`, and without `ACTUATE_WEBHOOK_SECRET` so does `/webhook`. Set `ACTUATE_PUBLIC_URL` (step 3) too, so approval links and the self-call check use your real origin rather than whatever host the first request named. Don't set `ACTUATE_DEV` in production: it opens routes whose secret is missing, and exists only for `actuate dev`. The full list of variables is in the [runtime HTTP API reference](/docs/reference/runtime-http/#environment-variables).
 
 `npx wrangler dev` runs the same thing locally.
 

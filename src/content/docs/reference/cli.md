@@ -45,7 +45,7 @@ Runs the actuator locally on `workerd` (through wrangler) with the same step eng
 - Bundles the file and rebuilds on every save.
 - Serves the [runtime HTTP API](/docs/reference/runtime-http/) at `http://localhost:<port>`.
 - Configuration: `actuate.config.json`, passed as `ACTUATE_CONFIG`.
-- Environment: variables from `.env` and then `.dev.vars` in the project directory. Set `ACTUATE_TOKEN` there to require a bearer token locally; without it the admin routes are open.
+- Environment: variables from `.env` and then `.dev.vars` in the project directory. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally. Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway.
 - Providers: pick real ones in `.dev.vars` (see [`actuate providers`](#actuate-providers)). Anything you don't pick stays local: messages (and approval links) print in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`; open it to "pay". Declared `http` uses your `http.allow` list for real. `ctx.llm` needs `ACTUATE_LLM` set; otherwise calls fail with "no llm provider is configured".
 - Payment webhooks: real payment providers call back to `POST /providers/<kind>/webhook`. Expose your local port with a tunnel (e.g. `cloudflared tunnel --url localhost:8787`) and set `ACTUATE_PUBLIC_URL` to the tunnel URL so callback links point there.
 - Cron schedules are registered. Fire one with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
@@ -139,14 +139,16 @@ Starts a run with the given JSON input (default `{}`) and prints the run record.
 actuate logs [runId] [--local] [--port 8787] [--name <actuator>]
 ```
 
-Without a run ID, lists the 20 most recent runs: ID, status, start time and trigger. With one, prints the run's status, each step in the journal with its status and error, the log lines, and the run's error if it failed. A log line's `data`, such as the approve and reject URLs of an approval, is printed as JSON on the line below it:
+Without a run ID, lists the 20 most recent runs: ID, status, start time and trigger. With one, prints the run's status, each step in the journal with its status and error, the log lines, and the run's error if it failed. A log line's `data` is printed as JSON on the line below it:
 
 ```text
 run_01a1998e44009c41f2e07b3d5a18  WAITING
   step  WAITING_APPROVAL manager-ok
   2026-11-02T00:00:00.000Z  info  Approval requested for "manager-ok"
-        {"approveUrl":"https://.../approve?token=...","rejectUrl":"https://.../approve?token=..."}
+        {"step":"manager-ok","expiresAt":1793664000000}
 ```
+
+Approval links are never in the logs; see [Human approvals](/docs/concepts/approvals/#getting-the-links).
 
 `--local` and `--name` work as for `actuate run`.
 
@@ -156,7 +158,16 @@ run_01a1998e44009c41f2e07b3d5a18  WAITING
 actuate login [--token <token>] [--api <url>]
 ```
 
-Saves an API token for `deploy`, `run` and `logs`. Without `--token` it prompts for one; create it in the dashboard settings. You sign in to the dashboard with Google or another social login; the CLI and agents use API tokens instead. `--api` overrides the API URL (default `https://api.actuate.run`).
+Saves an API token for `deploy`, `run` and `logs`. Without `--token` it prompts for one; create it in the dashboard settings. You sign in to the dashboard with Google or another social login; the CLI and agents use API tokens instead.
+
+There are two kinds of token:
+
+| Token | For | Can |
+| --- | --- | --- |
+| **Run** (the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, deploying, configuration or management |
+| **Full** | The CLI and management | Everything your account can do, including `deploy` and fetching approval links |
+
+`actuate login` needs a **full** token. Give agents run tokens. `--api` overrides the API URL (default `https://api.actuate.run`).
 
 Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`.
 
@@ -164,6 +175,6 @@ Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.c
 
 | Variable | Effect |
 | --- | --- |
-| `ACTUATE_API_TOKEN` | API token. Takes precedence over the saved credentials; useful in CI |
+| `ACTUATE_API_TOKEN` | A full API token. Takes precedence over the saved credentials; useful in CI |
 | `ACTUATE_API_URL` | API URL. Overrides the saved or default URL (`https://api.actuate.run`) |
 | `XDG_CONFIG_HOME` | Where the credentials file is stored |
