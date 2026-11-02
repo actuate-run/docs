@@ -79,9 +79,10 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
   input: I;
   output?: z.ZodType<O>;
   capabilities?: readonly K[];
+  optionalCapabilities?: readonly P[]; // on ctx but possibly undefined; never required to deploy
   http?: { allow: readonly string[] };
   cron?: readonly string[];
-  run(ctx: Context<K>, input: z.output<I>, config: z.output<C>): Promise<O> | O;
+  run(ctx: Context<K, P>, input: z.output<I>, config: z.output<C>): Promise<O> | O;
 }
 ```
 
@@ -228,6 +229,8 @@ interface StepInfo {
   idempotencyKey: string;
   /** 1 on the first try, 2 on the first retry, and so on. */
   attempt: number;
+  /** The host's clock when the step started, epoch ms. Use it instead of Date.now(); tests can control it. */
+  now: number;
 }
 ```
 
@@ -382,6 +385,8 @@ interface MessagingProvider {
 
 interface MessagingSendOptions {
   /** Provider-specific channel override, e.g. "telegram" | "whatsapp" | "email". */
+  /** "html" sends <b>, <i>, <a href>, <code>, <pre> where supported (Telegram, email); other channels get plain text. Default "text". */
+  format?: "text" | "html";
   channel?: string;
   /** Email subject, when the channel is email. */
   subject?: string;

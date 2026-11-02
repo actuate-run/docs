@@ -42,6 +42,7 @@ The free Sandbox plan has no messaging, payment or LLM providers; see [Limits](/
 
 - **Declared, not ambient.** Only declared capabilities appear on `ctx`, in the types and at runtime. An undeclared name in `capabilities` is rejected by `defineActuator`.
 - **Configured before deploy.** On the platform, an actuator whose declared capability has no provider configured is refused at deploy. In the open-source runtime, the first call to an unconfigured capability throws: `ctx.payment is declared but no payment provider is configured`.
+- **Optional when you can do without.** List a capability in `optionalCapabilities` instead and it is on `ctx` but `undefined` when no provider is configured, and never blocks a deploy: `await ctx.step.do("alert", () => ctx.messaging?.send("ops", text))`. `http` cannot be optional.
 - **Only inside steps.** Every provider method call must happen inside `ctx.step.do`. A call outside a step throws an `ActuatorError`, because it would repeat on every [replay](/docs/concepts/steps-and-replay/). Pass the step's `idempotencyKey` to providers that deduplicate.
 
 ## messaging
