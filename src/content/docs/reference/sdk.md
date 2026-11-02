@@ -11,7 +11,9 @@ npm install @actuate/sdk
 import { defineActuator, z, NonRetryableError } from "@actuate/sdk";
 ```
 
-`@actuate/sdk` is ESM-only and has one dependency, Zod 4, which it re-exports as `z`. Use that `z` so your schemas and the SDK agree on the Zod version.
+`@actuate/sdk` is ESM-only and has one dependency, Zod 4.6 or later, which it re-exports as `z`. Use that `z` so your schemas and the SDK agree on the Zod version.
+
+Zod's error messages are English-only in deployed actuators: `actuate deploy` and `actuate dev` drop Zod's other locales from the bundle, so `z.locales.en` works and other locales are `undefined`.
 
 ## Functions
 
@@ -169,7 +171,13 @@ interface Logger {
 }
 ```
 
-Writes to the run's log, shown by `actuate logs <runId>` and the dashboard. Messages longer than 4,000 characters are truncated. Log calls are not journaled: a call outside a step is written again on every pass.
+Writes to the run's log, shown by `actuate logs <runId>` and the dashboard. Lines are stored together at the end of each pass.
+
+- At most 100 lines per pass. After that, one warning line is added and further lines in that pass are dropped.
+- Messages are truncated at 2,000 characters.
+- `data` larger than about 4 KB of JSON is replaced by `{ truncated: "<the first 4,000 characters>" }`.
+
+Log calls are not journaled: a call outside a step is written again on every pass.
 
 ## Steps
 
@@ -192,7 +200,7 @@ interface Step {
 | `do(name, [options,] fn)` | Runs `fn` once per run and stores its JSON result. On replay returns the stored result without calling `fn`. Retries per `options`. [More](/docs/concepts/steps-and-replay/#ctxstepdo) |
 | `sleep([name,] duration)` | Suspends the run for `duration`. Unnamed sleeps are named `sleep#1`, `sleep#2`, … in call order. [More](/docs/concepts/sleeping-and-waiting/#sleep) |
 | `sleepUntil(name, until)` | Suspends until a `Date` or epoch-ms time. Completes immediately if it has passed. [More](/docs/concepts/sleeping-and-waiting/#sleepuntil) |
-| `waitForEvent(name, options)` | Suspends until an event with key `options.event` is posted and resolves to its payload, or resolves to `null` after `options.timeout`. Consumes a buffered event if one arrived first. [More](/docs/concepts/sleeping-and-waiting/#waitforevent) |
+| `waitForEvent(name, options)` | Suspends until an event with key `options.event` is posted and resolves to its payload (never `null`; an empty event is `{}`), or resolves to `null` after `options.timeout`. Consumes a buffered event if one arrived first. [More](/docs/concepts/sleeping-and-waiting/#waitforevent) |
 | `waitForApproval(name, options?)` | Suspends until a person decides through a signed link, or resolves to `null` after the timeout (default 7 days). [More](/docs/concepts/approvals/) |
 
 Rules for every method:
@@ -433,6 +441,25 @@ interface RefundRequest {
 ```
 
 `refund` is optional because not every provider supports it. Call it as `ctx.payment.refund?.(...)`.
+
+### PaymentEvent
+
+```ts
+interface PaymentEvent {
+  provider: string;
+  status: "paid" | "failed" | "expired" | "refunded" | "pending";
+  referenceId: string;
+  billId?: string;
+  amount?: number;
+  currency?: string;
+}
+```
+
+The payload of the `payment.<referenceId>` event a payment provider's webhook delivers:
+
+```ts
+const paid = await ctx.step.waitForEvent<PaymentEvent>("paid", { event: `payment.${bookingId}`, timeout: "1 day" });
+```
 
 ### LlmProvider
 

@@ -44,12 +44,16 @@ Pause until a point in time, given as a `Date` or epoch milliseconds. If that ti
 ## waitForEvent
 
 ```ts
-const payment = await ctx.step.waitForEvent<{ status: string }>("payment", {
+import type { PaymentEvent } from "@actuate/sdk";
+
+const payment = await ctx.step.waitForEvent<PaymentEvent>("payment", {
   event: `payment.${bookingId}`,
   timeout: "2 hours",
 });
 if (payment === null) {
   // timed out
+} else if (payment.status === "paid") {
+  // confirm the booking
 }
 ```
 
@@ -60,14 +64,14 @@ Pause until an event with the key `event` is posted, then resolve to its JSON pa
 | `event` | required | The event key, for example `payment.${bookingId}` |
 | `timeout` | none: wait forever | Give up after this long and resolve to `null` |
 
-**On timeout `waitForEvent` resolves to `null`; it does not throw.** Always handle the `null` case. Because `null` means "timed out", post events with a non-null payload.
+**On timeout `waitForEvent` resolves to `null`; it does not throw.** Always handle the `null` case. An event is never delivered as `null`: an event posted with no body, or a `null` body, arrives as `{}`. So `null` from a wait always means the timeout passed.
 
 ### Posting events
 
 Events are identified only by their key. Make keys specific enough to name one thing, usually by including an ID you created: `payment.${bookingId}`, `reply.${ctx.runId}`.
 
 - **Payment webhooks.** When a payment provider confirms a bill, the webhook is delivered as the event `payment.<referenceId>`, using the `referenceId` you passed to `createBill`. See [Capabilities and providers](/docs/concepts/capabilities/#payment).
-- **Your own systems.** Post to the actuator's events endpoint: `POST /events/<key>` with a JSON body on the [runtime API](/docs/reference/runtime-http/#events). The body is the payload.
+- **Your own systems.** Post to the actuator's events endpoint: `POST /events/<key>` with a JSON body on the [runtime API](/docs/reference/runtime-http/#events). The body is the payload, up to 64 KiB of JSON.
 
 When an event arrives, every step waiting on that key completes with the payload and its run resumes. That includes steps in different runs.
 
@@ -76,6 +80,7 @@ When an event arrives, every step waiting on that key completes with the payload
 An event can arrive before the run reaches its wait, for example when a customer pays within a second of receiving the link. Nothing is lost: an event that no step is waiting for is **buffered**. When a run later reaches `waitForEvent` with that key, it takes the oldest buffered event and continues without suspending.
 
 - Each buffered event is consumed by one wait.
+- An actuator buffers at most 1,000 events. Beyond that, the oldest are dropped.
 - Buffered events that nobody claims are dropped after 7 days.
 - An event that arrives after a wait timed out is buffered like any other, and a later wait on the same key can pick it up. Another reason to make keys specific.
 

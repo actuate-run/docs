@@ -19,6 +19,16 @@ pnpm preview    # serves the built site
 
 `pnpm build` fails if any internal link or `#anchor` is broken (see [`scripts/check-links.mjs`](scripts/check-links.mjs)).
 
+## Look and feel
+
+The site uses the same palette, fonts (Geist and Geist Mono), radii and logo as actuate.run and the dashboard:
+
+- [`src/styles/theme.css`](src/styles/theme.css): colours for light and dark, type, sidebar, tables, buttons;
+- [`ec.config.mjs`](ec.config.mjs): code blocks;
+- [`src/components/`](src/components/): the header wordmark and the links back to actuate.run, the dashboard and GitHub.
+
+Keep headings short and skip subtitles and eyebrow labels.
+
 ## Fix something
 
 Every page has an **Edit page** link at the bottom that opens the file on GitHub.

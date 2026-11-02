@@ -49,7 +49,7 @@ For agent builders the combination is the point: the model decides *that* a refu
 
 ## Hosted and open source
 
-The SDK (`@actuate/sdk`), the step engine (`@actuate/runtime`), the CLI (`@actuate/cli`) and the starter (`create-actuate`) are open source in [github.com/actuate-run/actuate](https://github.com/actuate-run/actuate). `actuate dev` runs the same engine on your machine, and you can [self-host an actuator on workerd](/docs/guides/self-hosting/). The hosted platform adds multi-tenancy, the MCP endpoint, the dashboard, managed providers and quotas.
+The SDK (`@actuate/sdk`), the step engine (`@actuate/runtime`), the CLI (`@actuate/cli`) and the starter (`create-actuate`) are open source in [github.com/actuate-run/actuate](https://github.com/actuate-run/actuate). `actuate dev` runs the same engine on your machine, and you can [self-host an actuator on workerd](/docs/guides/self-hosting/). The hosted platform adds multi-tenancy, the MCP endpoint, the dashboard, managed providers and quotas. You sign in to it with Google or another social login, the CLI and agents authenticate with API tokens, and billing is through Stripe.
 
 ## Next
 

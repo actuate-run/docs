@@ -69,7 +69,7 @@ const res = await ctx.step.do("fetch-rates", { retries: 3, backoff: "10 seconds"
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `retries` | `0` | How many times to retry after the first failure |
+| `retries` | `0` | How many times to retry after the first failure. Capped at 10 |
 | `backoff` | `"1 second"` | Delay before the first retry; doubles on each further retry |
 
 With `retries: 3, backoff: "10 seconds"` the step runs up to four times, waiting 10, 20 and 40 seconds between attempts. Between attempts the run is suspended like a sleep (status `RETRYING`), so a backoff costs nothing.
@@ -128,7 +128,7 @@ const startedAt = await ctx.step.do("started-at", () => new Date().toISOString()
 
 Database reads outside a step are allowed, but if the result decides which branch you take, read it inside a step so every replay sees the same value.
 
-`ctx.log` calls are not journaled. A log line outside a step is written again on each pass; put it inside the step if you want it once.
+`ctx.log` calls are not journaled. A log line outside a step is written again on each pass; put it inside the step if you want it once. A pass keeps at most 100 log lines.
 
 The runtime enforces some of this: provider calls outside `ctx.step.do` throw an `ActuatorError`. [`actuate check`](/docs/reference/cli/#actuate-check) flags the rest before you deploy.
 

@@ -87,7 +87,7 @@ actuate deploy [file] [--no-config] [--dry-run]
 Deploys the actuator to Actuate.
 
 1. Runs `actuate check` and stops if there are errors.
-2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it.
+2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it. Whitespace and syntax are minified but names are kept, so stack traces stay readable, and Zod's non-English locales are left out.
 3. Reads the actuator's metadata: name, description, capabilities, `http.allow`, cron schedules, and the input, config and output schemas as JSON Schema.
 4. Uploads the bundle with `actuate.config.json` as the configuration, unless you pass `--no-config`.
 5. Prints the version number and the actuator's webhook, MCP, OpenAPI and dashboard URLs, plus any warnings from the platform.
@@ -108,7 +108,14 @@ Starts a run with the given JSON input (default `{}`) and prints the run record.
 actuate logs [runId] [--local] [--port 8787] [--name <actuator>]
 ```
 
-Without a run ID, lists the 20 most recent runs: ID, status, start time and trigger. With one, prints the run's status, each step in the journal with its status and error, the log lines, and the run's error if it failed.
+Without a run ID, lists the 20 most recent runs: ID, status, start time and trigger. With one, prints the run's status, each step in the journal with its status and error, the log lines, and the run's error if it failed. A log line's `data`, such as the approve and reject URLs of an approval, is printed as JSON on the line below it:
+
+```text
+run_01a1998e44009c41f2e07b3d5a18  WAITING
+  step  WAITING_APPROVAL manager-ok
+  2026-11-02T00:00:00.000Z  info  Approval requested for "manager-ok"
+        {"approveUrl":"https://.../approve?token=...","rejectUrl":"https://.../approve?token=..."}
+```
 
 `--local` and `--name` work as for `actuate run`.
 
@@ -118,7 +125,7 @@ Without a run ID, lists the 20 most recent runs: ID, status, start time and trig
 actuate login [--token <token>] [--api <url>]
 ```
 
-Saves an API token for `deploy`, `run` and `logs`. Without `--token` it prompts for one; create it in the dashboard settings. `--api` overrides the API URL (default `https://api.actuate.run`).
+Saves an API token for `deploy`, `run` and `logs`. Without `--token` it prompts for one; create it in the dashboard settings. You sign in to the dashboard with Google or another social login; the CLI and agents use API tokens instead. `--api` overrides the API URL (default `https://api.actuate.run`).
 
 Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`.
 

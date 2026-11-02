@@ -34,7 +34,7 @@ A provider is a small adapter that you configure with your own credentials: your
 
 Telegram is the default messaging channel because you can have a working bot with no business verification. WhatsApp is supported from launch and suits a business that already has, or is setting up, its own WhatsApp Business account.
 
-The free Sandbox plan has no messaging or payment providers; see [Limits](/docs/reference/limits/).
+The free Sandbox plan has no providers; see [Limits](/docs/reference/limits/#plans).
 
 ## Rules
 
@@ -85,10 +85,26 @@ const bill = await ctx.step.do("create-bill", () =>
 **Payment webhooks become events.** When the provider reports a payment, it is delivered to the actuator as the event `payment.<referenceId>`, so a run can wait for it:
 
 ```ts
-const paid = await ctx.step.waitForEvent("payment", { event: `payment.${bookingId}`, timeout: "2 hours" });
+import type { PaymentEvent } from "@actuate/sdk";
+
+const paid = await ctx.step.waitForEvent<PaymentEvent>("payment", { event: `payment.${bookingId}`, timeout: "2 hours" });
+if (paid?.status === "paid") {
+  // confirm
+}
 ```
 
-When you run locally with `actuate dev`, the payment provider is a fake: the bill's `url` points at your actuator's `/events/payment.<referenceId>`, so opening it in a browser "pays" the bill. Messages are printed in the terminal instead of being sent.
+The payload is a `PaymentEvent`:
+
+| Field | Meaning |
+| --- | --- |
+| `provider` | Which provider sent it |
+| `status` | `paid`, `failed`, `expired`, `refunded` or `pending` |
+| `referenceId` | The `referenceId` you passed to `createBill` |
+| `billId`, `amount`, `currency` | Present when the provider reports them |
+
+Check `status`: a provider can report a failed or expired bill under the same key.
+
+When you run locally with `actuate dev`, the payment provider is a fake: the bill's `url` points at your actuator's `/events/payment.<referenceId>`, so opening it in a browser "pays" the bill with the payload `{ provider: "dev", status: "paid", referenceId, via: "GET" }`. Messages are printed in the terminal instead of being sent.
 
 ## llm
 

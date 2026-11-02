@@ -45,7 +45,7 @@ The first time a run reaches `waitForApproval`:
 
 1. The runtime writes a `WAITING_APPROVAL` row to the journal and suspends the run.
 2. It signs two tokens, approve and reject, with HMAC-SHA256. Each token names the run, the step and the decision, and expires with the timeout.
-3. It sends both links to `notify` through the actuator's messaging provider. The links are also attached to the run's log entry `Approval requested for "<step>"`, so you can always find them in `GET /runs/<runId>` (the entry's `data`) or the dashboard.
+3. It sends both links to `notify` through the actuator's messaging provider. The links are also attached to the run's log entry `Approval requested for "<step>"`, so you can always find them with `actuate logs <runId>`, in `GET /runs/<runId>` (the entry's `data`), or in the dashboard.
 
 Replays do not send the links again.
 
@@ -59,7 +59,7 @@ Approval decisions cannot be posted as ordinary events: event keys for approvals
 
 ## The approval queue
 
-Every step waiting for a decision is in the approval queue, oldest first. On the platform the dashboard shows it; on the [runtime API](/docs/reference/runtime-http/#approvals) it is `GET /approvals`.
+Every step waiting for a decision is in the approval queue, oldest first, with the `message` you passed to `waitForApproval`. On the platform the dashboard shows it; on the [runtime API](/docs/reference/runtime-http/#approvals) it is `GET /approvals`.
 
 An authenticated operator can also decide without the link, and attach a note:
 

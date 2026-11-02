@@ -1,0 +1,42 @@
+---
+title: Actuate docs
+description: Documentation for Actuate. One TypeScript file becomes a tool your agent can call over MCP.
+template: splash
+editUrl: false
+hero:
+  title: Actuate docs
+  tagline: One TypeScript file becomes a tool your agent can call over MCP.
+  actions:
+    - text: Quickstart
+      link: /docs/getting-started/quickstart/
+    - text: What is an actuator?
+      link: /docs/getting-started/introduction/
+      variant: secondary
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+## Start here
+
+<CardGrid>
+  <LinkCard title="Quickstart" href="/docs/getting-started/quickstart/" description="Create, run and deploy an actuator in five minutes." />
+  <LinkCard title="Your first actuator" href="/docs/getting-started/first-actuator/" description="A booking bot that waits for a payment or sends a reminder." />
+</CardGrid>
+
+## How it works
+
+<CardGrid>
+  <LinkCard title="Steps and replay" href="/docs/concepts/steps-and-replay/" description="Why each step runs once, and the one rule that follows." />
+  <LinkCard title="Sleeping and waiting" href="/docs/concepts/sleeping-and-waiting/" description="Pause for days, or until a webhook arrives, for free." />
+  <LinkCard title="Human approvals" href="/docs/concepts/approvals/" description="Pause a run until a person clicks a signed link." />
+  <LinkCard title="MCP and OpenAPI" href="/docs/concepts/mcp-and-openapi/" description="Every actuator is a tool with validated arguments." />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="SDK API" href="/docs/reference/sdk/" description="Every type and function in @actuate/sdk." />
+  <LinkCard title="CLI" href="/docs/reference/cli/" description="init, dev, check, deploy, run, logs, login." />
+  <LinkCard title="Runtime HTTP API" href="/docs/reference/runtime-http/" description="The routes of the open-source runtime." />
+  <LinkCard title="Limits" href="/docs/reference/limits/" description="CPU, outbound HTTP, plan limits and guards." />
+</CardGrid>

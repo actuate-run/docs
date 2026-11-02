@@ -22,6 +22,7 @@ Routes are either **public** or **admin**.
 | `GET` | [`/approve?token=`](#approve) | public | Approval confirmation page |
 | `POST` | [`/approve`](#approve) | public | Apply an approval decision |
 | `POST` | [`/webhook`](#webhook) | webhook secret | Start a run (trigger `webhook`) |
+| `POST` | [`/providers/:kind/webhook`](#provider-webhooks) | your verifier | A provider webhook, delivered as an event. Only with `providerWebhook` |
 | `GET` | [`/`](#describe) | admin | Describe the actuator |
 | `POST` | [`/run`](#run) | admin | Start a run (trigger `api`) |
 | `GET` | [`/runs`](#runs) | admin | List runs |
@@ -83,6 +84,18 @@ Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500
 
 When `ACTUATE_WEBHOOK_SECRET` is set, the request must carry it as the `x-actuate-secret` header or the `secret` query parameter, or it gets `401`. The admin token is not required.
 
+## Provider webhooks
+
+`POST /providers/:kind/webhook` exists only when you pass a `providerWebhook` function to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#5-providers)). `:kind` is lowercase letters, digits and hyphens, for example `stripe`. Your function verifies the request and returns the event to deliver:
+
+| Your function | Response |
+| --- | --- |
+| Returns `{ event, payload }` | The event is delivered as by [`POST /events/:key`](#events): `{ "event", "resumed", "buffered" }` |
+| Returns `null` | `{ "ignored": true }` |
+| Throws an error named `WebhookVerificationError` | `401 {"error": "<message>"}` |
+
+The route needs no admin token: verification is your function's job.
+
 ## Describe
 
 `GET /` describes the actuator:
@@ -115,12 +128,12 @@ The request returns once the first pass ends, so a run that does not wait comes 
 
 ## Runs
 
-`GET /runs` lists runs, newest first.
+`GET /runs` lists runs, newest first. Run IDs sort by creation time, so the list is ordered by run ID.
 
 | Query | Default | Meaning |
 | --- | --- | --- |
 | `limit` | `50` | 1 to 500 |
-| `before` | none | Only runs created before this epoch-ms time; pass the last `createdAt` to page |
+| `before` | none | Only runs created before this epoch-ms time; pass the last run's `createdAt` to get the next page |
 | `status` | none | Only runs with this status |
 
 ## Get a run
@@ -128,7 +141,7 @@ The request returns once the first pass ends, so a run that does not wait comes 
 `GET /runs/:runId` returns the run record plus:
 
 - `steps`: the journal, in order: `{ name, status, output, wakeAt, event, attempts, error, updatedAt }`;
-- `logs`: up to 500 log lines: `{ ts, level, message, data }`.
+- `logs`: up to 500 log lines, in pass order: `{ ts, level, message, data }`. Each pass keeps at most 100 lines (then one warning line); messages are cut at 2,000 characters, and `data` larger than about 4 KB is replaced by `{ "truncated": "<first 4,000 characters of its JSON>" }`.
 
 `404` if the run does not exist.
 
@@ -143,21 +156,23 @@ The request returns once the first pass ends, so a run that does not wait comes 
 `GET /approvals` lists steps waiting for a decision, oldest first:
 
 ```json
-[{ "runId": "run_...", "step": "manager-ok", "expiresAt": 1793664000000, "since": 1793577600000 }]
+[{ "runId": "run_...", "step": "manager-ok", "message": "Refund RM80 to Aina?", "expiresAt": 1793664000000, "since": 1793577600000 }]
 ```
 
 `POST /runs/:runId/approvals/:step/approve` (or `/reject`) decides without the signed link. An optional JSON body `{"note": "..."}` is stored in the result's `note`. Returns `{"ok": true, "runId", "step", "approved"}`, or `{"ok": false, "reason"}` if the step is not waiting for a decision.
 
 ## Events
 
-`POST /events/:key` posts an event with the JSON body as its payload. Every step waiting on `key` completes with the payload and its run resumes; if none is waiting, the event is buffered for the next wait (for up to 7 days).
+`POST /events/:key` posts an event with the JSON body as its payload, up to 64 KiB of JSON. Every step waiting on `key` completes with the payload and its run resumes; if none is waiting, the event is buffered for the next wait (for up to 7 days).
 
 ```json
 { "resumed": ["run_01a1998e44009c41f2e07b3d5a18"], "buffered": false }
 ```
 
-- A body that is missing or not JSON gives the payload `null`, which is indistinguishable from a timeout to the waiting run. Always send a JSON body.
-- `GET /events/:key` posts the event with the payload `{"via": "GET"}`. It exists so the local fake payment provider's bill links can be opened in a browser.
+- A body that is missing, not JSON, or `null` is delivered as `{}`. An event is never delivered as `null`, so `null` from a wait always means a timeout.
+- A larger payload is refused with `500 {"error":"Event payload is too large."}`.
+- If no step is waiting, the event is buffered. At most 1,000 events are buffered per actuator; beyond that the oldest are dropped.
+- `GET /events/:key` posts the event too, so the local fake payment provider's bill links can be opened in a browser. For `payment.<referenceId>` keys the payload is `{"provider":"dev","status":"paid","referenceId":"<referenceId>","via":"GET"}`; for other keys it is `{"via":"GET"}`.
 - Keys starting with `approval:` are reserved; posting one is refused.
 
 The response returns after the resumed runs' next pass.
@@ -174,7 +189,7 @@ The response returns after the resumed runs' next pass.
 | `offset` | `0` | Rows to skip |
 | `format` | JSON | `csv` returns a CSV download named `<name>.csv` |
 
-An unknown table returns `500` with `Unknown table "<name>"`.
+An unknown table returns `404 {"error":"Unknown table"}`.
 
 ## Environment variables
 

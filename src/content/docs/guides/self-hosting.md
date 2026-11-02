@@ -123,13 +123,55 @@ How the runtime uses providers:
 - A declared capability with no provider throws on first use.
 - If the actuator declares `http`, the runtime builds `ctx.http` from `http.allow` for you (HTTPS only, no redirects, never its own public URL) unless you return your own.
 - Approval links are sent through `messaging` to the `notify` recipient, or printed to the console when either is missing.
-- Payment providers are yours to wire up. For the payment webhook, add a small route in your Worker, in front of `runtime.worker`, that verifies the provider's signature and posts the event `payment.<referenceId>` to `POST /events/:key`.
+- Payment providers are yours to wire up, including their webhooks (below).
+
+### Provider webhooks
+
+Pass `providerWebhook` to serve `POST /providers/:kind/webhook`. Your function receives the kind from the URL, the request and the environment. Verify the request, then return the event to deliver, or `null` to ignore it. Throw an error named `WebhookVerificationError` to answer `401`.
+
+```ts title="entry.ts"
+import { createRuntime, type RuntimeEnv } from "@actuate/runtime/worker";
+import type { PaymentEvent } from "@actuate/sdk";
+import actuator from "./actuator.js";
+
+interface Env extends RuntimeEnv {
+  MYBANK_WEBHOOK_SECRET: string;
+}
+
+class WebhookVerificationError extends Error {
+  override name = "WebhookVerificationError";
+}
+
+const runtime = createRuntime<Env>(actuator, {
+  providerWebhook: async (kind, request, env) => {
+    if (kind !== "mybank") return null;
+    // Use your provider's real signature check here.
+    if (request.headers.get("x-signature") !== env.MYBANK_WEBHOOK_SECRET) {
+      throw new WebhookVerificationError("Bad signature");
+    }
+    const body = (await request.json()) as { reference: string; state: string; amount: number };
+    const payload: PaymentEvent = {
+      provider: "mybank",
+      status: body.state === "PAID" ? "paid" : "failed",
+      referenceId: body.reference,
+      amount: body.amount,
+    };
+    return { event: `payment.${body.reference}`, payload: { ...payload } };
+  },
+});
+export default runtime.worker;
+export const ActuatorObject = runtime.ActuatorObject;
+```
+
+Point the provider at `https://<your origin>/providers/mybank/webhook`. Payment webhooks should deliver `payment.<referenceId>` with a [`PaymentEvent`](/docs/reference/sdk/#paymentevent) payload, so actuators written for the platform work unchanged.
+
+### Configuration
 
 `createRuntime` also takes `config: (env) => unknown` if you want to build the configuration from something other than `ACTUATE_CONFIG`.
 
-## Testing in Node
+## Using the engine directly
 
-The engine also runs in-process on `node:sqlite`, which is handy for unit tests. `RunManager` drives runs, and `executePass` executes your actuator:
+The engine also runs in-process, for example on `node:sqlite`, which is handy for unit tests or for building your own host. `RunManager` drives runs, and `executePass` executes your actuator:
 
 ```ts title="actuator.test.ts"
 import { DatabaseSync } from "node:sqlite";
@@ -163,6 +205,23 @@ console.log(manager.getRun(run.runId)?.status, manager.getSteps(run.runId));
 ```
 
 `consoleMessaging()` prints messages and `fakePayment()` creates bills that are paid by posting `payment.<referenceId>`, the same stand-ins `actuate dev` uses. `deliverEvent(key, payload)`, `decide(token)`, `pendingApprovals()`, `listTables()` and `readTable(name)` cover the rest of the lifecycle. `manager.start` does not validate input; parse it with `actuator.input` first if you want that check in tests.
+
+### Guards
+
+`RunManager` takes options that bound what a run can cost. `createRuntime` uses the defaults; pass these when you build your own host.
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `passLimits.maxWaitMs` | none | Longest sleep or wait. A sleep longer than this fails the run with an `ActuatorError`; an event or approval wait times out at this limit (resolves to `null`), including waits with no timeout |
+| `passLimits.maxRetries` | `10` | Retries a step may ask for. Larger `retries` values are clamped to it |
+| `admitPass(runId)` | none | Called before every pass. Return a time (epoch ms) to defer the pass until then; the run stays `WAITING` and nothing is lost. Return `null` to run now. Use it for budgets |
+| `maxBufferedEvents` | `1000` | Events buffered while nobody waits for them. Beyond this, the oldest are dropped |
+| `maxEventBytes` | `65536` | Largest event payload, in bytes of JSON. Larger events are refused |
+| `maxPasses` | `10000` | Passes per run before the run fails |
+| `maxLogLinesPerPass` | `100` | Log lines kept per pass |
+| `eventBufferTtlMs` | 7 days | Buffered events older than this are deleted when the alarm runs |
+
+`manager.pruneRuns(before, limit = 500)` deletes settled runs (`COMPLETED`, `FAILED`, `CANCELLED`) last updated before `before` (epoch ms), with their steps and logs, and returns how many it removed. Your tables are never touched. Call it on a schedule to keep the journal small.
 
 ## Backups
 
