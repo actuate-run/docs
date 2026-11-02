@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev": "astro dev",
-    "build": "node -e \"require('node:fs').rmSync('node_modules/.astro',{recursive:true,force:true})\" && astro build && node scripts/check-links.mjs",
+    "build": "node -e \"require('node:fs').rmSync('node_modules/.astro',{recursive:true,force:true})\" && astro build && node scripts/llms.mjs && node scripts/check-links.mjs",
     "preview": "astro preview",
     "check-links": "node scripts/check-links.mjs",
     "build:worker": "pnpm build && node scripts/worker-assets.mjs"
