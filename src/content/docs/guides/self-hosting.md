@@ -82,9 +82,26 @@ curl -X POST https://bot.example.com/run \
 
 ## 5. Providers
 
-`createRuntime` takes a `providers` function that receives the Worker's environment and the public URL and returns a client for each capability. Anything you return must implement the [SDK provider interfaces](/docs/reference/sdk/#providers). Keep credentials in secrets and read them from `env`.
+The quickest path is the open-source adapters in `@actuate/providers`. They read the same variables as [`actuate dev`](/docs/reference/cli/#actuate-providers) (set them as Worker secrets), and they verify payment webhooks for you:
 
-A minimal Telegram messaging adapter:
+```ts
+import { createRuntime } from "@actuate/runtime/worker";
+import { parseProviderWebhookFromEnv, providersFromEnv } from "@actuate/providers";
+import actuator from "./actuator";
+
+const runtime = createRuntime(actuator, {
+  providers: (env, publicUrl) => providersFromEnv(env, publicUrl),
+  providerWebhook: (kind, request, env) => parseProviderWebhookFromEnv(env, kind, request),
+});
+export default runtime.worker;
+export const ActuatorObject = runtime.ActuatorObject;
+```
+
+With `ACTUATE_PAYMENT=billplz` (for example), bills carry `https://<your origin>/providers/billplz/webhook` as their callback, and signed callbacks resume the waiting run with a `PaymentEvent`.
+
+You can also write your own. `createRuntime` takes a `providers` function that receives the Worker's environment and the public URL and returns a client for each capability. Anything you return must implement the [SDK provider interfaces](/docs/reference/sdk/#providers). Keep credentials in secrets and read them from `env`.
+
+A minimal hand-written Telegram messaging adapter:
 
 ```ts title="entry.ts"
 import { createRuntime, type RuntimeEnv } from "@actuate/runtime/worker";
@@ -123,7 +140,7 @@ How the runtime uses providers:
 - A declared capability with no provider throws on first use.
 - If the actuator declares `http`, the runtime builds `ctx.http` from `http.allow` for you (HTTPS only, no redirects, never its own public URL) unless you return your own.
 - Approval links are sent through `messaging` to the `notify` recipient, or printed to the console when either is missing.
-- Payment providers are yours to wire up, including their webhooks (below).
+- With `@actuate/providers`, payment webhooks are verified for you; with your own adapters, wire them up as below.
 
 ### Provider webhooks
 

@@ -34,7 +34,9 @@ A provider is a small adapter that you configure with your own credentials: your
 
 Telegram is the default messaging channel because you can have a working bot with no business verification. WhatsApp is supported from launch and suits a business that already has, or is setting up, its own WhatsApp Business account.
 
-The free Sandbox plan has no providers; see [Limits](/docs/reference/limits/#plans).
+The adapters are open source in [`@actuate/providers`](https://github.com/actuate-run/actuate/tree/main/packages/providers), so the same clients run in `actuate dev` and on a self-hosted runtime with your keys from environment variables (see [`actuate providers`](/docs/reference/cli/#actuate-providers)). On the hosted platform you enter credentials in the dashboard; they are encrypted at rest.
+
+The free Sandbox plan has no messaging, payment or LLM providers; see [Limits](/docs/reference/limits/#plans).
 
 ## Rules
 
