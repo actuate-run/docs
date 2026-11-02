@@ -22,6 +22,11 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     width: 24px;
     height: 24px;
     flex: none;
+    border-radius: 5px;
+  }
+  /* The mark is a dark square; a hairline ring keeps it visible on dark headers. */
+  :global([data-theme="dark"]) img {
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.22);
   }
   .wordmark {
     font-weight: 600;
