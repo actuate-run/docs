@@ -1,0 +1,77 @@
+---
+title: Triggers
+description: Runs start from the API, a webhook, a cron schedule or an MCP tool call.
+---
+
+A run starts when something sends the actuator an input. Every trigger validates the input against the actuator's `input` schema before any code runs. `ctx.trigger` tells `run` how it started:
+
+```ts
+if (ctx.trigger.kind === "cron") ctx.log.info(`Scheduled run: ${ctx.trigger.cron}`);
+```
+
+| `ctx.trigger.kind` | Started by |
+| --- | --- |
+| `api` | `POST /run`, `actuate run` |
+| `webhook` | `POST /webhook` |
+| `cron` | A cron schedule; `ctx.trigger.cron` is the expression |
+| `mcp` | An MCP tool call |
+| `manual` | Reserved for runs started by hand |
+
+A request to `/run` or `/webhook` returns after the run's **first pass**: the response is the run record with status `COMPLETED`, `FAILED` or `WAITING`. A run that finishes without waiting returns its output immediately; one that sleeps returns `WAITING` and carries on in the background.
+
+## API
+
+```bash
+curl -X POST "$ACTUATOR_URL/run" \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -H 'Idempotency-Key: order-1042' \
+  -d '{"customerName":"Aina","phone":"+60123456789","appointmentIso":"2026-11-05T09:00:00Z"}'
+```
+
+`$ACTUATOR_URL` is where the actuator is served: `http://localhost:8787` under `actuate dev`, or your own origin when [self-hosting](/docs/guides/self-hosting/). On the platform, the OpenAPI document describes the endpoint. The body is the input. A new run returns `201 Created`; invalid input returns `400` with `{ "error": "Invalid input", "issues": [...] }` and no run is created.
+
+### Idempotency-Key
+
+Send an `Idempotency-Key` header to make retries safe. The first request with a key starts a run; any later request with the same key returns that same run, with `200 OK` instead of `201`, and starts nothing. If the duplicate arrives while the first request is still in its first pass, it waits and returns the result. The key is stored with the run, so it works across hours and days.
+
+Use a key that names the thing you are doing (an order ID, a webhook delivery ID), not a random value per attempt.
+
+`actuate run '<json>'` starts a run through the API from the command line.
+
+## Webhook
+
+`POST /webhook` starts a run with the request body as input, exactly like `/run` but with `trigger.kind = "webhook"`, and it honours `Idempotency-Key` too. `actuate deploy` prints the webhook URL.
+
+Point a third-party webhook at it when the sender's JSON body can be your input. In the open-source runtime the webhook route is protected by a shared secret, sent as the `x-actuate-secret` header or a `?secret=` query parameter; see [Runtime HTTP API](/docs/reference/runtime-http/#webhook).
+
+Payment provider webhooks are different: they do not start runs, they become [events](/docs/concepts/sleeping-and-waiting/#posting-events) named `payment.<referenceId>` that waiting runs resume on.
+
+## Cron
+
+```ts
+export default defineActuator({
+  name: "daily_report",
+  description: "Sends yesterday's bookings to the owner every morning.",
+  input: z.object({ chatId: z.string().default("123456789") }),
+  capabilities: ["messaging"],
+  cron: ["0 1 * * *"], // 01:00 UTC
+  async run(ctx, input) {
+    // ...
+  },
+});
+```
+
+Each firing starts a run with **the input `{}`**, parsed by your input schema. So an actuator with a cron schedule needs an input schema that accepts `{}`: make the fields optional or give them defaults, and keep settings like recipients in `config`. If the schema rejects `{}`, the firing is skipped and an error is logged.
+
+Cron expressions use the standard five fields. On Cloudflare they run in UTC.
+
+Locally, `actuate dev` registers the schedules. To fire one without waiting, call wrangler's test route: `curl 'localhost:8787/__scheduled?cron=0+1+*+*+*'`.
+
+## MCP tool calls
+
+On the platform every actuator is also an MCP tool. An agent's tool call is validated against the input schema and starts a run with `trigger.kind = "mcp"`. A retried tool call returns the first call's receipt instead of running twice. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
+
+## Events are not triggers
+
+`POST /events/<key>` does not start a run. It resumes runs that are already [waiting for that event](/docs/concepts/sleeping-and-waiting/#waitforevent), or buffers it for the next wait.

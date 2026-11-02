@@ -1,0 +1,131 @@
+---
+title: CLI
+description: The actuate command - init, dev, check, deploy, run, logs and login.
+---
+
+The CLI ships as `@actuate/cli` and installs the `actuate` command. Projects created with `npm create actuate` list it as a dev dependency, so run it with `npx actuate` or through the `package.json` scripts (`npm run dev`, `npm run check`, `npm run deploy`). It needs Node.js 20 or later.
+
+:::caution
+Outside a project that has `@actuate/cli` installed, don't run a bare `npx actuate`: the unscoped `actuate` package on npm is an unrelated library. Install the CLI with `npm install -g @actuate/cli`, or use `npx @actuate/cli <command>`.
+:::
+
+```text
+actuate init [dir] [--template <name>]   Create a new actuator project
+actuate dev [file] [--port 8787]         Run locally on workerd
+actuate check [file]                     Lint for replay-safety
+actuate deploy [file] [--no-config]      Deploy to Actuate
+actuate run '<json>' [--local]           Start a run with this input
+actuate logs [runId] [--local]           List recent runs, or show one run
+actuate login [--token <t>] [--api <url>]
+```
+
+`[file]` defaults to `actuator.ts`. `actuate --help` prints the list.
+
+## actuate init
+
+```bash
+actuate init [dir] [--template <name>]
+```
+
+Creates a project in `dir` (default: the current directory), which must be empty apart from `.git`. Without `--template` (`-t`) it writes the built-in `hello` starter; with one, it downloads `actuator.ts`, and `README.md`, `.env.example` and `actuate.config.json` when present, from the folder of that name in [actuate-run/templates](https://github.com/actuate-run/templates).
+
+The project contains `actuator.ts`, `actuate.config.json` (`{}`), `package.json`, `tsconfig.json` and a `.gitignore` that excludes `node_modules/`, `.actuate/`, `.dev.vars` and `.env`.
+
+`npm create actuate [dir] -- [--template <name>] [--ref <git-ref>]` does the same without installing the CLI first. Its default directory is `my-actuator`, and `--ref` picks a branch or tag of the templates repository (default `main`).
+
+## actuate dev
+
+```bash
+actuate dev [file] [--port 8787]
+```
+
+Runs the actuator locally on `workerd` (through wrangler) with the same step engine, a real SQLite-backed Durable Object and real alarms.
+
+- Runs [`actuate check`](#actuate-check) first and prints any problems, without stopping.
+- Bundles the file and rebuilds on every save.
+- Serves the [runtime HTTP API](/docs/reference/runtime-http/) at `http://localhost:<port>`.
+- Configuration: `actuate.config.json`, passed as `ACTUATE_CONFIG`.
+- Environment: variables from `.env` and then `.dev.vars` in the project directory. Set `ACTUATE_TOKEN` there to require a bearer token locally; without it the admin routes are open.
+- Providers: messages (and approval links) are printed in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`; open it to "pay". Declared `http` uses your `http.allow` list for real. There is no local `llm` provider, so calls to `ctx.llm` fail with "no llm provider is configured".
+- Cron schedules are registered. Fire one with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
+- State persists in `.actuate/state` between restarts. Delete the folder to start fresh.
+
+Configuration and environment files are read at startup; restart `actuate dev` after changing them.
+
+## actuate check
+
+```bash
+actuate check [file]
+```
+
+A replay-safety linter. `run` is [replayed from the top](/docs/concepts/steps-and-replay/) after every pause, so side effects and non-determinism must sit inside `ctx.step.do`. `check` parses the file and inspects the `run` function of the object passed to `defineActuator`, flagging these outside a step:
+
+| Rule | Severity | Flags |
+| --- | --- | --- |
+| `no-fetch-outside-step` | error | `fetch()` and `globalThis.fetch()` |
+| `no-provider-outside-step` | error | Calls on `ctx.messaging`, `ctx.payment`, `ctx.llm` or `ctx.http` |
+| `no-nondeterminism-outside-step` | error | `Date.now()`, `new Date()` with no arguments, `Math.random()`, `crypto.randomUUID()`, `performance.now()` |
+| `db-write-outside-step` | warning | `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE` |
+
+Everything inside the function passed as the last argument of `ctx.step.do` counts as inside a step.
+
+```text
+actuator.ts:14:5  error  ctx.messaging.send() must be called inside ctx.step.do.  (no-provider-outside-step)
+actuator.ts:20:5  warn   This write runs again on every replay. Put it inside ctx.step.do.  (db-write-outside-step)
+
+1 error(s), 1 warning(s)
+```
+
+`check` exits with status 1 when there are errors, so you can run it in a pre-commit hook. It is a syntactic check of one file: it does not follow calls into helper functions, and it only recognises SQL written as a string literal. The runtime still enforces the provider rule at run time.
+
+## actuate deploy
+
+```bash
+actuate deploy [file] [--no-config] [--dry-run]
+```
+
+Deploys the actuator to Actuate.
+
+1. Runs `actuate check` and stops if there are errors.
+2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it.
+3. Reads the actuator's metadata: name, description, capabilities, `http.allow`, cron schedules, and the input, config and output schemas as JSON Schema.
+4. Uploads the bundle with `actuate.config.json` as the configuration, unless you pass `--no-config`.
+5. Prints the version number and the actuator's webhook, MCP, OpenAPI and dashboard URLs, plus any warnings from the platform.
+
+`--dry-run` stops after step 3 and prints the metadata without uploading. Requires [`actuate login`](#actuate-login) or `ACTUATE_API_TOKEN`.
+
+## actuate run
+
+```bash
+actuate run '<json>' [--local] [--port 8787] [--name <actuator>]
+```
+
+Starts a run with the given JSON input (default `{}`) and prints the run record. With `--local` it targets `actuate dev` on `localhost:<port>`; otherwise the deployed actuator, whose name is read from `name:` in `actuator.ts` unless you pass `--name`.
+
+## actuate logs
+
+```bash
+actuate logs [runId] [--local] [--port 8787] [--name <actuator>]
+```
+
+Without a run ID, lists the 20 most recent runs: ID, status, start time and trigger. With one, prints the run's status, each step in the journal with its status and error, the log lines, and the run's error if it failed.
+
+`--local` and `--name` work as for `actuate run`.
+
+## actuate login
+
+```bash
+actuate login [--token <token>] [--api <url>]
+```
+
+Saves an API token for `deploy`, `run` and `logs`. Without `--token` it prompts for one; create it in the dashboard settings. `--api` overrides the API URL (default `https://api.actuate.run`).
+
+Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`.
+
+## Environment variables
+
+| Variable | Effect |
+| --- | --- |
+| `ACTUATE_API_TOKEN` | API token. Takes precedence over the saved credentials; useful in CI |
+| `ACTUATE_API_URL` | API URL. Overrides the saved or default URL (`https://api.actuate.run`) |
+| `XDG_CONFIG_HOME` | Where the credentials file is stored |
