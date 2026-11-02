@@ -80,9 +80,9 @@ ANTHROPIC_API_KEY=...
 
 | Capability | Choose with | Providers |
 | --- | --- | --- |
-| `messaging` | `ACTUATE_MESSAGING` | `telegram`, `whatsapp`, `resend` |
+| `messaging` | `ACTUATE_MESSAGING` | `telegram`, `whatsapp`, `slack`, `discord`, `resend` |
 | `payment` | `ACTUATE_PAYMENT` | `stripe`, `toyyibpay`, `billplz`, `chip` |
-| `llm` | `ACTUATE_LLM` | `anthropic`, `openai`, `google` |
+| `llm` | `ACTUATE_LLM` | `anthropic`, `openai`, `google`, `openai-compatible` |
 
 Credential variable names are `<KIND>_<FIELD>`, e.g. `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`. On the hosted platform you set providers in the dashboard instead (Settings → Providers).
 

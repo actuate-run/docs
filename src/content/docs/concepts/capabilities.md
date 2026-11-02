@@ -23,9 +23,9 @@ There are four capabilities:
 
 | Capability | Client | Launch providers | Credentials held by |
 | --- | --- | --- | --- |
-| `messaging` | `ctx.messaging` | Telegram Bot API (default: free, live in two minutes), WhatsApp Cloud API (your own Meta app and WABA), email via Resend or SMTP | You |
+| `messaging` | `ctx.messaging` | Telegram Bot API (default: free, live in two minutes), WhatsApp Cloud API (your own Meta app and WABA), Slack, Discord, email via Resend | You |
 | `payment` | `ctx.payment` | Stripe, Chip, ToyyibPay, Billplz | You |
-| `llm` | `ctx.llm` | Anthropic, OpenAI, Google, with your API key | You |
+| `llm` | `ctx.llm` | Anthropic, OpenAI, Google, or any OpenAI-compatible API (OpenRouter, Groq, Together, DeepSeek, Mistral, Workers AI, a local Ollama), with your API key | You |
 | `http` | `ctx.http` | Outbound `fetch` to domains you allow-list | You, per domain |
 
 ## Bring your own credentials
@@ -53,7 +53,17 @@ await ctx.step.do("notify", () =>
 );
 ```
 
-`send(to, text, options?)` returns `{ id, channel }`. `to` is a phone number, chat ID or email address, depending on the provider. Options:
+`send(to, text, options?)` returns `{ id, channel }`. What `to` means depends on the provider:
+
+| Provider | `to` |
+| --- | --- |
+| Telegram | A chat ID, e.g. `123456789` or `-100123456789` for a group |
+| WhatsApp | A phone number in international format, e.g. `60123456789` |
+| Slack | A channel ID, e.g. `C0123456789` (the bot must be in the channel). With an incoming webhook instead of a bot token, `to` is ignored |
+| Discord | A channel ID. With a channel webhook instead of a bot token, `to` is ignored. Messages are at most 2,000 characters, and never ping `@everyone` or roles |
+| Email (Resend) | An email address |
+
+Slack and Discord suit messages to you or your team: approval requests, alerts, reports. Options:
 
 | Option | Meaning |
 | --- | --- |
@@ -152,6 +162,8 @@ const summary = await ctx.step.do("summarise", async () => {
   return res.text;
 });
 ```
+
+**Any OpenAI-compatible API.** Choose **OpenAI-compatible API** and give its base URL (the part before `/chat/completions`, e.g. `https://openrouter.ai/api/v1`, `https://api.groq.com/openai/v1`), an API key and a default model. That covers OpenRouter, Groq, Together, DeepSeek, Mistral, Fireworks, Cloudflare Workers AI, and a local Ollama or vLLM server under `actuate dev` (`http://localhost:11434/v1`). The base URL must be `https://` (plain `http://` only for `localhost`) and use a hostname, not an IP address.
 
 `complete` takes `model`, `system`, `prompt` or `messages` (`{ role: "user" | "assistant", content }[]`), `maxTokens` and `temperature`, and returns `{ text, model, usage? }`. Because the call is in a step, its answer is stored: replays reuse the same text instead of asking again.
 
