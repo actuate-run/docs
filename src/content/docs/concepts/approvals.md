@@ -72,6 +72,21 @@ curl -X POST localhost:8787/runs/<runId>/approvals/manager-ok/approve \
 
 Use `/reject` to reject. A step that has already been decided returns `{ "ok": false, "reason": ... }`.
 
+## Who decided
+
+Every decision and answer records `via` (`"link"`, `"dashboard"` or `"api"`) and, when known, `by`:
+
+- **Dashboard:** the signed-in account's email.
+- **API:** the account email and the token's name, e.g. `aina@kedai.example (token "ops-cli")`.
+- **Link:** the name the person typed in the optional "Your name" field. Anyone holding the link can type anything there, so treat it as self-reported, not verified identity. If you need verified approvers, decide in the dashboard.
+
+```ts
+const decision = await ctx.step.waitForApproval("manager", { message: "Refund RM 480?", notify: "@shop_manager" });
+await ctx.step.do("audit", () =>
+  ctx.db.sql`INSERT INTO approvals (run_id, approved, by, via) VALUES (${ctx.runId}, ${decision?.approved ?? false}, ${decision?.by ?? null}, ${decision?.via ?? null})`,
+);
+```
+
 ## Getting the links
 
 The links are **never written to run logs**. Anything that can read a run, such as an agent holding a run token, could otherwise approve its own gate. As the owner you get them from:

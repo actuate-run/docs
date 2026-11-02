@@ -303,6 +303,10 @@ interface ApprovalResult {
   at: string;
   /** Optional note typed by the approver (on the approval page or in the dashboard). */
   note?: string;
+  /** Who decided: the signed-in account (dashboard: email; API: email and token name), or the name typed on the link page (self-reported). */
+  by?: string;
+  /** Where it came from. */
+  via?: "link" | "dashboard" | "api";
 }
 ```
 
@@ -333,6 +337,10 @@ interface InputResult {
   text: string;
   /** ISO timestamp of the answer. */
   at: string;
+  /** Who decided: the signed-in account (dashboard: email; API: email and token name), or the name typed on the link page (self-reported). */
+  by?: string;
+  /** Where it came from. */
+  via?: "link" | "dashboard" | "api";
 }
 ```
 
