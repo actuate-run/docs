@@ -29,7 +29,7 @@ curl -X POST "$ACTUATOR_URL/run" \
   -d '{"customerName":"Aina","phone":"+60123456789","appointmentIso":"2026-11-05T09:00:00Z"}'
 ```
 
-`$ACTUATOR_URL` is where the actuator is served: `http://localhost:8787` under `actuate dev`, or your own origin when [self-hosting](/docs/guides/self-hosting/). On the platform, the OpenAPI document describes the endpoint. The body is the input. A new run returns `201 Created`; invalid input returns `400` with `{ "error": "Invalid input", "issues": [...] }` and no run is created.
+`$ACTUATOR_URL` is where the actuator is served: `http://localhost:8787` under `actuate dev`, or your own origin when [self-hosting](/docs/guides/self-hosting/). On the platform, the OpenAPI document describes the endpoint. The body is the input. A new run returns `201 Created`; invalid input returns `400` with `{ "error": "Invalid input", "issues": [...] }` and no run is created. On the platform, the error names each field and what is wrong with it, for example `{ "error": "Invalid input: amount must be at least 1; email is required", "issues": [{ "path": "/amount", "field": "amount", "message": "must be at least 1" }, ...] }`; config saved in the dashboard or at deploy is checked the same way.
 
 ### Idempotency-Key
 
