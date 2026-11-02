@@ -38,6 +38,7 @@ export default defineConfig({
       components: {
         SiteTitle: "./src/components/SiteTitle.astro",
         SocialIcons: "./src/components/SocialIcons.astro",
+        PageTitle: "./src/components/PageTitle.astro",
       },
       editLink: { baseUrl: "https://github.com/actuate-run/docs/edit/main/" },
       lastUpdated: false,

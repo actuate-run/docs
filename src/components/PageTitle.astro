@@ -1,0 +1,174 @@
+---
+// Starlight's page title, plus AI-native page actions for pages that have a Markdown copy
+// (scripts/llms.mjs writes one for every sidebar page): copy the page as Markdown, view it,
+// or open it in Claude or ChatGPT with the Markdown URL in the prompt.
+import Default from "@astrojs/starlight/components/PageTitle.astro";
+import { sidebar } from "../sidebar.mjs";
+
+const id = Astro.locals.starlightRoute.id.replace(/\/$/, "");
+const hasMarkdown = sidebar.some((group) => group.items.includes(id));
+const site = (Astro.site?.toString() ?? "https://actuate.run/").replace(/\/$/, "");
+const mdPath = `/docs/${id}.md`;
+const mdUrl = `${site}${mdPath}`;
+const prompt = `Read ${mdUrl} so I can ask questions about it. It's a page of the Actuate docs (all docs: ${site}/docs/llms.txt).`;
+const claude = `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
+const chatgpt = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(prompt)}`;
+---
+
+<Default />
+{
+  hasMarkdown && (
+    <div class="page-actions" data-page-actions data-md={mdPath}>
+      <button type="button" class="pa-btn" data-copy-page>
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <rect x="5" y="5" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+          <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+        <span data-copy-label>Copy page</span>
+      </button>
+      <details class="pa-menu">
+        <summary class="pa-btn" aria-label="More page actions">
+          <span>Open in</span>
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+        </summary>
+        <ul role="list">
+          <li>
+            <a href={claude} target="_blank" rel="noopener">
+              <strong>Open in Claude</strong>
+              <span>Ask questions about this page</span>
+            </a>
+          </li>
+          <li>
+            <a href={chatgpt} target="_blank" rel="noopener">
+              <strong>Open in ChatGPT</strong>
+              <span>Ask questions about this page</span>
+            </a>
+          </li>
+          <li>
+            <a href={mdPath} target="_blank">
+              <strong>View as Markdown</strong>
+              <span>Plain text for LLMs</span>
+            </a>
+          </li>
+        </ul>
+      </details>
+      <span class="sr-only" role="status" aria-live="polite" data-copy-status />
+    </div>
+  )
+}
+
+<script>
+  for (const root of document.querySelectorAll<HTMLElement>("[data-page-actions]")) {
+    const button = root.querySelector<HTMLButtonElement>("[data-copy-page]")!;
+    const label = root.querySelector<HTMLElement>("[data-copy-label]")!;
+    const status = root.querySelector<HTMLElement>("[data-copy-status]")!;
+    const say = (text: string) => {
+      label.textContent = text;
+      status.textContent = text;
+      setTimeout(() => (label.textContent = "Copy page"), 2000);
+    };
+    button.addEventListener("click", async () => {
+      const text = fetch(root.dataset.md!).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.text();
+      });
+      try {
+        // ClipboardItem with a promise keeps the click's permission while the fetch runs (Safari).
+        if (typeof ClipboardItem !== "undefined" && "write" in navigator.clipboard) {
+          await navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })) })]);
+        } else {
+          await navigator.clipboard.writeText(await text);
+        }
+        say("Copied");
+      } catch {
+        say("Couldn't copy");
+      }
+    });
+    // Close the menu on outside click or Escape.
+    const menu = root.querySelector<HTMLDetailsElement>(".pa-menu")!;
+    document.addEventListener("click", (e) => {
+      if (menu.open && !menu.contains(e.target as Node)) menu.open = false;
+    });
+    menu.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && menu.open) {
+        menu.open = false;
+        menu.querySelector("summary")?.focus();
+      }
+    });
+  }
+</script>
+
+<style>
+  .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    position: relative;
+  }
+  .pa-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.4rem;
+    background: var(--sl-color-bg);
+    color: var(--sl-color-gray-2);
+    font: inherit;
+    font-size: var(--sl-text-sm);
+    line-height: 1.4;
+    cursor: pointer;
+    list-style: none;
+  }
+  .pa-btn::-webkit-details-marker {
+    display: none;
+  }
+  .pa-btn:hover {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
+  }
+  .pa-btn:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+  .pa-menu {
+    position: relative;
+  }
+  .pa-menu ul {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    min-width: 15rem;
+    margin: 0;
+    padding: 0.3rem;
+    list-style: none;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background: var(--sl-color-black);
+    box-shadow: var(--sl-shadow-md);
+  }
+  .pa-menu li {
+    margin: 0;
+  }
+  .pa-menu a {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.35rem;
+    text-decoration: none;
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-sm);
+  }
+  .pa-menu a span {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-xs);
+  }
+  .pa-menu a:hover,
+  .pa-menu a:focus-visible {
+    background: var(--sl-color-gray-6);
+  }
+</style>
