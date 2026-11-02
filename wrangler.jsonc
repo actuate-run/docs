@@ -1,0 +1,16 @@
+// The docs, served at actuate.run/docs through the site Worker's service binding (no route of
+// its own). Built and deployed by Workers Builds:
+//   build:  pnpm build:worker
+//   deploy: npx wrangler deploy --env <staging|production>
+// Static assets only: /docs redirects to /docs/, and unknown pages get docs/404.html.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "actuate-docs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "assets": { "directory": "./dist-worker", "not_found_handling": "404-page", "html_handling": "auto-trailing-slash" },
+  "env": {
+    "staging": { "name": "actuate-docs-staging", "workers_dev": false },
+    "production": { "name": "actuate-docs", "workers_dev": false }
+  }
+}

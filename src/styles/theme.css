@@ -1,0 +1,344 @@
+/*
+ * Actuate theme for Starlight: the same palette, type and radii as
+ * actuate.run and the dashboard. Dark is Starlight's base (:root); light is
+ * :root[data-theme="light"]. "Auto" follows prefers-color-scheme.
+ */
+
+:root {
+  /* Product palette (dark) */
+  --a-bg: #0e0e0d;
+  --a-bg-raised: #161615;
+  --a-bg-sunk: #121211;
+  --a-fg: #f1f0ec;
+  --a-fg-muted: #b3b1a9;
+  --a-fg-faint: #9a988f;
+  --a-line: #2a2926;
+  --a-line-strong: #3a3935;
+  --a-accent: #fb8a4c;
+  --a-accent-strong: #fdba8c;
+  --a-accent-soft: #2a1a10;
+  --a-code-bg: #131312;
+  --a-radius: 12px;
+  --a-radius-sm: 8px;
+  --a-radius-xs: 5px;
+
+  --sl-font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sl-font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --sl-color-white: var(--a-fg);
+  --sl-color-gray-1: #dddbd4;
+  --sl-color-gray-2: var(--a-fg-muted);
+  --sl-color-gray-3: var(--a-fg-faint);
+  --sl-color-gray-4: #6b6a63;
+  --sl-color-gray-5: var(--a-line-strong);
+  --sl-color-gray-6: var(--a-line);
+  --sl-color-gray-7: var(--a-bg-raised);
+  --sl-color-black: var(--a-bg);
+
+  --sl-color-accent-low: var(--a-accent-soft);
+  --sl-color-accent: var(--a-accent);
+  --sl-color-accent-high: var(--a-accent-strong);
+
+  --sl-color-text: var(--sl-color-gray-1);
+  --sl-color-text-accent: var(--a-accent);
+  --sl-color-text-invert: var(--a-bg);
+  --sl-color-bg: var(--a-bg);
+  --sl-color-bg-nav: color-mix(in srgb, var(--a-bg) 85%, transparent);
+  --sl-color-bg-sidebar: var(--a-bg);
+  --sl-color-bg-inline-code: var(--a-bg-sunk);
+  --sl-color-bg-accent: var(--a-accent);
+  --sl-color-hairline-light: var(--a-line);
+  --sl-color-hairline: var(--a-line);
+  --sl-color-hairline-shade: var(--a-line);
+
+
+  /* Status colours for asides, from the product palette. */
+  --sl-color-orange-low: var(--a-accent-soft);
+  --sl-color-orange: var(--a-accent);
+  --sl-color-orange-high: var(--a-accent-strong);
+  --sl-color-blue-low: #14213a;
+  --sl-color-blue: #7fb0ff;
+  --sl-color-blue-high: #bcd5ff;
+  --sl-color-red-low: #2d1414;
+  --sl-color-red: #f87171;
+  --sl-color-red-high: #fca5a5;
+  --sl-color-green-low: #0f2a1a;
+  --sl-color-green: #4ade80;
+  --sl-color-green-high: #a7f3c0;
+  --sl-color-purple-low: #171a33;
+  --sl-color-purple: #b4b8ff;
+  --sl-color-purple-high: #d6d8ff;
+
+  --sl-nav-height: 60px;
+  --sl-line-height: 1.7;
+  --sl-line-height-headings: 1.15;
+}
+
+:root[data-theme="light"] {
+  --a-bg: #fafaf8;
+  --a-bg-raised: #ffffff;
+  --a-bg-sunk: #f2f1ed;
+  --a-fg: #141413;
+  --a-fg-muted: #57564f;
+  --a-fg-faint: #6b6a63;
+  --a-line: #e4e2dc;
+  --a-line-strong: #cfccc3;
+  --a-accent: #c2410c;
+  --a-accent-strong: #9a3412;
+  --a-accent-soft: #fdeee4;
+  --a-code-bg: #f5f4f0;
+
+  --sl-color-white: var(--a-fg);
+  --sl-color-gray-1: #2b2a27;
+  --sl-color-gray-2: var(--a-fg-muted);
+  --sl-color-gray-3: var(--a-fg-faint);
+  --sl-color-gray-4: #9a988f;
+  --sl-color-gray-5: var(--a-line-strong);
+  --sl-color-gray-6: var(--a-line);
+  --sl-color-gray-7: var(--a-bg-sunk);
+  --sl-color-black: var(--a-bg);
+
+  --sl-color-accent-low: var(--a-accent-soft);
+  --sl-color-accent: var(--a-accent);
+  --sl-color-accent-high: var(--a-accent-strong);
+
+  --sl-color-text: var(--sl-color-gray-1);
+  --sl-color-text-accent: var(--a-accent);
+  --sl-color-text-invert: var(--a-bg);
+  --sl-color-bg-nav: color-mix(in srgb, var(--a-bg) 85%, transparent);
+  --sl-color-bg-sidebar: var(--a-bg);
+  --sl-color-bg-inline-code: var(--a-bg-sunk);
+  --sl-color-bg-accent: var(--a-accent);
+  --sl-color-hairline-light: var(--a-line);
+  --sl-color-hairline: var(--a-line);
+  --sl-color-hairline-shade: var(--a-line);
+
+  --sl-color-orange-low: var(--a-accent-soft);
+  --sl-color-orange: var(--a-accent);
+  --sl-color-orange-high: var(--a-accent-strong);
+  --sl-color-blue-low: #e6effc;
+  --sl-color-blue: #1d5fc4;
+  --sl-color-blue-high: #174c9c;
+  --sl-color-red-low: #fdecec;
+  --sl-color-red: #c42b2b;
+  --sl-color-red-high: #9b2020;
+  --sl-color-green-low: #e7f6ec;
+  --sl-color-green: #15803d;
+  --sl-color-green-high: #11652f;
+  --sl-color-purple-low: #eef0fa;
+  --sl-color-purple: #4b4fa8;
+  --sl-color-purple-high: #3b3f88;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--a-accent-soft);
+}
+
+:focus-visible {
+  outline-color: var(--a-accent);
+}
+
+/* Header: translucent and blurred, like the landing page. */
+header.header {
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom-color: var(--a-line);
+}
+
+/* Headings: tight, 600, as on the site. */
+.sl-markdown-content :is(h1, h2, h3, h4, h5),
+h1#_top,
+.hero h1 {
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  color: var(--sl-color-white);
+  text-wrap: balance;
+}
+h1#_top {
+  font-size: clamp(2rem, 4vw, 2.5rem);
+}
+
+/* Links: accent, underlined only in prose. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--a-accent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  color: var(--a-accent-strong);
+}
+
+/* Inline code. */
+.sl-markdown-content :not(pre) > code {
+  background: var(--a-bg-sunk);
+  border: 1px solid var(--a-line);
+  border-radius: var(--a-radius-xs);
+  padding: 0.05em 0.35em;
+  font-size: 0.86em;
+  overflow-wrap: anywhere;
+}
+
+/* Tables: hairlines and a sunk header row, like the dashboard. */
+.sl-markdown-content table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--a-line);
+  border-radius: var(--a-radius);
+  width: fit-content;
+  max-width: 100%;
+  font-size: var(--sl-text-sm);
+}
+.sl-markdown-content :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid var(--a-line);
+  padding: 0.55rem 0.8rem;
+}
+.sl-markdown-content tr:last-child td {
+  border-bottom: 0;
+}
+.sl-markdown-content th {
+  background: var(--a-bg-sunk);
+  color: var(--a-fg-muted);
+  font-weight: 500;
+}
+
+/* Sidebar: muted links, current page in the accent's soft tint. */
+.sidebar-content {
+  --sl-sidebar-item-padding-inline: 0.6rem;
+}
+.sidebar-content a {
+  color: var(--a-fg-muted);
+  border-radius: var(--a-radius-sm);
+}
+.sidebar-content a:hover {
+  color: var(--a-fg);
+}
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:hover,
+.sidebar-content a[aria-current="page"]:focus {
+  background: var(--a-accent-soft);
+  color: var(--a-accent);
+  font-weight: 500;
+}
+.sidebar-content .group-label .large,
+.sidebar-content summary .large {
+  font-size: var(--sl-text-sm);
+  font-weight: 600;
+  color: var(--a-fg);
+}
+
+/* Table of contents. */
+starlight-toc a[aria-current="true"],
+starlight-toc a[aria-current="true"]:hover {
+  color: var(--a-accent);
+}
+
+/* Buttons: the site's .btn and .btn.primary. */
+.sl-link-button {
+  border-radius: 10px;
+  font-weight: 500;
+  border: 1px solid var(--a-line-strong);
+  background: var(--a-bg-raised);
+  color: var(--a-fg);
+}
+.sl-link-button.primary {
+  background: var(--a-fg);
+  border-color: var(--a-fg);
+  color: var(--a-bg);
+}
+.sl-link-button.primary:hover {
+  background: color-mix(in srgb, var(--a-fg) 85%, var(--a-bg));
+  color: var(--a-bg);
+}
+.sl-link-button.minimal {
+  border-color: var(--a-line-strong);
+  padding-inline: 1.25rem;
+}
+
+/* Asides: soft tint, hairline border, product radius. */
+.starlight-aside {
+  border-radius: var(--a-radius);
+  border: 1px solid var(--a-line);
+  border-inline-start-width: 3px;
+}
+
+/* Search box and pagination cards. */
+site-search button[data-open-modal] {
+  border-radius: var(--a-radius-sm);
+  border-color: var(--a-line);
+  background: var(--a-bg-raised);
+}
+.pagination-links a {
+  border-radius: var(--a-radius);
+  border-color: var(--a-line);
+  box-shadow: none;
+}
+.pagination-links a:hover {
+  border-color: var(--a-line-strong);
+}
+
+/* Splash page hero. */
+.hero {
+  padding-block: 3rem 2rem;
+}
+.hero h1 {
+  font-size: clamp(2.25rem, 5vw, 3.5rem);
+  line-height: 1.08;
+}
+.hero .tagline {
+  color: var(--a-fg-muted);
+}
+
+/* Header buttons on narrow screens: flat, like the site's nav. */
+site-search button[data-open-modal] {
+  box-shadow: none;
+}
+@media (max-width: 49.99rem) {
+  site-search button[data-open-modal] {
+    background: transparent;
+    border: 0;
+  }
+}
+.sl-menu-button {
+  background: transparent;
+  box-shadow: none;
+  color: var(--a-fg);
+}
+
+/* Smaller hero buttons, the site's 44px. */
+.hero .sl-link-button {
+  padding: 0.6rem 1.1rem;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Link cards: the site's feature grid. */
+.sl-link-card {
+  border-radius: var(--a-radius);
+  border: 1px solid var(--a-line);
+  background: var(--a-bg-raised);
+  box-shadow: none;
+}
+.sl-link-card:hover {
+  border-color: var(--a-line-strong);
+  background: var(--a-bg-raised);
+}
+.sl-link-card .title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--a-fg);
+}
+.sl-link-card .description {
+  color: var(--a-fg-muted);
+}
+.sl-link-card svg {
+  color: var(--a-fg-faint);
+}
+.sl-link-card:hover svg {
+  color: var(--a-accent);
+}
