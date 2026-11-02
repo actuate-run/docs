@@ -1,7 +1,9 @@
 ---
-title: Human approvals
-description: Pause a run until a person approves or rejects it through a signed, single-use link.
+title: Human approvals and input
+description: Pause a run until a person approves, rejects or answers a question through a signed, single-use link.
 ---
+
+Two steps pause a run until a person acts on a signed link: `waitForApproval` for a yes or no, and [`waitForInput`](#asking-for-input) for a short written answer.
 
 `ctx.step.waitForApproval` pauses a run until a person clicks **Approve** or **Reject** on a signed link, or until the timeout passes. Use it for money above a threshold, a message to a customer, or anything you want a human to sign off.
 
@@ -37,7 +39,7 @@ return { status: "REFUNDED" };
 - `{ approved: false, at, note? }` when rejected;
 - `null` when the timeout passed with no decision.
 
-`at` is the ISO timestamp of the decision. `note` is set only when the decision was made through the API with a note (see below). Like every wait, a timeout resolves to `null` rather than throwing.
+`at` is the ISO timestamp of the decision. `note` is whatever the approver typed in the optional note box on the approval page, or sent with an API decision (see below), trimmed and at most 2,000 characters. It is absent when they left it empty. Like every wait, a timeout resolves to `null` rather than throwing.
 
 ## How the links work
 
@@ -51,15 +53,15 @@ Replays do not send the links again.
 
 When the approver opens a link:
 
-- **`GET` shows a confirmation page** with a single button. Opening the link decides nothing, so chat-app link previews and email security scanners that fetch URLs can never approve a refund by accident.
-- **Clicking the button sends a `POST`** that applies the decision, records it in the journal and resumes the run.
-- **Links are single use.** Once a step has been decided, both links stop working and show "This approval has already been decided or has expired." Expired or tampered links show "This link is invalid or has expired." Either way nothing changes.
+- **`GET` shows a confirmation page** with your `message`, an optional note box and a single button. Opening the link decides nothing, so chat-app link previews and email security scanners that fetch URLs can never approve a refund by accident.
+- **Clicking the button sends a `POST`** that applies the decision with the note, records it in the journal and resumes the run.
+- **Links are single use.** Once a step has been decided, both links stop working: opening one shows "Link expired", and posting one is refused. Expired or tampered links behave the same. Either way nothing changes.
 
 Approval decisions cannot be posted as ordinary events: event keys for approvals are reserved and refused by the events endpoint.
 
 ## The approval queue
 
-Every step waiting for a decision is in the approval queue, oldest first, with the `message` you passed to `waitForApproval`. On the platform the dashboard shows it; on the [runtime API](/docs/reference/runtime-http/#approvals) it is `GET /approvals`.
+Every step waiting for a person is in the approval queue, oldest first. Each entry has a `kind`, `"approval"` or `"input"`, and a `message`: the approval message or the input prompt. On the platform the dashboard shows it; on the [runtime API](/docs/reference/runtime-http/#approvals) it is `GET /approvals`.
 
 An authenticated operator can also decide without the link, and attach a note:
 
@@ -78,7 +80,42 @@ The links are **never written to run logs**. Anything that can read a run, such 
 - the dashboard's approval queue;
 - the API, with a full token: `GET /v1/actuators/<name>/runs/<runId>/approvals/<step>/links`. In the open-source runtime it is [`GET /runs/<runId>/approvals/<step>/links`](/docs/reference/runtime-http/#approvals), behind `ACTUATE_TOKEN`.
 
-Each returns `{ approveUrl, rejectUrl, expiresAt }` while the step is waiting.
+Each returns `{ approveUrl, rejectUrl, expiresAt }` for an approval, or `{ answerUrl, expiresAt }` for an input step, while the step is waiting.
+
+## Asking for input
+
+`ctx.step.waitForInput` asks a person a question and waits for a written answer. Use it for what an agent can't decide alone: what to tell an upset customer, which of two dates works, a correction to a draft.
+
+```ts
+const reply = await ctx.step.waitForInput("reply-text", {
+  prompt: `${input.customerName} asked for a refund on ${input.orderId}. What should we tell them?`,
+  notify: config.managerChatId,
+  initial: draft, // pre-filled, to edit
+  maxLength: 1000,
+  timeout: "2 days",
+});
+if (reply === null) return { status: "NO_ANSWER" };
+
+await ctx.step.do("send-reply", () => ctx.messaging.send(input.phone, reply.text));
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `prompt` | required | The question shown on the form |
+| `notify` | none | Who gets the link, as for approvals |
+| `initial` | empty | Text the form starts with, for example a draft to edit |
+| `maxLength` | `4000` | Longest answer, in characters. At most 20,000 |
+| `timeout` | `"7 days"` | Give up after this long and resolve to `null`. The link expires at the same time |
+
+It resolves to `{ text, at }`, or `null` on timeout. `text` is trimmed, never empty and never longer than `maxLength`; the form refuses anything else and the run keeps waiting.
+
+It works like an approval:
+
+- The runtime signs one **answer link** and sends it to `notify`. It is never written to the run's logs.
+- `GET` on the link shows the prompt and a text box filled with `initial`. Only the `POST` from the form's **Send answer** button records the answer.
+- The link is single use: once answered, it stops working.
+- The step appears in the approval queue with `kind: "input"`.
+- Owners can answer without the link from the dashboard, or with a full token: `POST /v1/actuators/<name>/runs/<runId>/inputs/<step>` with `{"text": "..."}`. A step that isn't waiting, an empty answer or one that's too long returns `{ "ok": false, "reason": ... }`.
 
 ## Delivering the links
 

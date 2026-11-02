@@ -21,8 +21,8 @@ The runtime **fails closed**. If `ACTUATE_TOKEN` is not set, every admin route a
 | Method | Path | Auth | What it does |
 | --- | --- | --- | --- |
 | `GET` | [`/health`](#health) | public | Liveness check |
-| `GET` | [`/approve?token=`](#approve) | public | Approval confirmation page |
-| `POST` | [`/approve`](#approve) | public | Apply an approval decision |
+| `GET` | [`/approve?token=`](#approve) | public | The page behind an approval or input link |
+| `POST` | [`/approve`](#approve) | public | Apply an approval decision or an answer |
 | `POST` | [`/webhook`](#webhook) | webhook secret | Start a run (trigger `webhook`) |
 | `POST` | [`/providers/:kind/webhook`](#provider-webhooks) | your verifier | A provider webhook, delivered as an event. Only with `providerWebhook` |
 | `GET` | [`/`](#describe) | admin | Describe the actuator |
@@ -77,9 +77,13 @@ Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500
 
 ## Approve
 
-`GET /approve?token=<token>` returns an HTML page that names the decision ("Approve “manager-ok”") with a single button. It changes nothing.
+`GET /approve?token=<token>` returns the HTML form for the link. It changes nothing.
 
-`POST /approve` with a form field `token` applies the decision and resumes the run. It returns an HTML page and status `200` on success, or `410` when the token is invalid, expired or already used. Links are single use: once a step is decided, both of its links return `410`. See [Human approvals](/docs/concepts/approvals/).
+- An **approval** link shows the decision ("Approve “manager-ok”"), the step's `message`, an optional note box and one button.
+- An **input** link (from [`waitForInput`](/docs/concepts/approvals/#asking-for-input)) shows the prompt and a text box pre-filled with `initial`, limited to `maxLength`.
+- An invalid, expired or already used link shows "Link expired".
+
+`POST /approve` takes a form-encoded body (at most 64 KiB) with `token`, plus `note` for an approval or `text` for an input answer. It records the decision or answer and resumes the run. It returns an HTML page and status `200` on success, or `410` when the token is invalid, expired or already used, or the answer is empty or longer than `maxLength`. Links are single use: once a step is decided or answered, its links return `410`. See [Human approvals and input](/docs/concepts/approvals/).
 
 ## Webhook
 
@@ -156,17 +160,19 @@ The request returns once the first pass ends, so a run that does not wait comes 
 
 ## Approvals
 
-`GET /approvals` lists steps waiting for a decision, oldest first:
+`GET /approvals` lists steps waiting for a person, oldest first. `kind` is `"approval"` or `"input"`, and `message` is the approval message or the input prompt:
 
 ```json
-[{ "runId": "run_...", "step": "manager-ok", "message": "Refund RM80 to Aina?", "expiresAt": 1793664000000, "since": 1793577600000 }]
+[{ "runId": "run_...", "step": "manager-ok", "kind": "approval", "message": "Refund RM80 to Aina?", "expiresAt": 1793664000000, "since": 1793577600000 }]
 ```
 
-`GET /runs/:runId/approvals/:step/links` returns the signed links for a step that is waiting for a decision, for an owner who has no messaging channel:
+`GET /runs/:runId/approvals/:step/links` returns the signed links for a step that is waiting for a person, for an owner who has no messaging channel. For an approval:
 
 ```json
 { "approveUrl": "https://bot.example.com/approve?token=...", "rejectUrl": "https://bot.example.com/approve?token=...", "expiresAt": 1793664000000 }
 ```
+
+For an input step it returns `{ "answerUrl": "...", "expiresAt": ... }`. The open-source runtime has no route that answers an input step directly: open the `answerUrl`.
 
 It returns `404` if that step is not waiting. The links are never written to run logs, so this route (behind `ACTUATE_TOKEN`) and the messaging notification are the only ways to get them.
 

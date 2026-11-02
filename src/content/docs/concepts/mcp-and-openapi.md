@@ -44,6 +44,31 @@ export default defineActuator({
 
 The JSON Schema is generated from the schema's input type, so fields with a `.default()` are optional for the caller.
 
+## Tool hints
+
+MCP clients ask a person before running tools that change things, and some agents treat read-only tools differently. Tell them what your tool does with `hints`:
+
+```ts
+export default defineActuator({
+  name: "order_status",
+  description: "Looks up an order's payment and delivery status.",
+  input: z.object({ orderId: z.string() }),
+  hints: { readOnly: true, idempotent: true, openWorld: false },
+  async run(ctx, input) {
+    return ctx.db.first("SELECT status FROM orders WHERE id = ?", [input.orderId]);
+  },
+});
+```
+
+| Hint | MCP annotation | Default | Set it when |
+| --- | --- | --- | --- |
+| `readOnly` | `readOnlyHint` | `false` | The tool never changes anything |
+| `idempotent` | `idempotentHint` | `false` | Calling it twice with the same arguments has the same effect as once |
+| `destructive` | `destructiveHint` | `true`, unless `readOnly` | It may delete or irreversibly change data. Set `false` for additive tools such as "create a draft" |
+| `openWorld` | `openWorldHint` | `true` | It talks to the outside world: messages, payments, other APIs. Set `false` when it only touches its own database |
+
+Hints describe the tool to clients; they don't enforce anything. The schema, your code and `waitForApproval` do that.
+
 ## Validation before code runs
 
 Arguments are validated against the InputSchema at the gateway, before the actuator wakes. A call with a missing field, a wrong type or an amount over the `max` is rejected: no run is created and none of your code executes. The model gets a precise error it can correct, instead of a half-executed process.

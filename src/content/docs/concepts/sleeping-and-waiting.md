@@ -63,6 +63,20 @@ Pause until an event with the key `event` is posted, then resolve to its JSON pa
 | --- | --- | --- |
 | `event` | required | The event key, for example `payment.${bookingId}` |
 | `timeout` | none: wait forever | Give up after this long and resolve to `null` |
+| `until` | none | Give up at this moment instead, as a `Date` or epoch ms. Use `timeout` or `until`, not both |
+
+`until` is for deadlines that are a point in time, such as "pay before the appointment". An event still ends the wait early:
+
+```ts
+const paid = await ctx.step.waitForEvent<PaymentEvent>("deposit", {
+  event: `payment.${bookingId}`,
+  until: new Date(input.appointmentIso),
+});
+```
+
+Like a sleep, the deadline is fixed the first time the run reaches the wait. A deadline already in the past times out on the next pass.
+
+**Plan limits.** On a plan with a longest wait (the Sandbox allows 7 days), a `timeout` or `until` beyond it throws `ActuatorError` when the wait starts, so you find out instead of the run waking early. A wait with neither is open-ended and gets the plan's maximum. The same rule applies to the timeouts of `waitForApproval` and `waitForInput`.
 
 **On timeout `waitForEvent` resolves to `null`; it does not throw.** Always handle the `null` case. An event is never delivered as `null`: an event posted with no body, or a `null` body, arrives as `{}`. So `null` from a wait always means the timeout passed.
 
@@ -86,7 +100,7 @@ An event can arrive before the run reaches its wait, for example when a customer
 
 ## Waiting for a person
 
-`ctx.step.waitForApproval` is a wait whose event can only be posted through a signed link. See [Human approvals](/docs/concepts/approvals/).
+`ctx.step.waitForApproval` and `ctx.step.waitForInput` are waits that only a person can end, through a signed link. See [Human approvals and input](/docs/concepts/approvals/).
 
 ## Combining waits
 

@@ -66,7 +66,8 @@ Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
 | One SQL statement does unbounded work | Refused before it runs: recursive queries, `randomblob`/`zeroblob`/`printf`/`format`, `PRAGMA`/`ATTACH`/`DETACH`/`VACUUM`. Bound parameters at most 1 MiB per statement. See [Database](/docs/concepts/database/#what-the-platform-refuses) |
 | Large step results | One step's stored result is at most 1 MiB |
 | Retry storms | Retries are capped at 10 per step, with exponential backoff |
-| Long waits on the Sandbox | Sleeps longer than 7 days fail; waits time out at 7 days |
+| Long waits on the Sandbox | Sleeps, and waits with a timeout or deadline, longer than 7 days fail with `ActuatorError`; open-ended waits time out at 7 days |
+| Slow regular expressions in input schemas | Refused at deploy if a hand-written pattern has nested quantifiers, such as `(a+)+` or `(\w*)*`, which can backtrack for minutes on a crafted input. Zod's built-in formats (`z.email()`, `z.uuid()`, `z.iso.datetime()` and the like) are allowed. Rewrite the pattern without a repeated group that itself repeats |
 | Cron too frequent | Refused at deploy if the actuator has more schedules than the plan allows, or if its schedules together fire more often than the plan's minimum interval |
 | Too many SSE sessions | Opening one more than the plan's limit is refused with `429`; use the streamable HTTP endpoint |
 | Agents approving their own gates | Run tokens (the default) can only start and read runs, and approval links never appear in run logs |

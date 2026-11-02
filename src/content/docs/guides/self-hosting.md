@@ -229,7 +229,7 @@ console.log(manager.getRun(run.runId)?.status, manager.getSteps(run.runId));
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `passLimits.maxWaitMs` | none | Longest sleep or wait. A sleep longer than this fails the run with an `ActuatorError`; an event or approval wait times out at this limit (resolves to `null`), including waits with no timeout |
+| `passLimits.maxWaitMs` | none | Longest sleep or wait. A sleep, or a wait with an explicit `timeout` or `until`, longer than this fails the run with an `ActuatorError`. A wait with no timeout gets this limit and then resolves to `null` |
 | `passLimits.maxRetries` | `10` | Retries a step may ask for. Larger `retries` values are clamped to it |
 | `admitPass(runId)` | none | Called before every pass. Return a time (epoch ms) to defer the pass until then; the run stays `WAITING` and nothing is lost. Return `null` to run now. Use it for budgets |
 | `maxBufferedEvents` | `1000` | Events buffered while nobody waits for them. Beyond this, the oldest are dropped |

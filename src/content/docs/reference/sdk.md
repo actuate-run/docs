@@ -82,6 +82,7 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
   optionalCapabilities?: readonly P[]; // on ctx but possibly undefined; never required to deploy
   http?: { allow: readonly string[] };
   cron?: readonly string[];
+  hints?: ToolHints;
   run(ctx: Context<K, P>, input: z.output<I>, config: z.output<C>): Promise<O> | O;
 }
 ```
@@ -96,9 +97,36 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
 | `capabilities` | Capabilities this actuator uses. Undeclared ones are absent from `ctx` |
 | `http.allow` | Hostnames `ctx.http` may reach: exact (`api.github.com`) or wildcard (`*.example.com`) |
 | `cron` | Cron schedules. Each firing starts a run with input `{}` |
+| `hints` | What calling the tool does, for MCP clients: [`ToolHints`](#toolhints). Optional |
 | `run` | Your code: `(ctx, input, config) => output` |
 
 `C` and `I` extend [`AnySchema`](#anyschema). `input` and `config` arrive parsed, with defaults applied.
+
+### ToolHints
+
+```ts
+interface ToolHints {
+  /** Only reads; never changes anything. */
+  readOnly?: boolean;
+  /** Calling twice with the same arguments has the same effect as calling once. */
+  idempotent?: boolean;
+  /** May delete or irreversibly change data. */
+  destructive?: boolean;
+  /** Talks to the outside world (messages, payments, other APIs). */
+  openWorld?: boolean;
+}
+```
+
+Published as the MCP tool's annotations. MCP clients use them to decide how to ask a person before calling the tool.
+
+| Hint | MCP annotation | Default |
+| --- | --- | --- |
+| `readOnly` | `readOnlyHint` | `false` |
+| `idempotent` | `idempotentHint` | `false` |
+| `destructive` | `destructiveHint` | `true`, unless `readOnly` is `true` |
+| `openWorld` | `openWorldHint` | `true` |
+
+See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/#tool-hints).
 
 ### Actuator
 
@@ -193,6 +221,7 @@ interface Step {
   sleepUntil(name: string, until: Date | number): Promise<void>;
   waitForEvent<T = Json>(name: string, options: WaitForEventOptions): Promise<T | null>;
   waitForApproval(name: string, options?: WaitForApprovalOptions): Promise<ApprovalResult | null>;
+  waitForInput(name: string, options: WaitForInputOptions): Promise<InputResult | null>;
 }
 ```
 
@@ -201,14 +230,15 @@ interface Step {
 | `do(name, [options,] fn)` | Runs `fn` once per run and stores its JSON result. On replay returns the stored result without calling `fn`. Retries per `options`. [More](/docs/concepts/steps-and-replay/#ctxstepdo) |
 | `sleep([name,] duration)` | Suspends the run for `duration`. Unnamed sleeps are named `sleep#1`, `sleep#2`, … in call order. [More](/docs/concepts/sleeping-and-waiting/#sleep) |
 | `sleepUntil(name, until)` | Suspends until a `Date` or epoch-ms time. Completes immediately if it has passed. [More](/docs/concepts/sleeping-and-waiting/#sleepuntil) |
-| `waitForEvent(name, options)` | Suspends until an event with key `options.event` is posted and resolves to its payload (never `null`; an empty event is `{}`), or resolves to `null` after `options.timeout`. Consumes a buffered event if one arrived first. [More](/docs/concepts/sleeping-and-waiting/#waitforevent) |
+| `waitForEvent(name, options)` | Suspends until an event with key `options.event` is posted and resolves to its payload (never `null`; an empty event is `{}`), or resolves to `null` after `options.timeout` or at `options.until`. Consumes a buffered event if one arrived first. [More](/docs/concepts/sleeping-and-waiting/#waitforevent) |
 | `waitForApproval(name, options?)` | Suspends until a person decides through a signed link, or resolves to `null` after the timeout (default 7 days). [More](/docs/concepts/approvals/) |
+| `waitForInput(name, options)` | Suspends until a person answers a short text form through a signed link, or resolves to `null` after the timeout (default 7 days). [More](/docs/concepts/approvals/#asking-for-input) |
 
 Rules for every method:
 
 - `name` is 1 to 200 characters and **unique within a run**. A repeated name throws `ActuatorError`.
 - Steps cannot be nested: calling any `ctx.step.*` inside a `do` function throws `ActuatorError`.
-- Timeouts resolve to `null`; they never throw.
+- Timeouts resolve to `null`; they never throw. But a timeout longer than the plan's longest wait throws `ActuatorError` when the wait starts.
 
 ### StepOptions
 
@@ -242,10 +272,14 @@ Passed to every `ctx.step.do` function.
 interface WaitForEventOptions {
   /** The event key to wait for, e.g. `payment.${bookingId}`. */
   event: string;
-  /** Give up after this long and resolve to `null`. Default: wait forever. */
+  /** Give up after this long and resolve to `null`. Default: wait forever (or the plan's longest wait). */
   timeout?: Duration;
+  /** Give up at this moment instead (use one of `timeout` or `until`). An event ends the wait early. */
+  until?: Date | number;
 }
 ```
+
+Passing both `timeout` and `until` throws `ActuatorError`.
 
 ### WaitForApprovalOptions
 
@@ -267,7 +301,38 @@ interface ApprovalResult {
   approved: boolean;
   /** ISO timestamp of the decision. */
   at: string;
+  /** Optional note typed by the approver (on the approval page or in the dashboard). */
   note?: string;
+}
+```
+
+### WaitForInputOptions
+
+```ts
+interface WaitForInputOptions {
+  /** The question shown on the form. */
+  prompt: string;
+  /** Who gets the signed link: a chat ID, phone or email understood by the messaging provider. */
+  notify?: string;
+  /** Pre-filled text, e.g. a draft to edit. */
+  initial?: string;
+  /** Longest answer accepted, characters. Default 4,000, at most 20,000. */
+  maxLength?: number;
+  /** Give up after this long and resolve to `null`. Default "7 days". */
+  timeout?: Duration;
+}
+```
+
+`prompt` is required; without it `waitForInput` throws `ActuatorError`.
+
+### InputResult
+
+```ts
+interface InputResult {
+  /** The answer, trimmed. Never empty, never longer than maxLength. */
+  text: string;
+  /** ISO timestamp of the answer. */
+  at: string;
 }
 ```
 
