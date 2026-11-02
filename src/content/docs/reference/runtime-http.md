@@ -89,15 +89,20 @@ Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500
 
 `POST /webhook` starts a run with the JSON body as input and `trigger.kind = "webhook"`. Same validation, responses and `Idempotency-Key` handling as [`POST /run`](#run).
 
-The request must carry `ACTUATE_WEBHOOK_SECRET` as the `x-actuate-secret` header or the `secret` query parameter, or it gets `401`. If the secret is not set at all, the route answers `503` (except under `ACTUATE_DEV=1`). The admin token is not required.
+The request must prove it knows `ACTUATE_WEBHOOK_SECRET`, or it gets `401`. If the secret is not set at all, the route answers `503` (except under `ACTUATE_DEV=1`). The admin token is not required. Two ways:
+
+- **Signature (preferred).** Sign the raw body GitHub-style: `X-Hub-Signature-256: sha256=<hex HMAC-SHA256 of the body, keyed with the secret>`. GitHub does this for you when you set the secret on the repository's webhook. A signed delivery's idempotency key is its signature, because headers aren't signed: a captured request replayed with a new `X-GitHub-Delivery` or `Idempotency-Key` returns the original run instead of starting another.
+- **Shared secret.** Send it as the `x-actuate-secret` header, or as `?secret=` for senders that can't set headers. Query strings end up in proxy and sender logs, so prefer the header, and rotate the secret if a URL leaks. `Idempotency-Key`, or else `X-GitHub-Delivery`, is the idempotency key.
 
 ## Provider webhooks
 
-`POST /providers/:kind/webhook` exists only when you pass a `providerWebhook` function to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#5-providers)). `:kind` is lowercase letters, digits and hyphens, for example `stripe`. Your function verifies the request and returns the event to deliver:
+`/providers/:kind/webhook` (any method) exists only when you pass a `providerWebhook` function to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#5-providers)). `:kind` is lowercase letters, digits and hyphens, for example `stripe`. Your function verifies the request and returns what to do; `parseProviderWebhookFromEnv` from `@actuate/providers` does this for the built-in providers:
 
 | Your function | Response |
 | --- | --- |
 | Returns `{ event, payload }` | The event is delivered as by [`POST /events/:key`](#events): `{ "event", "resumed", "buffered" }` |
+| Returns an array of them | Each is delivered in order: `{ "events": [ ... ] }` |
+| Returns `{ reply: "<text>" }` | `200` with that text as `text/plain`, for subscription handshakes such as Meta's `hub.challenge` |
 | Returns `null` | `{ "ignored": true }` |
 | Throws an error named `WebhookVerificationError` | `401 {"error": "<message>"}` |
 
@@ -214,7 +219,7 @@ An unknown table returns `404 {"error":"Unknown table"}`.
 | --- | --- |
 | `ACTUATE_CONFIG` | JSON object of configuration, validated against the actuator's `config` schema. Default `{}`. Invalid JSON or values set `configError` and fail every run |
 | `ACTUATE_TOKEN` | Bearer token for the admin routes. Required: unset, admin routes answer `503` |
-| `ACTUATE_WEBHOOK_SECRET` | Shared secret for `POST /webhook`, sent as `x-actuate-secret` or `?secret=`. Required to accept webhooks: unset, `/webhook` answers `503` |
+| `ACTUATE_WEBHOOK_SECRET` | Secret for `POST /webhook`: signs the body (`X-Hub-Signature-256`), or is sent as `x-actuate-secret` or `?secret=`. Required to accept webhooks: unset, `/webhook` answers `503` |
 | `ACTUATE_APPROVAL_SECRET` | HMAC secret for approval links. If unset, one is generated on first start and kept in the Durable Object's storage |
 | `ACTUATE_PUBLIC_URL` | Public origin used in approval links and for the self-call check, e.g. `https://bot.example.com`. If unset, the origin of the first request is used and remembered. **Set it in production** |
 | `ACTUATE_DEV` | `1` only for local development (set by `actuate dev`): routes whose secret is unset are served open instead of answering `503` |

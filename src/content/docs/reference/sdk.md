@@ -539,6 +539,22 @@ The payload of the `payment.<referenceId>` event a payment provider's webhook de
 const paid = await ctx.step.waitForEvent<PaymentEvent>("paid", { event: `payment.${bookingId}`, timeout: "1 day" });
 ```
 
+### InboundMessage
+
+```ts
+interface InboundMessage {
+  channel: string;  // "whatsapp" | "telegram"
+  from: string;     // phone number (digits) or Telegram chat ID: pass it to messaging.send to reply
+  text: string;     // the text, a button's title, or a media caption ("" for media without one)
+  type: string;     // "text", "button", "interactive", "image", ... as the provider reports it
+  id: string;       // the provider's message ID
+  at: number;       // when it was sent, ms since the epoch
+  name?: string;    // the sender's display name, when the provider includes it
+}
+```
+
+The payload of the `message.<channel>.<from>` event an inbound message delivers. See [Receiving messages](/docs/concepts/capabilities/#receiving-messages).
+
 ### LlmProvider
 
 ```ts

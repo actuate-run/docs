@@ -60,7 +60,36 @@ await ctx.step.do("notify", () =>
 | `channel` | Pick a channel when several are configured, for example `"telegram"`, `"whatsapp"` or `"email"` |
 | `subject` | Email subject, when the channel is email |
 | `template` | `{ name, language, variables? }`: a WhatsApp template, required for messages outside the 24-hour service window |
+| `format` | `"text"` (default) or `"html"`: a small HTML subset (`<b>`, `<i>`, `<a href>`, `<code>`, `<pre>`) where the channel supports it (Telegram, email); other channels get the text with tags removed |
 | `idempotencyKey` | Passed to providers that deduplicate. Defaults to the current step's key |
+
+### Receiving messages
+
+With WhatsApp or Telegram, a run can wait for the customer's reply. Each inbound message becomes the event `message.<channel>.<from>`, with an [`InboundMessage`](/docs/reference/sdk/#inboundmessage) payload:
+
+```ts
+import type { InboundMessage } from "@actuate/sdk";
+
+await ctx.step.do("ask", () => ctx.messaging.send(input.phone, "Reply YES to confirm tomorrow at 10:00"));
+const reply = await ctx.step.waitForEvent<InboundMessage>("reply", {
+  event: `message.whatsapp.${input.phone}`,
+  timeout: "1 day",
+});
+if (reply?.text.trim().toUpperCase() === "YES") {
+  // confirmed
+}
+```
+
+`from` is in the form `send` accepts, so `ctx.messaging.send(reply.from, ...)` answers the same person. A message nobody is waiting for is buffered like any [event](/docs/concepts/sleeping-and-waiting/#posting-events), so a reply that arrives before the run starts waiting is not lost.
+
+To set it up, point the provider at the actuator's provider webhook URL, which the dashboard shows under **Connect → Receive messages** (`https://run.actuate.run/a/<id>/providers/<kind>/webhook`):
+
+| Provider | Setup | Needed so messages can't be forged |
+| --- | --- | --- |
+| WhatsApp | In your Meta app, WhatsApp → Configuration → Webhook: paste the URL, enter your **Webhook verify token**, subscribe to `messages` | **App secret**: every delivery's `X-Hub-Signature-256` is checked. Only messages to your configured phone number ID count |
+| Telegram | Call `setWebhook` with the URL and `secret_token` set to your **Webhook secret token** | **Webhook secret token**: checked on every update |
+
+Without the app secret or secret token, inbound messages are ignored rather than trusted. A WhatsApp number or Telegram bot has one webhook, so it delivers to one actuator; use a bot or number per actuator if several need replies. Locally, `actuate dev` serves the same route at `http://localhost:8787/providers/<kind>/webhook`; expose it with a tunnel.
 
 ## payment
 

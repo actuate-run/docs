@@ -43,9 +43,14 @@ Use a key that names the thing you are doing (an order ID, a webhook delivery ID
 
 `POST /webhook` starts a run with the request body as input, exactly like `/run` but with `trigger.kind = "webhook"`, and it honours `Idempotency-Key` too. `actuate deploy` prints the webhook URL.
 
-Point a third-party webhook at it when the sender's JSON body can be your input. In the open-source runtime the webhook route is protected by a shared secret, sent as the `x-actuate-secret` header or a `?secret=` query parameter; see [Runtime HTTP API](/docs/reference/runtime-http/#webhook).
+Point a third-party webhook at it when the sender's JSON body can be your input. Every actuator has a webhook secret (on the platform, in the dashboard's **Connect** tab). A request proves it knows the secret in one of two ways:
 
-Payment provider webhooks are different: they do not start runs, they become [events](/docs/concepts/sleeping-and-waiting/#posting-events) named `payment.<referenceId>` that waiting runs resume on.
+- **A signature of the body**, GitHub-style: `X-Hub-Signature-256: sha256=<HMAC-SHA256 hex>`. Preferred: the secret never travels, and a captured delivery can't be replayed as a new run, because a signed delivery is deduplicated by its signature.
+- **The secret itself**, as the `x-actuate-secret` header, or `?secret=` for senders that can only be given a URL. URLs end up in logs, so prefer the header.
+
+If the secret leaks, rotate it: **Rotate secret** in the Connect tab, or `POST /v1/actuators/<name>/webhook-secret` with a full API token. The new secret works at once; the old one stops within 30 seconds. See [Runtime HTTP API](/docs/reference/runtime-http/#webhook) for the self-hosted route.
+
+Provider webhooks are different: they do not start runs, they become [events](/docs/concepts/sleeping-and-waiting/#posting-events) that waiting runs resume on, such as `payment.<referenceId>` for payments and `message.whatsapp.<phone>` for [inbound messages](/docs/concepts/capabilities/#receiving-messages).
 
 ## Cron
 
