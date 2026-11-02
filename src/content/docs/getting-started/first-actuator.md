@@ -104,7 +104,11 @@ The return value is the run's output, stored with the run record and returned to
 
 ## Try it locally
 
-Save the file as `actuator.ts` in the project from the [Quickstart](/docs/getting-started/quickstart/) and run `npx actuate dev`. Locally, messages are printed in the terminal and the payment provider is a fake whose bill URL points back at your actuator.
+Start from a fresh project (`npm create actuate deposit-bot`), save the file as its `actuator.ts`, and run `npx actuate dev`. Locally, messages are printed in the terminal and the payment provider is a fake whose bill URL points back at your actuator.
+
+:::note
+If you reuse the Quickstart project instead, stop `actuate dev` and delete its `.actuate/state` folder first. Its database already applied migration 0 (`CREATE TABLE greetings`), and [migrations are tracked by index](/docs/concepts/database/#migrations), so `CREATE TABLE bookings` would be skipped and the first run would fail with `no such table: bookings`. Runs still waiting from the old code would also replay against the new file and fail.
+:::
 
 ```bash
 curl -X POST localhost:8787/run -H 'content-type: application/json' \
@@ -119,6 +123,10 @@ curl localhost:8787/runs/<runId>
 ```
 
 The run is `COMPLETED` with output `{ "status": "CONFIRMED", ... }`, and `curl localhost:8787/tables/bookings` shows the row. To test the reminder path, set `{"reminderDelay": "30 minutes"}` in `actuate.config.json`, restart `actuate dev` (it reads the configuration at startup), start a run and don't pay.
+
+## Deploying it
+
+`actuate deploy` works as in the [Quickstart](/docs/getting-started/quickstart/#5-deploy), with two differences. This actuator declares `payment` and `messaging`, so it needs the Maker plan: the free Sandbox refuses it with `402`. And it needs providers: set your payment and messaging credentials in the dashboard under Settings → Providers before you deploy, or the deploy is refused.
 
 ## Next
 

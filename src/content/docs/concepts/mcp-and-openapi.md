@@ -8,7 +8,7 @@ When you deploy an actuator, the platform publishes it two ways:
 - a **hosted MCP server**, over SSE and streamable HTTP, where the actuator is a tool an AI agent can call;
 - an **OpenAPI document**, for any HTTP client or agent framework that speaks OpenAPI.
 
-`actuate deploy` prints both URLs.
+`actuate deploy` prints both URLs. Both need an API token as `Authorization: Bearer <token>`; an Agent (run-scoped) token is enough. See [Connect your agent](/docs/guides/connect-your-agent/).
 
 ## From actuator to tool
 

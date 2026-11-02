@@ -221,7 +221,7 @@ await manager.alarm();
 console.log(manager.getRun(run.runId)?.status, manager.getSteps(run.runId));
 ```
 
-`consoleMessaging()` prints messages and `fakePayment()` creates bills that are paid by posting `payment.<referenceId>`, the same stand-ins `actuate dev` uses. `deliverEvent(key, payload)`, `decide(token)`, `pendingApprovals()`, `listTables()` and `readTable(name)` cover the rest of the lifecycle. `manager.start` does not validate input; parse it with `actuator.input` first if you want that check in tests.
+`consoleMessaging()` prints messages and `fakePayment()` creates bills that are paid by posting `payment.<referenceId>` (and refunds that always succeed), the same stand-ins `actuate dev` uses. `deliverEvent(key, payload)`, `decide(token)`, `pendingApprovals()`, `listTables()` and `readTable(name)` cover the rest of the lifecycle. `manager.start` does not validate input; parse it with `actuator.input` first if you want that check in tests.
 
 ### Guards
 

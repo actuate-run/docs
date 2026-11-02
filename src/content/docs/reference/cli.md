@@ -3,20 +3,21 @@ title: CLI
 description: The actuate command - init, dev, check, deploy, run, logs and login.
 ---
 
-The CLI ships as `@actuate/cli` and installs the `actuate` command. Projects created with `npm create actuate` list it as a dev dependency, so run it with `npx actuate` or through the `package.json` scripts (`npm run dev`, `npm run check`, `npm run deploy`). It needs Node.js 20 or later.
+The CLI ships as `@actuate/cli` and installs the `actuate` command. Projects created with `npm create actuate` list it as a dev dependency, so run it with `npx actuate` or through the `package.json` scripts (`npm run dev`, `npm run check`, `npm run deploy`). It needs Node.js 22 or later (its `wrangler` dependency does).
 
 :::caution
 Outside a project that has `@actuate/cli` installed, don't run a bare `npx actuate`: the unscoped `actuate` package on npm is an unrelated library. Install the CLI with `npm install -g @actuate/cli`, or use `npx @actuate/cli <command>`.
 :::
 
 ```text
-actuate init [dir] [--template <name>]   Create a new actuator project
-actuate dev [file] [--port 8787]         Run locally on workerd
-actuate check [file]                     Lint for replay-safety
-actuate deploy [file] [--no-config]      Deploy to Actuate
-actuate run '<json>' [--local]           Start a run with this input
-actuate logs [runId] [--local]           List recent runs, or show one run
-actuate login [--token <t>] [--api <url>]
+actuate init [dir] [--template <name>] [--ref <git-ref>]   Create a new actuator project
+actuate dev [file] [--port 8787]                          Run locally on workerd
+actuate check [file]                                      Lint for replay-safety
+actuate deploy [file] [--no-config] [--dry-run]           Deploy to Actuate
+actuate run '<json>' [--local]                            Start a run with this input
+actuate logs [runId] [--local]                            List recent runs, or show one run
+actuate login [--token <t>] [--api <url>]                 Save an API token
+actuate providers                                         List providers and their variables
 ```
 
 `[file]` defaults to `actuator.ts`. `actuate --help` prints the list.
@@ -24,10 +25,10 @@ actuate login [--token <t>] [--api <url>]
 ## actuate init
 
 ```bash
-actuate init [dir] [--template <name>]
+actuate init [dir] [--template <name>] [--ref <git-ref>]
 ```
 
-Creates a project in `dir` (default: the current directory), which must be empty apart from `.git`. Without `--template` (`-t`) it writes the built-in `hello` starter; with one, it downloads `actuator.ts`, and `README.md`, `.env.example` and `actuate.config.json` when present, from the folder of that name in [actuate-run/templates](https://github.com/actuate-run/templates).
+Creates a project in `dir` (default: the current directory), which must be empty apart from `.git`. Without `--template` (`-t`) it writes the built-in `hello` starter; with one, it downloads `actuator.ts`, and `README.md`, `.env.example` and `actuate.config.json` when present, from the folder of that name in [actuate-run/templates](https://github.com/actuate-run/templates). `--ref` picks a branch or tag of that repository (default `main`).
 
 The project contains `actuator.ts`, `actuate.config.json` (`{}`), `package.json`, `tsconfig.json` and a `.gitignore` that excludes `node_modules/`, `.actuate/`, `.dev.vars` and `.env`.
 
@@ -46,7 +47,7 @@ Runs the actuator locally on `workerd` (through wrangler) with the same step eng
 - Serves the [runtime HTTP API](/docs/reference/runtime-http/) at `http://localhost:<port>`.
 - Configuration: `actuate.config.json`, passed as `ACTUATE_CONFIG`.
 - Environment: variables from `.env` and then `.dev.vars` in the project directory. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally. Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway.
-- Providers: pick real ones in `.dev.vars` (see [`actuate providers`](#actuate-providers)). Anything you don't pick stays local: messages (and approval links) print in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`; open it to "pay". Declared `http` uses your `http.allow` list for real. `ctx.llm` needs `ACTUATE_LLM` set; otherwise calls fail with "no llm provider is configured".
+- Providers: pick real ones in `.dev.vars` (see [`actuate providers`](#actuate-providers)). Anything you don't pick stays local: messages (and approval links) print in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`; open it to "pay". Its refunds always succeed and are printed. Declared `http` uses your `http.allow` list for real. `ctx.llm` needs `ACTUATE_LLM` set; otherwise calls fail with "no llm provider is configured".
 - Payment webhooks: real payment providers call back to `POST /providers/<kind>/webhook`. Expose your local port with a tunnel (e.g. `cloudflared tunnel --url localhost:8787`) and set `ACTUATE_PUBLIC_URL` to the tunnel URL so callback links point there.
 - Cron schedules are registered. Fire one with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
 - State persists in `.actuate/state` between restarts. Delete the folder to start fresh.
@@ -133,7 +134,7 @@ Deploys the actuator to Actuate.
 actuate run '<json>' [--local] [--port 8787] [--name <actuator>]
 ```
 
-Starts a run with the given JSON input (default `{}`) and prints the run record. With `--local` it targets `actuate dev` on `localhost:<port>`; otherwise the deployed actuator, whose name is read from `name:` in `actuator.ts` unless you pass `--name`.
+Starts a run with the given JSON input (default `{}`) and prints the run record. Quote the JSON in single quotes. Input that fails the schema prints each problem, e.g. `name: Too small: expected string to have >=1 characters`. With `--local` it targets `actuate dev` on `localhost:<port>`; otherwise the deployed actuator, whose name is read from `name:` in `actuator.ts` unless you pass `--name`.
 
 ## actuate logs
 
@@ -160,16 +161,16 @@ Approval links are never in the logs; see [Human approvals](/docs/concepts/appro
 actuate login [--token <token>] [--api <url>]
 ```
 
-Saves an API token for `deploy`, `run` and `logs`. Without `--token` it prompts for one; create it in the dashboard settings. You sign in to the dashboard with Google or another social login; the CLI and agents use API tokens instead.
+Saves an API token for `deploy`, `run` and `logs`. Without `--token` it prompts for one; create it in the dashboard under Settings → API tokens, choosing **Full**. You sign in to the dashboard with Google or another social login; the CLI and agents use API tokens instead.
 
 There are two kinds of token:
 
 | Token | For | Can |
 | --- | --- | --- |
-| **Run** (the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, deploying, configuration or management |
+| **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, deploying, configuration or management |
 | **Full** | The CLI and management | Everything your account can do, including `deploy` and fetching approval links |
 
-`actuate login` needs a **full** token. Give agents run tokens. `--api` overrides the API URL (default `https://api.actuate.run`).
+`actuate login` needs a **full** token. Give agents Agent tokens. `--api` overrides the API URL (default `https://api.actuate.run`).
 
 Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`.
 

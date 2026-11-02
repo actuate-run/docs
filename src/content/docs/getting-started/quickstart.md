@@ -3,7 +3,7 @@ title: Quickstart
 description: Create an actuator, run it locally, watch it sleep and wake, and deploy it.
 ---
 
-You need Node.js 20 or later. Five minutes, no account until the last step.
+You need Node.js 22 or later. Five minutes, no account until the last step.
 
 ## 1. Create a project
 
@@ -129,11 +129,15 @@ curl 'localhost:8787/tables/greetings?format=csv'
 ## 5. Deploy
 
 ```bash
-npx actuate login     # paste a full API token from the dashboard's settings
+npx actuate login     # paste a Full token from the dashboard: Settings → API tokens
 npx actuate deploy
 ```
 
+New tokens are **Agent** tokens by default, which can only start and read runs; choose **Full** for the CLI. With an Agent token, `deploy` answers `403`.
+
 `deploy` refuses to upload while [`actuate check`](/docs/reference/cli/#actuate-check) reports errors. It bundles `actuator.ts`, sends `actuate.config.json` as the configuration, and prints the actuator's webhook, MCP, OpenAPI and dashboard URLs.
+
+The free Sandbox plan deploys this `hello` actuator as it is. Actuators that declare `messaging`, `payment` or `llm` need the Maker plan; on Sandbox, `deploy` refuses them with `402`.
 
 Start a run on the deployed actuator:
 
