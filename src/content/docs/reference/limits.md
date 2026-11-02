@@ -32,9 +32,8 @@ The isolate's environment contains only your declared capability clients. There 
 | Runs per month | 1,000 | 100,000 | 500,000 |
 | SQLite per actuator | 25 MB | 500 MB | 5 GB |
 | SQLite in total | 50 MB | 500 MB | 5 GB, pooled |
-| Providers | None | All | All |
+| Providers | `http` to declared domains only | All | All |
 | Longest sleep or wait | 7 days | Unlimited | Unlimited |
-| Idle actuators | Sleep after 7 idle days | Never sleep | Never sleep |
 | Run rate | 60 per minute | 600 per minute | 1,200 per minute |
 | Passes per month | 10,000 | 800,000 | 3,000,000 |
 | Rows written per month | 250,000 | 4,000,000 | 15,000,000 |
@@ -46,7 +45,6 @@ The isolate's environment contains only your declared capability clients. There 
 - **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. **Rows written** count every billed SQLite row your actuators write, journal included.
 - The free Sandbox has no providers: it is for building and exposing MCP tools, not for sending messages or taking payments.
 - The run rate is a sliding window per account.
-- An idle Sandbox actuator stops accepting runs until you wake it from the dashboard.
 - Agency also adds client portals, the approval queue, white-label domains, and Excel and SQLite exports. It arrives with Stage 2.
 
 Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.

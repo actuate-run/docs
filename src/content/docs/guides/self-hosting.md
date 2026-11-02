@@ -208,7 +208,7 @@ console.log(manager.getRun(run.runId)?.status, manager.getSteps(run.runId));
 
 ### Guards
 
-`RunManager` takes options that bound what a run can cost. `createRuntime` uses the defaults; pass these when you build your own host.
+`RunManager` takes options that bound what a run can cost. Pass them to `createRuntime` as `guards: { ... }`, or to `RunManager` when you build your own host.
 
 | Option | Default | Effect |
 | --- | --- | --- |

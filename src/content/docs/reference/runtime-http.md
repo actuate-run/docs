@@ -133,7 +133,7 @@ The request returns once the first pass ends, so a run that does not wait comes 
 | Query | Default | Meaning |
 | --- | --- | --- |
 | `limit` | `50` | 1 to 500 |
-| `before` | none | Only runs created before this epoch-ms time; pass the last run's `createdAt` to get the next page |
+| `before` | none | A run ID (exact, newest first by run ID) or an epoch-ms `createdAt`. Pass the last run's `runId` to get the next page |
 | `status` | none | Only runs with this status |
 
 ## Get a run
