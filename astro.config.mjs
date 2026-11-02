@@ -59,7 +59,7 @@ export default defineConfig({
         },
         {
           label: "Guides",
-          items: ["guides/self-hosting", "guides/agent-tools", "guides/templates"],
+          items: ["guides/connect-your-agent", "guides/agent-tools", "guides/self-hosting", "guides/templates"],
         },
       ],
     }),
