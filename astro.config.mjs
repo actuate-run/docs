@@ -1,6 +1,8 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import { sidebar } from "./src/sidebar.mjs";
+import { indexable } from "./src/indexable.mjs";
 
 export default defineConfig({
   site: "https://actuate.run",
@@ -23,45 +25,24 @@ export default defineConfig({
         },
         { tag: "meta", attrs: { name: "theme-color", content: "#fafaf8", media: "(prefers-color-scheme: light)" } },
         { tag: "meta", attrs: { name: "theme-color", content: "#0e0e0d", media: "(prefers-color-scheme: dark)" } },
+        { tag: "meta", attrs: { property: "og:image", content: "https://actuate.run/og.png" } },
+        { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
+        { tag: "meta", attrs: { name: "twitter:card", content: "summary_large_image" } },
+        { tag: "meta", attrs: { name: "twitter:image", content: "https://actuate.run/og.png" } },
+        { tag: "link", attrs: { rel: "alternate", type: "text/plain", href: "/docs/llms.txt", title: "Actuate docs for LLMs" } },
+        // Staging and preview builds must never be indexed (see src/indexable.mjs).
+        ...(indexable ? [] : [{ tag: "meta", attrs: { name: "robots", content: "noindex, nofollow" } }]),
       ],
       customCss: ["./src/styles/theme.css"],
       components: {
         SiteTitle: "./src/components/SiteTitle.astro",
         SocialIcons: "./src/components/SocialIcons.astro",
+        PageTitle: "./src/components/PageTitle.astro",
       },
       editLink: { baseUrl: "https://github.com/actuate-run/docs/edit/main/" },
       lastUpdated: false,
-      sidebar: [
-        {
-          label: "Getting started",
-          items: [
-            "getting-started/introduction",
-            "getting-started/quickstart",
-            "getting-started/first-actuator",
-          ],
-        },
-        {
-          label: "Concepts",
-          items: [
-            "concepts/actuators",
-            "concepts/steps-and-replay",
-            "concepts/sleeping-and-waiting",
-            "concepts/approvals",
-            "concepts/database",
-            "concepts/capabilities",
-            "concepts/triggers",
-            "concepts/mcp-and-openapi",
-          ],
-        },
-        {
-          label: "Reference",
-          items: ["reference/sdk", "reference/cli", "reference/runtime-http", "reference/limits"],
-        },
-        {
-          label: "Guides",
-          items: ["guides/connect-your-agent", "guides/agent-tools", "guides/self-hosting", "guides/templates"],
-        },
-      ],
+      sidebar,
     }),
   ],
 });
