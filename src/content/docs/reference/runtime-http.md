@@ -172,7 +172,7 @@ The request returns once the first pass ends, so a run that does not wait comes 
 { "approveUrl": "https://bot.example.com/approve?token=...", "rejectUrl": "https://bot.example.com/approve?token=...", "expiresAt": 1793664000000 }
 ```
 
-For an input step it returns `{ "answerUrl": "...", "expiresAt": ... }`. The open-source runtime has no route that answers an input step directly: open the `answerUrl`.
+For an input step it returns `{ "answerUrl": "...", "expiresAt": ... }`. To answer directly, `POST /runs/:id/inputs/:step` with `{ "text": "..." }` (admin auth); it returns `{ "ok": true }` or `{ "ok": false, "reason": "..." }`.
 
 It returns `404` if that step is not waiting. The links are never written to run logs, so this route (behind `ACTUATE_TOKEN`) and the messaging notification are the only ways to get them.
 
