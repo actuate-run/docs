@@ -67,11 +67,22 @@ Slack and Discord suit messages to you or your team: approval requests, alerts, 
 
 | Option | Meaning |
 | --- | --- |
-| `channel` | Pick a channel when several are configured, for example `"telegram"`, `"whatsapp"` or `"email"` |
+| `channel` | Which channel sends, when several are configured: `"telegram"`, `"whatsapp"`, `"slack"`, `"discord"` or `"email"`. Without it, the default channel sends. See [Several channels](#several-channels) |
 | `subject` | Email subject, when the channel is email |
 | `template` | `{ name, language, variables? }`: a WhatsApp template, required for messages outside the 24-hour service window |
 | `format` | `"text"` (default) or `"html"`: a small HTML subset (`<b>`, `<i>`, `<a href>`, `<code>`, `<pre>`) where the channel supports it (Telegram, email); other channels get the text with tags removed |
 | `idempotencyKey` | Passed to providers that deduplicate. Defaults to the current step's key |
+
+### Several channels
+
+You can connect more than one messaging provider, for example WhatsApp for customers and Slack for your team. The first one is the default; `channel` picks another:
+
+```ts
+await ctx.step.do("tell-customer", () => ctx.messaging.send(input.phone, "Your refund is on its way"));
+await ctx.step.do("tell-team", () => ctx.messaging.send("C0123456789", `Refunded ${input.orderId}`, { channel: "slack" }));
+```
+
+On the platform, connect each in **Settings → Providers** and use **Make default** to choose the default; up to five channels. Locally, list them in `.dev.vars`, default first: `ACTUATE_MESSAGING=whatsapp,slack`. Sending on a channel that isn't configured fails the step with `No "slack" messaging channel is configured`. Payment and LLM providers stay one each.
 
 ### Receiving messages
 
