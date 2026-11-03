@@ -6,7 +6,7 @@ description: On the hosted platform each run stays on the version it started on.
 Something broke in production: a provider was down, or your code had a bug. On the hosted platform you can fix it without losing the runs it hit:
 
 1. **Deploy a fix.** Runs already in flight keep running the version they started on.
-2. **Retry the failed runs** from the step that failed, on the new version. Steps that completed are not run again, so a payment that went through is not charged twice.
+2. **Retry the failed runs** from the step that failed, on the new version. Steps that completed are not run again, so a payment made in a completed step is not charged twice.
 3. Or, if the new version is the problem, **roll back** to an earlier one.
 
 All of this is hosted only. In `actuate dev` and a [self-hosted runtime](/docs/guides/self-hosting/) a deploy replaces the code for every run, including runs that are sleeping or waiting, and there is no retry or rollback.
@@ -29,7 +29,7 @@ On a failed run's page, click **Retry from failed step**. The run continues unde
 - Every other step (the one that failed, one that was cut off mid-attempt, a wait that hadn't finished) is cleared and runs again from the start.
 - The run's pass count starts again at 0, so it has the plan's full passes per run.
 - The log keeps the earlier passes and adds a line such as `Retried on v8 from step "refund"`, with the version, the cleared steps and who retried it.
-- Provider calls in the steps that run again get new [idempotency keys](/docs/concepts/steps-and-replay/#idempotency-keys): `:retry1` (then `:retry2`, ...) is added to the keys derived from the run. So the fixed step reaches Stripe or Resend as a new call, rather than getting the failed call's saved answer or a "different parameters" error. If a call had already succeeded before its step failed, the retry makes it again. To keep such a call to once across retries, pass your own `idempotencyKey` (one that doesn't start with the run ID), such as `refund-${orderId}`.
+- Provider calls in the steps that run again get new [idempotency keys](/docs/concepts/steps-and-replay/#idempotency-keys): `:retry1` (then `:retry2`, ...) is added to the keys Actuate derives (`<runId>:<step>:<method>:<n>`). So the fixed step reaches Stripe or Resend as a new call, rather than getting the failed call's saved answer or a "different parameters" error. If a call had already succeeded before its step failed (or the step was cut off after it), the retry makes it again. To keep such a call to once across retries, pass your own `idempotencyKey`, such as `refund-${orderId}` or `` `${ctx.runId}:refund` ``: keys you pass are always sent as given.
 
 The run becomes `WAITING`, due now, and carries on in the background within moments. If it fails again, you get another [alert](/docs/guides/alerts/) and can retry again.
 
