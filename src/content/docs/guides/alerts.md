@@ -53,7 +53,7 @@ Windows are per actuator and per kind, so a failing actuator never hides an aler
 
 ### Daily email cap
 
-Alert emails, test alerts included, are capped per account per day (UTC): 10 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual.
+Alert emails, test alerts included, are capped per account per day (UTC): 5 on Sandbox, 30 on Maker, 100 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual.
 
 ## Where alerts go
 

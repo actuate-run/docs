@@ -47,12 +47,13 @@ The isolate's environment contains only your declared capability clients. There 
 | Shortest cron interval, all schedules together | 1 hour | 1 minute | 1 minute |
 | Open legacy SSE sessions | 2 | 5 | 20 |
 | Deploys per 24 hours | 30 | 200 | 500 |
+| Deploys per month (failed ones and rollbacks count) | 60 | 500 | 1,500 |
 | Settled runs kept for | 7 days | 30 days | 90 days |
 | Agent analytics kept for | 30 days | 60 days | 90 days |
 | Where alerts go | Email | Email and one messaging channel | Email and one messaging channel |
-| Alert emails per day | 10 | 100 | 300 |
+| Alert emails per day | 5 | 30 | 100 |
 | Test alerts per day | 5 | 5 | 5 |
-| Days an earlier version runs next to the current one, per month | 60 | 1,000 | 3,000 |
+| Days an earlier version runs next to the current one, per month | 20 | 200 | 1,000 |
 
 - **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included. **Outbound HTTP requests** count every `ctx.http` call. Provider calls (messaging, payment, LLM) do not count.
 - The SQLite total is checked when a run starts; the per-actuator size before each run and after every statement.
