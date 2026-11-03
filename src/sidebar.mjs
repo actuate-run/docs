@@ -31,6 +31,7 @@ export const sidebar = [
     items: [
       "guides/connect-your-agent",
       "guides/agent-tools",
+      "guides/best-practices",
       "guides/alerts",
       "guides/retry-and-rollback",
       "guides/self-hosting",

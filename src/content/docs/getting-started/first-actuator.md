@@ -133,3 +133,4 @@ The run is `COMPLETED` with output `{ "status": "CONFIRMED", ... }`, and `curl l
 - [Steps and replay](/docs/concepts/steps-and-replay/): retries, idempotency keys and the determinism rules.
 - [Sleeping and waiting](/docs/concepts/sleeping-and-waiting/): timeouts and events that arrive early.
 - [Human approvals](/docs/concepts/approvals/): add a sign-off before money moves.
+- [Write efficient actuators](/docs/guides/best-practices/): keep runs cheap, and test an actuator before you deploy it.

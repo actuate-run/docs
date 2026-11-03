@@ -152,3 +152,5 @@ If your code swallows the signal anyway, the runtime still suspends the run when
 ## Passes
 
 Each time `run` executes from the top is a pass. A run that keeps suspending and waking is normal; one that never settles is not. The open-source runtime fails a run after 10,000 passes.
+
+Every pass, and every step it writes, counts against your plan's budgets. [Write efficient actuators](/docs/guides/best-practices/) shows what each one costs and how to keep runs small.

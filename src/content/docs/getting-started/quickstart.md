@@ -152,3 +152,4 @@ npx actuate logs
 
 - [Your first actuator](/docs/getting-started/first-actuator/): payments, events and reminders.
 - [Steps and replay](/docs/concepts/steps-and-replay/): the one rule you need to know.
+- [Write efficient actuators](/docs/guides/best-practices/): patterns that save limits, and how to test before you deploy.

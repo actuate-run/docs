@@ -5,6 +5,8 @@ description: CPU and memory per invocation, outbound HTTP rules, plan limits, th
 
 Actuate is built so that one actuator cannot hurt you, another tenant or the platform. **Every limit is a hard stop, not an overage charge.** Work pauses or is refused, and nothing is ever billed beyond your plan.
 
+For what uses each budget and how to write actuators that stay well inside them, see [Write efficient actuators](/docs/guides/best-practices/).
+
 ## Per invocation
 
 Each pass of a run executes in its own V8 isolate with:
