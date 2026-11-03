@@ -48,7 +48,7 @@ The isolate's environment contains only your declared capability clients. There 
 | Cron schedules per actuator | 3 | 5 | 5 |
 | Shortest cron interval, all schedules together | 1 hour | 1 minute | 1 minute |
 | Open legacy SSE sessions | 2 | 5 | 20 |
-| Deploys per 24 hours | 30 | 200 | 500 |
+| Deploys per day (failed ones and rollbacks count) | 30 | 200 | 500 |
 | Deploys per month (failed ones and rollbacks count) | 300 | 2,000 | 5,000 |
 | Settled runs kept for | 7 days | 30 days | 90 days |
 | Agent analytics kept for | 30 days | 60 days | 90 days |
@@ -91,7 +91,7 @@ Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
 | Journals grow without bound | Settled runs, with their steps and logs, are deleted after the plan's retention period. Your tables are never touched |
 | Database growth | Each actuator's SQLite size is checked against the plan before each run and after every statement; the account's total is checked when a run starts |
 | Suspended accounts | Runs, crons, alarms, events, MCP and SSE stop; state is kept |
-| Deploy churn | Limited to the plan's deploys per 24 hours and per month. Every attempt counts toward the monthly budget, including deploys that fail their checks. A rollback counts as a deploy |
+| Deploy churn | Limited to the plan's deploys per day and per month. Every attempt counts, including deploys that fail their checks, so a loop of failing deploys stops at the daily limit. A rollback counts as a deploy |
 | One agent running a tool too often | Optional [per-token limits](/docs/concepts/agents/#limits): runs per hour overall and per tool, 1 to 100,000 each, on agent tokens and MCP connections. Calls over a limit are refused with `429` (a tool error over MCP) and start no run |
 | Bulk retries | At most 100 runs per call, each counted as a run; the batch stops when the run budget runs out |
 | Alert floods | At most one [alert](/docs/guides/alerts/#throttling) per actuator per kind per hour (6 hours for missed schedules and rejected credentials, 15 minutes for expiring waits); the rest are counted into the next. Alert emails per day per account (above). Test alerts: one per 30 seconds, ten a day |

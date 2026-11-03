@@ -56,7 +56,7 @@ If a deploy is the problem, make an earlier version current again: on the actuat
 - Runs in flight finish on the version they started on. New runs use v9.
 - It runs the same checks as a deploy: your plan must allow v6's capabilities, their providers must be configured, and its cron schedules, `http.allow` list and input patterns must pass today's rules.
 - Your configuration stays as it is, and it must fit v6's config schema; otherwise the rollback is refused and says which fields don't fit. Through the API you can pass a configuration that fits with the rollback.
-- A rollback counts as a deploy toward your plan's [deploys per 24 hours](/docs/reference/limits/#plans).
+- A rollback counts as a deploy toward your plan's [deploys per day and per month](/docs/reference/limits/#plans).
 
 Runs that failed on the bad version can then be retried: a retry moves them to the current version, the rolled-back one.
 
