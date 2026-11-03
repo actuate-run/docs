@@ -263,7 +263,7 @@ interface StepOptions {
 
 ```ts
 interface StepInfo {
-  /** `<runId>:<stepName>`. Stable for this run and step. */
+  /** `<runId>:<stepName>`. The same on every attempt and replay of this step. */
   idempotencyKey: string;
   /** 1 on the first try, 2 on the first retry, and so on. */
   attempt: number;
@@ -273,6 +273,8 @@ interface StepInfo {
 ```
 
 Passed to every `ctx.step.do` function.
+
+Provider calls in the step that take an idempotency key (`messaging.send`, `payment.createBill`, `payment.refund`) get one derived from `idempotencyKey` when you pass none: `<idempotencyKey>:<method>:<n>`, where `n` counts that method's calls in this attempt of the step from 0. In a step named `notify`, the second `send` gets `<runId>:notify:send:1`. A key you pass is used as is. See [keys on provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). Requires `@actuate/runtime` 0.3.
 
 ### WaitForEventOptions
 
@@ -369,6 +371,9 @@ interface Db {
   query<T extends object = Row>(sql: string, params?: readonly SqlValue[]): Promise<T[]>;
   first<T extends object = Row>(sql: string, params?: readonly SqlValue[]): Promise<T | null>;
   sql<T extends object = Row>(strings: TemplateStringsArray, ...values: SqlValue[]): Promise<T[]>;
+  statement(strings: TemplateStringsArray, ...values: SqlValue[]): DbStatement;
+  batch<T extends object = Row>(statements: readonly DbStatement[]): Promise<T[][]>;
+  commitWithStep(statements: readonly DbStatement[]): void;
   migrate(statements: readonly string[]): Promise<void>;
 }
 ```
@@ -378,9 +383,24 @@ interface Db {
 | `query(sql, params?)` | Runs one statement with `?` placeholders and returns all rows |
 | `first(sql, params?)` | Like `query`, returning the first row or `null` |
 | `` sql`...` `` | Tagged template. Each interpolated value becomes a bound parameter, never SQL. Throws if called as a plain function |
+| `` statement`...` `` | Tagged template. Builds a [`DbStatement`](#dbstatement) for `batch` or `commitWithStep` without running it. Interpolated values become bound parameters, as in `sql` |
+| `batch(statements)` | Runs the statements in order in one transaction, all or nothing, and resolves to each one's rows (`RETURNING` rows, or `[]`). If one fails, none is applied and the error names it. A retried step runs the batch again |
+| `commitWithStep(statements)` | Inside `ctx.step.do` only. Queues the statements to apply in the same transaction that records the step as completed: once, never on a failed attempt or a replay. The step can't read their effects. If one fails, none is applied and the attempt fails |
 | `migrate(statements)` | Applies each statement once per actuator, tracked by its index, in a transaction. Append new entries; never edit or reorder shipped ones |
 
-SQL that mentions a table starting with `_actuate_` is refused with `ActuatorError`. See [Database](/docs/concepts/database/).
+SQL that mentions a table starting with `_actuate_` is refused with `ActuatorError`. In `batch` and `commitWithStep`, so is a statement that controls a transaction (`BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`). `statement`, `batch` and `commitWithStep` require `@actuate/runtime` 0.3; a host on an older runtime rejects them and writes nothing. See [Database](/docs/concepts/database/#atomic-writes).
+
+### DbStatement
+
+```ts
+interface DbStatement {
+  /** One statement with `?` placeholders. */
+  sql: string;
+  params?: readonly SqlValue[];
+}
+```
+
+One parameterised statement for `batch` and `commitWithStep`. Build it with `` ctx.db.statement`...` `` or write it as an object.
 
 ### SqlValue
 
@@ -473,7 +493,7 @@ interface MessagingSendOptions {
   subject?: string;
   /** WhatsApp template for messages outside the 24-hour service window. */
   template?: { name: string; language: string; variables?: string[] };
-  /** Defaults to the current step's idempotency key. */
+  /** Passed to providers that deduplicate (Resend; Discord with a bot token, for a few minutes). Defaults to a key for this call, derived from the step's key. */
   idempotencyKey?: string;
 }
 
@@ -505,6 +525,7 @@ interface CreateBillRequest {
   customer?: { name?: string; email?: string; phone?: string };
   /** Where the payer is sent after paying. */
   returnUrl?: string;
+  /** Passed to providers that deduplicate (Stripe). Defaults to a key for this call, derived from the step's key. */
   idempotencyKey?: string;
 }
 
@@ -522,6 +543,7 @@ interface RefundRequest {
   /** Major units. Omit for a full refund. */
   amount?: number;
   reason?: string;
+  /** Passed to providers that deduplicate (Stripe). Defaults to a key for this call, derived from the step's key. */
   idempotencyKey?: string;
 }
 ```

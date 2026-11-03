@@ -100,15 +100,50 @@ Every step function receives a `StepInfo`:
 
 ```ts
 await ctx.step.do("refund", async ({ idempotencyKey, attempt }) => {
-  ctx.log.info(`refund attempt ${attempt}`);
-  return ctx.payment.refund?.({ billId, idempotencyKey });
+  ctx.log.info(`refund attempt ${attempt} (${idempotencyKey})`);
+  return ctx.payment.refund?.({ billId });
 });
 ```
 
-- `idempotencyKey` is `<runId>:<stepName>`. It is the same on every attempt and every replay, so pass it to any API that deduplicates (payment providers, message APIs). Messaging providers use the current step's key by default.
+- `idempotencyKey` is `<runId>:<stepName>`. It is the same on every attempt and every replay.
 - `attempt` is 1 on the first try, 2 on the first retry, and so on.
 
-Why it matters: a step can be interrupted after the provider acted but before the result was stored (a crash, a deploy, a CPU limit). The step then runs again. The journal makes the common case exactly-once; the idempotency key covers that last gap at the provider.
+Why it matters: a step can be interrupted after the provider acted but before the result was stored (a crash, a deploy, a CPU limit). The step then runs again. The journal makes the common case exactly-once; an idempotency key covers that last gap at the provider.
+
+### Keys on provider calls
+
+You don't need to pass a key yourself. Inside `ctx.step.do`, each call to `ctx.messaging.send`, `ctx.payment.createBill` or `ctx.payment.refund` gets one when you pass none (in `send`'s options, or in the request):
+
+```text
+<runId>:<stepName>:<method>:<n>
+```
+
+`n` counts that method's calls in the current attempt of the step, from 0. In a step named `notify` that sends two messages, the first gets `<runId>:notify:send:0` and the second `<runId>:notify:send:1`. So two calls in one step are never deduplicated against each other, and a retried or replayed step gives each call the same key it had before. Calls are counted per method, so an extra `send` on a retry doesn't change the key of the `refund` after it.
+
+A key you pass yourself is used as is. Keys longer than 255 characters (a long custom run ID) are shortened to 255, ending in a hash of the whole key, so different keys stay different.
+
+:::note
+Default keys require `@actuate/runtime` 0.3. On the hosted platform they apply once the platform runs that version.
+:::
+
+Only some providers can use the key:
+
+| Provider | Deduplicates | How |
+| --- | --- | --- |
+| Stripe | `createBill`, `refund` | `Idempotency-Key` header, kept for 24 hours |
+| Resend (email) | `send` | `Idempotency-Key` header, kept for 24 hours |
+| Discord with a bot token | `send` | A nonce with `enforce_nonce`, checked for a few minutes only |
+| Discord webhooks, Telegram, WhatsApp, Slack | No | Their APIs take no key. A retried send can arrive twice |
+| Chip, ToyyibPay, Billplz | No | Their APIs take no key. A retried call can create a second, unpaid bill (or, at Chip, repeat a partial refund) |
+
+Two things follow at Stripe and Resend:
+
+- A retry after the key has expired (a backoff longer than 24 hours) is not deduplicated.
+- A retry that sends different parameters with the same key is rejected with an error. Build a step's provider requests from its input and earlier step results, not from `Date.now()` or values that change between attempts.
+
+For providers that can't deduplicate, keep the call in a step of its own and give it no `retries`, or check whether it already happened before you repeat it.
+
+Pass your own key when you want calls in **different steps or different runs** to count as one, for example `refund-${orderId}` so that two runs for the same order refund it once (within Stripe's 24 hours). Never pass the same key to two different calls: the provider answers the second with the first one's result, or with an error if the parameters differ.
 
 ## Determinism rules
 

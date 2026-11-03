@@ -43,7 +43,7 @@ What follows from them: each extra step costs about one row written, each insert
 
 ### Guards on a single pass
 
-The platform also caps what one pass can do: at most 1,000 database statements, 1,000 step writes, 20,000 rows written, 5,000,000 rows read, 50 HTTP requests, 30 seconds of wall time and 50 ms of CPU. A step's stored result is at most 1 MiB. A run fails after the plan's passes per run (200 on the Sandbox). See [guards on the hosted platform](/docs/reference/limits/#guards-on-the-hosted-platform).
+The platform also caps what one pass can do: at most 1,000 database statements (each statement in a `ctx.db.batch` or `commitWithStep` counts), 1,000 step writes, 20,000 rows written, 5,000,000 rows read, 50 HTTP requests, 30 seconds of wall time and 50 ms of CPU. A step's stored result is at most 1 MiB. A run fails after the plan's passes per run (200 on the Sandbox). See [guards on the hosted platform](/docs/reference/limits/#guards-on-the-hosted-platform).
 
 Steps in the same pass run in the same invocation, so splitting a heavy loop into more steps does not give it more CPU. To spread work over several invocations, process a bounded batch per run, or put a short sleep between chunks: each sleep starts a new pass, which costs a pass.
 
@@ -59,7 +59,7 @@ Three hosted budgets depend on how you work rather than on how many runs you hav
 
 ### Write related rows in one step and one statement
 
-Rows written are counted per row, so batching does not make the rows themselves cheaper. It saves the journal row of every extra step, a statement per row (a pass may run 1,000), and the round trip each statement makes. It also makes the write atomic: a single SQLite statement either applies completely or not at all, while a step that runs several statements and then fails keeps the ones that already ran.
+Rows written are counted per row, so batching does not make the rows themselves cheaper. It saves the journal row of every extra step, a statement per row (a pass may run 1,000), and the round trip each statement makes. It also makes the write atomic: a single SQLite statement either applies completely or not at all, while a step that runs several statements and then fails keeps the ones that already ran. When the rows can't go in one statement, run the statements with [`ctx.db.batch`](/docs/concepts/database/#atomic-writes) (all or nothing) or [`ctx.db.commitWithStep`](/docs/concepts/database/#commitwithstep) (all or nothing, committed with the step's result). Both require `@actuate/runtime` 0.3.
 
 Don't write one row per step:
 
@@ -112,13 +112,13 @@ await ctx.step.do("notify-all", async () => {
 
 // Do: each message is sent once, even when a later one fails.
 for (const c of customers) {
-  await ctx.step.do(`notify-${c.id}`, ({ idempotencyKey }) => ctx.messaging.send(c.phone, text, { idempotencyKey }));
+  await ctx.step.do(`notify-${c.id}`, () => ctx.messaging.send(c.phone, text));
 }
 ```
 
 The trade-off is one journal row per item. That is the price of exactly-once, and it is worth paying for anything a customer sees or that moves money. For database writes, make the batch safe to repeat instead (one statement, or natural keys with `ON CONFLICT`), and keep it in one step.
 
-Pass the step's `idempotencyKey` to every provider call that accepts one. It covers the case where the provider acted but the step was interrupted before its result was stored.
+Inside a step, `send`, `createBill` and `refund` get an [idempotency key](/docs/concepts/steps-and-replay/#keys-on-provider-calls) for each call automatically. It covers the case where the provider acted but the step was interrupted before its result was stored, at the providers that deduplicate (Stripe, Resend, and Discord with a bot token for a few minutes). Pass your own key only when calls in different steps or runs should count as one.
 
 ### Wait for events instead of polling
 
@@ -233,8 +233,8 @@ export default defineActuator({
 
     for (const r of due) {
       // One step per message, marked sent in the same step, so a failed run never resends it.
-      await ctx.step.do(`send-${r.id}`, async ({ idempotencyKey }) => {
-        await ctx.messaging.send(r.phone, "Your appointment is tomorrow.", { idempotencyKey });
+      await ctx.step.do(`send-${r.id}`, async () => {
+        await ctx.messaging.send(r.phone, "Your appointment is tomorrow.");
         await ctx.db.query("UPDATE reminders SET sent_at = ? WHERE id = ?", [Date.now(), r.id]);
       });
     }
@@ -499,8 +499,9 @@ Paste this into `CLAUDE.md`, `AGENTS.md` or a file in `.cursor/rules/`, so your 
 - Compute `Date.now()`, `new Date()`, `Math.random()` and `crypto.randomUUID()` inside a step. Do database reads that decide a branch inside a step.
 - Never swallow the suspend signal: in a `try`/`catch` around waits, rethrow when `isSuspendSignal(err)` is true.
 - Give steps descriptive, unique, stable names. Never rename a step that has shipped. In loops, build the name from the item's ID. Name every sleep inside a branch or loop.
-- Give each external side effect (message, charge, refund) its own step, and pass the step's `idempotencyKey` to the provider.
+- Give each external side effect (message, charge, refund) its own step. Inside a step, `ctx.messaging.send`, `ctx.payment.createBill` and `ctx.payment.refund` get an idempotency key per call automatically (`@actuate/runtime` 0.3); pass your own `idempotencyKey` only to deduplicate across different steps or runs.
 - Do database work for many rows in one step and one statement: multi-row INSERT, `INSERT ... SELECT ... FROM json_each(?)`, or `INSERT ... ON CONFLICT DO UPDATE` instead of select-then-write. Make writes safe to repeat.
+- When several statements must apply together, use `ctx.db.batch([...])` (all or nothing; a retried step runs it again) or, inside a step, `ctx.db.commitWithStep([...])` (applied once with the step's result; the step can't read those writes). Build each statement with ``ctx.db.statement`...` ``. Both need `@actuate/runtime` 0.3.
 - Return small JSON from steps: only the fields you use, never whole tables, response bodies or LLM replies. A step result may be at most 1 MiB.
 - Wait with `ctx.step.waitForEvent`, `ctx.step.waitForApproval`, `ctx.step.waitForInput` or `ctx.step.sleepUntil`. Never poll in a loop of short sleeps. Prefer one long sleep to many short ones.
 - Keep passes short: a pass over 5 seconds counts one extra pass per further 5 seconds. Put timeouts under 30 seconds on slow calls, and wait for long jobs with `waitForEvent` instead of inside a step.
@@ -508,10 +509,10 @@ Paste this into `CLAUDE.md`, `AGENTS.md` or a file in `.cursor/rules/`, so your 
 - Return a status for expected outcomes (not found, rejected, over a limit) instead of throwing. A failed run sends an alert.
 - Create tables and indexes with `ctx.db.migrate` at the top of `run`. Only append to its list; never edit, reorder or remove entries.
 - Index the columns you filter and sort on. Select named columns, put LIMIT on reads of growing tables, and don't COUNT(*) a large table on every run.
-- Don't use WITH RECURSIVE, self-referencing CTEs, printf, format, randomblob, zeroblob, PRAGMA, ATTACH, DETACH, VACUUM or REINDEX, or table names starting with `_actuate_`, `_cf_` or `sqlite_`. The platform refuses them.
+- Don't use WITH RECURSIVE, self-referencing CTEs, printf, format, randomblob, zeroblob, PRAGMA, ATTACH, DETACH, VACUUM, REINDEX, BEGIN, COMMIT, ROLLBACK or SAVEPOINT, or table names starting with `_actuate_`, `_cf_` or `sqlite_`. The platform refuses them.
 - Delete rows you no longer need, in batches of a few thousand, for example in a step of an existing daily cron. The platform never prunes your tables.
 - Cron: use the longest interval that works, read due work with one indexed, LIMITed query, and return early when there is none. Cron runs get the input `{}`, so the input schema must accept it.
-- Keep a pass under 1,000 statements, 1,000 steps, 20,000 rows written, 50 `ctx.http` calls and 50 ms of CPU. Process big batches a bounded page per run.
+- Keep a pass under 1,000 statements (each statement in a batch counts), 1,000 steps, 20,000 rows written, 50 `ctx.http` calls and 50 ms of CPU. Process big batches a bounded page per run.
 - Tell callers to send an idempotency key that names the action: the `Idempotency-Key` header over HTTP, `_meta["run.actuate/idempotencyKey"]` over MCP.
 
 Before you deploy:

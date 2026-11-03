@@ -43,7 +43,7 @@ The free Sandbox plan has no messaging, payment or LLM providers; see [Limits](/
 - **Declared, not ambient.** Only declared capabilities appear on `ctx`, in the types and at runtime. An undeclared name in `capabilities` is rejected by `defineActuator`.
 - **Configured before deploy.** On the platform, an actuator whose declared capability has no provider configured is refused at deploy. In the open-source runtime, the first call to an unconfigured capability throws: `ctx.payment is declared but no payment provider is configured`.
 - **Optional when you can do without.** List a capability in `optionalCapabilities` instead and it is on `ctx` but `undefined` when no provider is configured, and never blocks a deploy: `await ctx.step.do("alert", () => ctx.messaging?.send("ops", text))`. `http` cannot be optional.
-- **Only inside steps.** Every provider method call must happen inside `ctx.step.do`. A call outside a step throws an `ActuatorError`, because it would repeat on every [replay](/docs/concepts/steps-and-replay/). Pass the step's `idempotencyKey` to providers that deduplicate.
+- **Only inside steps.** Every provider method call must happen inside `ctx.step.do`. A call outside a step throws an `ActuatorError`, because it would repeat on every [replay](/docs/concepts/steps-and-replay/). Inside a step, `send`, `createBill` and `refund` get an [idempotency key](/docs/concepts/steps-and-replay/#keys-on-provider-calls) automatically, so providers that deduplicate act once when the step is retried.
 
 ## messaging
 
@@ -71,7 +71,7 @@ Slack and Discord suit messages to you or your team: approval requests, alerts, 
 | `subject` | Email subject, when the channel is email |
 | `template` | `{ name, language, variables? }`: a WhatsApp template, required for messages outside the 24-hour service window |
 | `format` | `"text"` (default) or `"html"`: a small HTML subset (`<b>`, `<i>`, `<a href>`, `<code>`, `<pre>`) where the channel supports it (Telegram, email); other channels get the text with tags removed |
-| `idempotencyKey` | Passed to providers that deduplicate. Defaults to the current step's key |
+| `idempotencyKey` | Passed to providers that deduplicate (Resend, and Discord with a bot token). Defaults to a key for this call: `<runId>:<step>:send:<n>`, where `n` counts the step's sends from 0. See [Deduplication by provider](#deduplication-by-provider) |
 
 ### Several channels
 
@@ -135,6 +135,8 @@ const bill = await ctx.step.do("create-bill", () =>
 
 `amount` is always in major units. Other `createBill` fields are `returnUrl` (where the payer goes after paying) and `idempotencyKey`.
 
+`createBill` and `refund` requests get an idempotency key when you leave it out: `<runId>:<step>:createBill:<n>` or `<runId>:<step>:refund:<n>`, where `n` counts that method's calls in the step from 0. Stripe uses it, so a retried step gets the first checkout session or refund back instead of a second one. Chip, ToyyibPay and Billplz have no idempotency key: a retried `createBill` there can make a second, unpaid bill, and a retried partial refund at Chip can refund twice. See [Deduplication by provider](#deduplication-by-provider).
+
 **Payment webhooks become events.** When the provider reports a payment, it is delivered to the actuator as the event `payment.<referenceId>`, so a run can wait for it:
 
 ```ts
@@ -162,6 +164,23 @@ Stripe events take their reference only from the `actuate_reference_id` metadata
 ToyyibPay's callbacks are not signed, so Actuate never trusts what the callback says. It re-queries the transaction with your ToyyibPay credentials and builds the event only from that answer: the event key uses the re-queried transaction's reference, and the amount is the re-queried amount. A callback that doesn't match a transaction on your account is rejected.
 
 When you run locally with `actuate dev`, the payment provider is a fake: the bill's `url` points at your actuator's `/events/payment.<referenceId>`, so opening it in a browser "pays" the bill with the payload `{ provider: "dev", status: "paid", referenceId, via: "GET" }`. Messages are printed in the terminal instead of being sent.
+
+## Deduplication by provider
+
+Inside a step, `send`, `createBill` and `refund` get a key per call when you pass none (see [keys on provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls)). What the provider does with it:
+
+| Provider | What a repeated key does |
+| --- | --- |
+| Stripe | Returns the first checkout session or refund. Keys last 24 hours |
+| Resend | Returns the first email instead of sending again. Keys last 24 hours |
+| Discord with a bot token | Returns the first message, but only within a few minutes |
+| Discord webhooks, Telegram, WhatsApp, Slack | Nothing: the message can be sent twice |
+| Chip, ToyyibPay, Billplz | Nothing: a second bill can be created, and a Chip partial refund can repeat |
+| `actuate dev` fake payment | Returns the first bill or refund, like Stripe |
+
+At Stripe and Resend, a repeated key with different parameters is an error, so build a step's requests from values that are the same on every attempt. Pass your own `idempotencyKey` only when calls in different steps or runs should count as one, such as `refund-${orderId}`.
+
+Default keys require `@actuate/runtime` 0.3. On the hosted platform they apply once the platform runs that version.
 
 ## llm
 
