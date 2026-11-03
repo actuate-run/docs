@@ -48,7 +48,7 @@ The isolate's environment contains only your declared capability clients. There 
 | Cron schedules per actuator | 3 | 5 | 5 |
 | Shortest cron interval, all schedules together | 1 hour | 1 minute | 1 minute |
 | Open legacy SSE sessions | 2 | 5 | 20 |
-| Deploys per day (failed ones and rollbacks count) | 30 | 200 | 500 |
+| Deploys per UTC day (failed ones and rollbacks count) | 30 | 200 | 500 |
 | Deploys per month (failed ones and rollbacks count) | 300 | 2,000 | 5,000 |
 | Settled runs kept for | 7 days | 30 days | 90 days |
 | Agent analytics kept for | 30 days | 60 days | 90 days |
