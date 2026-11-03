@@ -35,11 +35,14 @@ The runtime **fails closed**. If `ACTUATE_TOKEN` is not set, every admin route a
 | `GET` | [`/runs/:runId/approvals/:step/links`](#approvals) | admin | The signed approve and reject links of a waiting step |
 | `POST` | [`/runs/:runId/approvals/:step/approve`](#approvals) | admin | Approve directly |
 | `POST` | [`/runs/:runId/approvals/:step/reject`](#approvals) | admin | Reject directly |
+| `POST` | [`/runs/:runId/inputs/:step`](#approvals) | admin | Answer an input step directly |
 | `POST`, `GET` | [`/events/:key`](#events) | admin | Post an event |
 | `GET` | [`/tables`](#tables) | admin | List your tables |
 | `GET` | [`/tables/:name`](#tables) | admin | Read a table as JSON or CSV |
 
 Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500 {"error":"<message>"}`.
+
+There is no `/mcp` route: the MCP endpoint is served by the hosted platform's gateway, not by this runtime. A self-hosted actuator is called over these routes, usually `POST /run`.
 
 ## The run record
 
@@ -177,7 +180,7 @@ The request returns once the first pass ends, so a run that does not wait comes 
 { "approveUrl": "https://bot.example.com/approve?token=...", "rejectUrl": "https://bot.example.com/approve?token=...", "expiresAt": 1793664000000 }
 ```
 
-For an input step it returns `{ "answerUrl": "...", "expiresAt": ... }`. To answer directly, `POST /runs/:id/inputs/:step` with `{ "text": "..." }` (admin auth); it returns `{ "ok": true }` or `{ "ok": false, "reason": "..." }`.
+For an input step it returns `{ "answerUrl": "...", "expiresAt": ... }`. To answer directly, `POST /runs/:id/inputs/:step` with `{ "text": "..." }` (admin auth); it returns `{"ok": true, "runId", "step", "approved": true}`, or `{"ok": false, "reason": "..."}` if the step isn't waiting for an answer, or the answer is empty or longer than `maxLength`.
 
 It returns `404` if that step is not waiting. The links are never written to run logs, so this route (behind `ACTUATE_TOKEN`) and the messaging notification are the only ways to get them.
 
@@ -201,7 +204,7 @@ The response returns after the resumed runs' next pass.
 
 ## Tables
 
-`GET /tables` lists your tables, excluding runtime (`_actuate_*`) and SQLite internal tables: `["bookings", "greetings"]`.
+`GET /tables` lists your tables: `["bookings", "greetings"]`. It leaves out the runtime's own tables (`_actuate_*`), SQLite's (`sqlite_*`), Cloudflare's (`_cf_*`) and the one `actuate dev` adds through Miniflare (`__miniflare_*`).
 
 `GET /tables/:name` returns `{ "columns": [...], "rows": [...] }`.
 
