@@ -53,7 +53,7 @@ Windows are per actuator and per kind, so a failing actuator never hides an aler
 
 ### Daily email cap
 
-Alert emails, test alerts included, are capped per account per day (UTC): 5 on Sandbox, 30 on Maker, 100 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual.
+Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual.
 
 ## Where alerts go
 
@@ -75,7 +75,7 @@ On Maker and Agency you can also send them to one messaging channel. Alerts use 
 
 The recipient is one ID or address, at most 200 characters, with no spaces. Messages to a channel are cut at about 1,900 characters (Discord's limit). If you later remove that provider, alerts go to email only until you pick another channel. If sending to the channel fails, the email still goes out.
 
-**Send test alert** sends a test message to your email and the channel, whatever your toggles and mutes say, and shows what happened to each, including the provider's error if the channel failed. You can send one every 30 seconds, and five a day.
+**Send test alert** sends a test message to your email and the channel, whatever your toggles and mutes say, and shows what happened to each, including the provider's error if the channel failed. You can send one every 30 seconds, and ten a day.
 
 ## Turn alerts off
 
