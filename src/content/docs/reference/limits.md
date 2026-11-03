@@ -70,6 +70,8 @@ Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
 
 ## Guards on the hosted platform
 
+You can hit most of these locally first. With `@actuate/cli` 0.3 or later, `actuate dev` and `actuate test` apply the per-pass guards, the 1 MiB step result limit, the SQL refusals, and the plan's longest wait, passes per run and retry cap, with the platform's messages. `actuate dev` also prints the deploy checks at startup, and `actuate check --platform` and `actuate deploy` run them before anything is uploaded: cron schedules, `http.allow`, input regexes, capabilities on the plan, the configuration and, logged in, providers, the actuator count and the deploy budget. The CPU limit, the monthly budgets and the database size are not mirrored. See [guards in actuate dev](/docs/reference/cli/#guards-in-actuate-dev) and [the deploy checks](/docs/reference/cli/#the-deploy-checks).
+
 | Situation | What happens |
 | --- | --- |
 | Monthly runs used up | New runs are refused until the monthly reset |

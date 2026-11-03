@@ -45,6 +45,8 @@ What follows from them: each extra step costs about one row written, each insert
 
 The platform also caps what one pass can do: at most 1,000 database statements (each statement in a `ctx.db.batch` or `commitWithStep` counts), 1,000 step writes, 20,000 rows written, 5,000,000 rows read, 50 HTTP requests, 30 seconds of wall time and 50 ms of CPU. A step's stored result is at most 1 MiB. A run fails after the plan's passes per run (200 on the Sandbox). See [guards on the hosted platform](/docs/reference/limits/#guards-on-the-hosted-platform).
 
+`actuate dev` and `actuate test` apply the same guards, for your plan, with the platform's messages, so a pass that does too much fails locally first. The CPU limit is the exception: local machines differ too much to mirror it. See [guards in actuate dev](/docs/reference/cli/#guards-in-actuate-dev).
+
 Steps in the same pass run in the same invocation, so splitting a heavy loop into more steps does not give it more CPU. To spread work over several invocations, process a bounded batch per run, or put a short sleep between chunks: each sleep starts a new pass, which costs a pass.
 
 ### Hosted budgets that follow your habits
@@ -303,40 +305,48 @@ A write outside a step is also a cost: it runs again, and writes rows again, on 
 
 ### Deploy when it works locally
 
-Every deploy attempt that reaches the platform counts against your plan's [monthly deploy budget](/docs/reference/limits/#plans), including attempts the platform refuses. `actuate deploy` runs `actuate check` first and stops on errors before it uploads anything, so those don't count. Everything after the upload does: a bundle that fails to load, a cron schedule over the plan's limits, an `http.allow` entry or input regex the platform refuses, a capability your plan doesn't include, a provider you haven't set up, or a configuration your schema rejects.
+Every deploy attempt that reaches the platform counts against your plan's [monthly deploy budget](/docs/reference/limits/#plans), including attempts the platform refuses. So `actuate deploy` checks what it can before it uploads anything, and stops on errors, which then don't count:
 
-So don't deploy to find out whether something works. Run it with `actuate dev`, test it, look at `actuate deploy --dry-run`, and deploy once.
+- replay safety (`actuate check`);
+- an actuator file that doesn't load, and a bundle over 5 MB;
+- cron schedules over the plan's limits, and an input schema that rejects the `{}` every cron run gets (a warning);
+- an `http.allow` entry or input regex the platform refuses;
+- a capability your plan doesn't include;
+- an `actuate.config.json` that isn't valid JSON or that your config schema rejects;
+- logged in, also a provider you haven't set up, a new actuator over the plan's number of actuators, and no deploys left this month.
+
+When the deployed version already runs the same code, `deploy` updates only the configuration, which uses no deploy. These checks mirror the platform's, which runs its own again on upload and has the final say. They need `@actuate/cli` 0.3 or later; earlier versions only ran `actuate check`. See [the deploy checks](/docs/reference/cli/#the-deploy-checks).
+
+So don't deploy to find out whether something works. Run `actuate check --platform` and `actuate test`, try it with `actuate dev`, and deploy once.
 
 ## Test before you deploy
 
-There is no `actuate test` command. Use the CLI for a quick loop by hand, and a test runner such as Vitest with `@actuate/runtime` for repeatable tests.
+Use the CLI for a quick loop by hand, and `actuate test` with `@actuate/cli/testing` for repeatable tests. Projects created with `npm create actuate` have both, and an example test in `actuator.test.ts`.
 
 ### The CLI loop
 
-1. **`npx actuate check`** lints the file for replay safety. It flags, outside `ctx.step.do`:
+1. **`npx actuate check --platform`** lints the file for replay safety, then bundles it and runs the platform's [deploy checks](/docs/reference/cli/#the-deploy-checks) for your plan. The linter flags, outside `ctx.step.do`:
    - `fetch()` and `globalThis.fetch()` (error)
    - calls on `ctx.messaging`, `ctx.payment`, `ctx.llm` or `ctx.http` (error)
    - `Date.now()`, `new Date()` with no arguments, `Math.random()`, `crypto.randomUUID()` and `performance.now()` (error)
    - `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE` (warning)
 
-   It exits with status 1 on errors. It only reads the `run` function in one file: it doesn't follow calls into helpers, and it only sees SQL written as a literal. See [actuate check](/docs/reference/cli/#actuate-check).
-2. **`npx actuate dev`** runs the actuator on a local `workerd` with the same step engine, at `http://localhost:8787`. Messages and approval links print in the terminal, and payments go to a fake provider.
-3. **`npx actuate run '{"name":"Aina"}' --local`** starts a run and prints the run record after its first pass, including `status` and `passes`.
-4. **`npx actuate logs --local`** lists recent runs, and **`npx actuate logs <runId> --local`** prints one run's steps, log lines and error. The number of steps is the number of journal rows the run wrote.
-5. Drive the waits: post an event with `curl -X POST localhost:8787/events/<key> -d '{}'`, open an approval link from the terminal, or fire a schedule with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
-6. **`npx actuate deploy --dry-run`** runs `check`, bundles the file, prints `Bundled <name>: <size> KiB, sha256 <hash>`, and then the metadata a deploy would send: name, description, capabilities, optional capabilities, `httpAllow`, cron schedules, hints, and the input, config and output schemas as JSON Schema. It needs no login, uploads nothing and doesn't count as a deploy. It doesn't run the platform's checks either, so read the output: are the capabilities on your plan, are the cron schedules within its limits, is `http.allow` what you meant?
+   It exits with status 1 on errors. The linter only reads the `run` function in one file: it doesn't follow calls into helpers, and it only sees SQL written as a literal. See [actuate check](/docs/reference/cli/#actuate-check).
+2. **`npx actuate dev`** runs the actuator on a local `workerd` with the same step engine and the platform's guards, at `http://localhost:8787`. Messages and approval links print in the terminal, and payments go to a fake provider.
+3. **`npx actuate run '{"name":"Aina"}' --local`** starts a run and prints where it got to after its first pass: its status, passes, the rows it wrote and read, its steps, and the command that moves it on if it waits. `--json` prints the run record instead.
+4. **`npx actuate logs --local`** lists recent runs with their passes and rows, and **`npx actuate logs <runId> --local`** prints one run's steps, log lines, rows and error.
+5. Drive the waits: post an event with `npx actuate event <key> '{}' --local`, decide an approval with `npx actuate approve <runId> --local` (or `reject`), answer a question with `npx actuate answer <runId> "<text>" --local`, or open an approval link from the terminal. Fire a schedule with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
+6. **`npx actuate deploy --dry-run`** runs `check` and the deploy checks, prints `Bundled <name>: <size> KiB, sha256 <hash>` and each problem, and then the metadata a deploy would send: name, description, capabilities, optional capabilities, `httpAllow`, cron schedules, hints, and the input, config and output schemas as JSON Schema. It exits with status 1 when a check fails. It needs no login (logged in, it also runs the checks that need your account), uploads nothing and doesn't count as a deploy.
 
-`actuate dev` doesn't enforce the platform's guards: no per-pass caps, no 1 MiB limit on step results, no SQL refusals, no plan limit on waits and no budgets. Code that works locally can still hit them, which is what tests are for.
+`actuate dev` applies the platform's per-pass guards, the 1 MiB limit on step results, the SQL the platform refuses, and your plan's longest wait and passes per run, with the platform's messages; `--no-guards` turns them off. It doesn't apply the 50 ms CPU limit or the monthly budgets, so heavy computation in one pass can still be cut short once deployed. See [guards in actuate dev](/docs/reference/cli/#guards-in-actuate-dev).
 
-### Unit tests with the engine
+`npx actuate doctor` checks the rest of your setup in one go: Node, the SDK version, the deploy checks, providers in `.dev.vars`, and your login.
 
-The engine runs in-process on `node:sqlite` (Node.js 22.13 or later runs it without a flag), the same way the [templates](/docs/guides/templates/) test themselves. `RunManager` drives runs and `executePass` runs your actuator, with a clock you control and fake providers. Install the runtime at the same version as `@actuate/sdk`:
+### Unit tests with testActuator
 
-```bash
-npm install -D vitest @actuate/runtime
-```
+`testActuator` from `@actuate/cli/testing` runs your actuator in-process: the real step engine on `node:sqlite`, a clock you move, recording fakes for every provider, and the platform's guards. [`actuate test`](/docs/reference/cli/#actuate-test) runs the tests with `node:test` and TypeScript, with no other dependency and no configuration. Both need `@actuate/cli` 0.3 or later, which projects created with `npm create actuate` have as a dev dependency.
 
-Add `"test": "vitest run"` to `package.json`. Here is an actuator that saves a draft, waits for a person, and sends it:
+Here is an actuator that saves a draft, waits for a person, and sends it:
 
 ```ts title="actuator.ts"
 import { defineActuator, z } from "@actuate/sdk";
@@ -370,119 +380,117 @@ export default defineActuator({
 });
 ```
 
-And its tests: approve through the signed link, let the approval time out, and check the steps, the passes, the rows in the table and the rows written:
+And its tests: approve through the signed link, let the approval time out, refuse bad input, and check the steps, the message sent, the rows in the table, and the passes and rows written:
 
 ```ts title="actuator.test.ts"
-import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
-import { RunManager, executePass, nodeSqlite, type ApprovalRequest } from "@actuate/runtime";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { testActuator } from "@actuate/cli/testing";
 import actuator from "./actuator.js";
 
-function setup() {
-  let now = Date.parse("2026-11-02T00:00:00Z");
-  const db = new DatabaseSync(":memory:");
-  const sent: Array<{ to: string; text: string }> = [];
-  const approvals: ApprovalRequest[] = [];
-  const config = actuator.config!.parse({});
-  const manager = new RunManager({
-    sql: nodeSqlite(db),
-    approvalSecret: "test-secret",
-    approvalUrl: "https://example.test/approve",
-    now: () => now,
-    consoleLogs: false,
-    notifyApproval: async (request) => void approvals.push(request),
-    invoke: (request, journal) =>
-      executePass(actuator, request, {
-        journal,
-        config,
-        providers: {
-          messaging: {
-            async send(to, text) {
-              sent.push({ to, text });
-              return { id: `msg-${sent.length}`, channel: "test" };
-            },
-          },
-        },
-      }),
-  });
-  return {
-    db,
-    manager,
-    sent,
-    approvals,
-    // manager.start doesn't validate input; parse it as the platform does.
-    start: (input: unknown) => manager.start({ input: actuator.input.parse(input), trigger: { kind: "api" } }),
-    // Move the clock forward and fire the alarm, as the Durable Object would.
-    advance: async (ms: number) => {
-      now += ms;
-      await manager.alarm();
-    },
-    // Rows inserted, updated or deleted on this connection so far.
-    changes: () => Number(db.prepare("SELECT total_changes() AS n").get()!.n),
-  };
-}
-
-const token = (url: string) => new URL(url).searchParams.get("token")!;
 const call = { to: "aina@example.com", text: "Your order has shipped." };
 
-describe("approve_message", () => {
-  it("sends only after approval", async () => {
-    const t = setup();
-    const before = t.changes();
+test("sends only after approval", async () => {
+  const t = testActuator(actuator);
+  const run = await t.start(call);
+  assert.equal(run.status, "WAITING");
+  assert.equal(t.messages.length, 0);
+  assert.equal(t.approvals[0]?.notify, "lead-chat");
 
-    const { run } = await t.start(call);
-    expect(run.status).toBe("WAITING");
-    expect(t.sent).toHaveLength(0);
+  await t.approve("review"); // through the signed link, as a click would
 
-    await t.manager.decide(token(t.approvals[0]!.approveUrl!));
+  assert.equal(t.run(run.runId).status, "COMPLETED");
+  assert.deepEqual(t.messages.map((m) => m.to), [call.to]);
+  assert.deepEqual(t.steps(run.runId).map((s) => s.name), ["save-draft", "review", "send", "mark-sent"]);
+  assert.deepEqual(t.rows("outgoing").map((r) => r.status), ["SENT"]);
+  // A budget: fails if a change makes this run cost more passes or rows.
+  assert.equal(t.usage(run.runId).passes, 2);
+  assert.ok(t.usage(run.runId).rowsWritten <= 20);
+});
 
-    const done = t.manager.getRun(run.runId)!;
-    expect(done.status).toBe("COMPLETED");
-    expect(done.passes).toBe(2);
-    expect(t.sent).toEqual([call]);
-    expect(t.manager.getSteps(run.runId).map((s) => s.name)).toEqual(["save-draft", "review", "send", "mark-sent"]);
-    expect(t.manager.readTable("outgoing").rows).toEqual([expect.objectContaining({ status: "SENT" })]);
-    // A budget: fails if a change makes this run write more rows.
-    expect(t.changes() - before).toBeLessThanOrEqual(12);
-  });
+test("sends nothing when the approval times out", async () => {
+  const t = testActuator(actuator);
+  const run = await t.start(call);
+  await t.advance("4 hours"); // fires the timeout; no real waiting
+  assert.deepEqual(t.run(run.runId).output, { status: "REJECTED" });
+  assert.equal(t.messages.length, 0);
+});
 
-  it("sends nothing when the approval times out", async () => {
-    const t = setup();
-    const { run } = await t.start(call);
-    await t.advance(4 * 3_600_000);
-    expect(t.manager.getRun(run.runId)!.output).toEqual({ status: "REJECTED" });
-    expect(t.sent).toHaveLength(0);
-  });
+test("refuses an empty message before any code runs", async () => {
+  const t = testActuator(actuator);
+  await assert.rejects(t.start({ to: "aina@example.com", text: "" }), /text/);
 });
 ```
 
-The rest of the lifecycle is on the same `RunManager`: `deliverEvent(key, payload)` resolves a `waitForEvent` (and pays a bill, with the key `payment.<referenceId>`), `decide(token, { note })` approves with a note or `decide(token, { text })` answers a `waitForInput`, `advance` fires sleeps, retries and timeouts, and `getLogs(runId)` returns the log lines. `consoleMessaging()` and `fakePayment()` from `@actuate/runtime` are ready-made stand-ins if you don't need to record calls.
+```bash
+npx actuate test
+```
 
-You can run the linter in the same suite, as the templates do:
+What the test actuator gives you:
+
+| | |
+| --- | --- |
+| `t.start(input, { trigger, idempotencyKey })` | Starts a run and returns its record after the first pass. The input is validated with your schema first, as the platform does, and a bad one rejects |
+| `t.cron(expression)` | Fires a schedule (default: the first one): a run with the input `{}` |
+| `t.advance(duration)`, `t.advanceTo(time)` | Move the clock, firing every sleep, retry and timeout due on the way, in order. `t.now()` reads it |
+| `t.approve(step, opts)`, `t.reject(step, opts)` | Decide a `waitForApproval` through its signed link. Without a step, the latest one waiting. `opts`: `runId`, `note`, `by` |
+| `t.answer(text, opts)` | Answer a `waitForInput` through its signed link. `opts`: `step`, `runId`, `by` |
+| `t.event(key, payload)` | Post an event, as `POST /events/:key` does |
+| `t.pay(referenceId, payment)` | Pay a bill: posts `payment.<referenceId>` with a `PaymentEvent` filled in from the bill |
+| `t.run(runId)`, `t.steps(runId)`, `t.logs(runId)` | The run record, its journal and its log lines |
+| `t.pending()` | Steps waiting for a person, oldest first |
+| `t.rows(table)` | Every row of one of your tables |
+| `t.query(sql, params)` | SQL straight against the database, not metered, for assertions |
+| `t.usage(runId)` | The run's passes, statements, and rows read and written. Without a run ID, the totals of every run. See [measuring rows](#measuring-rows) |
+| `t.messages`, `t.bills`, `t.refunds`, `t.prompts`, `t.requests`, `t.approvals` | What the fakes recorded: messages sent, bills created, refunds, LLM requests, HTTP requests, and approval and input requests with their links |
+| `t.close()` | Closes the database, and gives `Date` back once the last open test actuator closes |
+
+`testActuator(actuator, options)` takes:
+
+| Option | |
+| --- | --- |
+| `config` | The operator configuration, parsed with your config schema, so defaults apply |
+| `providers` | Replace a fake with your own provider. Set a capability to `undefined` to test an optional capability with no provider |
+| `llm` | Replies for `ctx.llm.complete`, in order, or a function that answers each request. A call with no reply queued fails |
+| `http` | Answers `ctx.http.fetch` after the real `http.allow` check: return a `Response`, or any JSON value for a `200` JSON response. Without it, `ctx.http` calls fail |
+| `plan` | `"sandbox"`, `"maker"` or `"agency"`: whose guards apply. Default: `ACTUATE_PLAN` (which `actuate test --plan` sets), else the Sandbox. `false` turns the guards off |
+| `now` | When the clock starts. Default: Monday 5 January 2026, 00:00 UTC |
+| `fakeDate` | Make `Date.now()` and `new Date()` follow the clock (default `true`) |
+| `logs` | Print run logs to the console (default `false`) |
+
+The fakes record every call and succeed: a message gets an ID, a bill gets a URL and stays `pending` until `t.pay`, and a refund succeeds. The guards are the ones [`actuate dev`](/docs/reference/cli/#guards-in-actuate-dev) applies. They don't check that your plan includes a capability: `actuate check --platform` does.
+
+`t.rows` returns rows as objects without a prototype, so with `node:assert/strict`, compare their fields, as above, rather than the whole row against an object literal.
+
+Tests that import `vitest` work the same, run with your project's Vitest. You can also run the linter in the same suite:
 
 ```ts
 import { readFileSync } from "node:fs";
 import { checkSource } from "@actuate/cli";
 
-it("passes actuate check", () => {
-  expect(checkSource("actuator.ts", readFileSync("actuator.ts", "utf8"))).toEqual([]);
+test("passes actuate check", () => {
+  assert.deepEqual(checkSource("actuator.ts", readFileSync("actuator.ts", "utf8")), []);
 });
 ```
 
+`testActuator` is built on `RunManager` and `executePass` from `@actuate/runtime`, with `meteredNodeSqlite` as the database, and `t.manager` and `t.db` are its own. To build your own harness or host, you can still drive the engine directly: see [using the engine directly](/docs/guides/self-hosting/#using-the-engine-directly).
+
 ### Measuring rows
 
-The runtime has a meter, `newSqlMeter()`, but it only works with Durable Object storage (`durableObjectSql`), which is what the platform uses to bill. `nodeSqlite` has no meter, so in tests you estimate:
+In tests, `t.usage(runId)` returns a run's passes, statements, and rows read and written, journal included, counted the way Durable Objects bill them. Pin them with an assertion, as in the test above, so a change that makes a run cost more fails the test. How exact they are:
 
-- **Rows written.** SQLite's `total_changes()` counts rows inserted, updated and deleted on the connection, journal included, as in the test above. Take the difference across a run, and pin it with an assertion so a change that adds writes fails the test. The platform's count is a little higher: it also counts every index entry written, and it records the version each run started on. The first run on a fresh database also records your migrations.
-- **Rows read.** There is no counter in `node:sqlite`. Check how SQLite runs each query with `EXPLAIN QUERY PLAN` after a run has applied your migrations. `SEARCH ... USING INDEX` reads only the matching rows; `SCAN <table>` reads the whole table:
+- **Rows written** match Cloudflare's count: rows inserted, updated or deleted, in your tables and in the journal, plus the index entries written. The first run on a fresh database also counts your migrations. A run of the `hello` starter writes 16 rows under `actuate test`, and 16 under `actuate dev`.
+- **Rows read** are exact for full table scans: a `SCAN <table>` counts the whole table, as Cloudflare does, even when a `LIMIT` stops it early. For an index search, the count is the rows the statement returned or changed, which is lower than Cloudflare's when the search visits rows that a further condition drops or that feed an aggregate. The `hello` run reads 13 rows under `actuate test` and 20 under `actuate dev`. Full scans are what use up a rows-read budget, and those are counted in full.
+- **Passes** are exact.
 
-  ```ts
-  const plan = t.db.prepare("EXPLAIN QUERY PLAN SELECT status FROM outgoing WHERE run_id = ?").all("run_1");
-  expect(plan.map((row) => String(row.detail))).not.toContainEqual(expect.stringMatching(/^SCAN/));
-  ```
+For Cloudflare's own count, run the actuator under `actuate dev`: `actuate run --local` and `actuate logs --local` show the rows each run wrote and read, from the `workerd` counters the platform bills with.
 
-  Add to that the journal each pass loads: one row per step the run has so far.
-- **Passes.** The run record's `passes` field, in tests and in the output of `actuate run`.
+To see why a query reads many rows, check how SQLite runs it with `EXPLAIN QUERY PLAN` after a run has applied your migrations. `SEARCH ... USING INDEX` reads only the matching rows; `SCAN <table>` reads the whole table:
+
+```ts
+const plan = t.query("EXPLAIN QUERY PLAN SELECT status FROM outgoing WHERE run_id = ?", ["run_1"]);
+assert.ok(!plan.some((row) => String(row.detail).startsWith("SCAN")));
+```
 
 After you deploy, **Settings → Plan** in the dashboard shows the month's usage for your account: runs, wake-ups, database writes and reads, HTTP requests and storage. The meters cover every actuator and update in batches, so compare them before and after a known number of runs rather than per run.
 
@@ -517,9 +525,9 @@ Paste this into `CLAUDE.md`, `AGENTS.md` or a file in `.cursor/rules/`, so your 
 
 Before you deploy:
 
-- Run `npx actuate check` and fix every error and warning.
-- Run the actuator with `npx actuate dev`, start runs with `npx actuate run '<json>' --local`, and read them with `npx actuate logs <runId> --local`.
-- Write Vitest tests with `RunManager`, `executePass` and `nodeSqlite` from `@actuate/runtime` on `node:sqlite`: start runs, drive sleeps and approvals with a fake clock, and assert the steps, `passes`, table rows and `total_changes()`. There is no `actuate test` command.
-- Run `npx actuate deploy --dry-run` and check the capabilities, cron schedules and `httpAllow` it prints.
+- Run `npx actuate check --platform` and fix every error and warning. It checks replay safety and runs the platform's deploy checks for your plan (`@actuate/cli` 0.3 or later).
+- Write tests in `actuator.test.ts` with `testActuator` from `@actuate/cli/testing`: start runs with `t.start`, move the clock with `t.advance`, decide with `t.approve`, `t.reject` or `t.answer`, post events with `t.event`, and assert the run's status, its steps, what the fakes recorded (`t.messages`, `t.bills`), the rows in your tables (`t.rows(table)`), and its passes and rows written (`t.usage(runId)`). Run them with `npx actuate test`.
+- Run the actuator with `npx actuate dev`, start runs with `npx actuate run '<json>' --local`, move waiting runs on with `npx actuate event`, `approve`, `reject` or `answer` (each with `--local`), and read them with `npx actuate logs <runId> --local`. A `[platform guard]` message means the deployed actuator would fail the same way.
+- Run `npx actuate deploy --dry-run`. It must exit with status 0. Check that the capabilities, cron schedules and `httpAllow` it prints are what you meant.
 - Deploy only when all of that passes. Every deploy attempt counts against the monthly deploy budget, failed ones included.
 ```
