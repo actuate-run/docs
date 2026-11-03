@@ -72,11 +72,11 @@ Table names starting with `_actuate_` belong to the runtime (`_actuate_runs`, `_
 
 ## What the platform refuses
 
-On the hosted platform, every statement is checked by the host before it runs, outside your code, so it cannot be bypassed. A single SQLite statement can do unbounded work, so these are refused with a readable error:
+On the hosted platform, every statement is checked by the host before it runs, outside your code, so it cannot be bypassed. The check reads the statement the way SQLite does (strings, quoted names and comments), so quoting or commenting cannot hide part of it. A single SQLite statement can do unbounded work, so these are refused with a readable error:
 
 | Refused | Examples |
 | --- | --- |
-| Recursive queries | `WITH RECURSIVE ...` |
+| Recursive queries | `WITH RECURSIVE ...`, and any CTE that refers to itself (SQLite makes it recursive even without the keyword) |
 | Generator and file functions | `randomblob()`, `zeroblob()`, `printf()`, `format()`, `load_extension()`, `readfile()`, `writefile()` |
 | Database commands | `PRAGMA`, `ATTACH`, `DETACH`, `VACUUM`, `REINDEX` |
 | Runtime and system tables | `_actuate_*`, `_cf_*`, `sqlite_*` |

@@ -85,7 +85,7 @@ Like a sleep, the deadline is fixed the first time the run reaches the wait. A d
 Events are identified only by their key. Make keys specific enough to name one thing, usually by including an ID you created: `payment.${bookingId}`, `reply.${ctx.runId}`.
 
 - **Payment webhooks.** When a payment provider confirms a bill, the webhook is delivered as the event `payment.<referenceId>`, using the `referenceId` you passed to `createBill`. See [Capabilities and providers](/docs/concepts/capabilities/#payment).
-- **Your own systems.** Post to the actuator's events endpoint: `POST /events/<key>` with a JSON body on the [runtime API](/docs/reference/runtime-http/#events). The body is the payload, up to 64 KiB of JSON.
+- **Your own systems.** Post to the actuator's events endpoint: `POST /events/<key>` with a JSON body on the [runtime API](/docs/reference/runtime-http/#events). The body is the payload, up to 64 KiB of JSON. On the platform this needs a **full** API token: an event can complete a payment or a reply your run is waiting for, so agent (run-scoped) tokens cannot post one.
 
 When an event arrives, every step waiting on that key completes with the payload and its run resumes. That includes steps in different runs.
 
