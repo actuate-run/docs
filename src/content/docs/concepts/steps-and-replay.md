@@ -143,6 +143,8 @@ Two things follow at Stripe and Resend:
 
 For providers that can't deduplicate, keep the call in a step of its own and give it no `retries`, or check whether it already happened before you repeat it.
 
+On the hosted platform, retrying a failed run from its page (or the retry API) is not a step retry: the keys Actuate derived get `:retry<n>`, so the fixed step is a new call at the provider. Keys you pass yourself are sent as given. See [Retry a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run).
+
 Pass your own key when you want calls in **different steps or different runs** to count as one, for example `refund-${orderId}` so that two runs for the same order refund it once (within Stripe's 24 hours). Never pass the same key to two different calls: the provider answers the second with the first one's result, or with an error if the parameters differ.
 
 ## Determinism rules
