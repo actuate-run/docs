@@ -152,7 +152,7 @@ A pass that runs or waits longer than 5 seconds counts one extra pass for every 
 
 - Set a timeout on slow calls you control, shorter than 30 seconds, and retry the step instead of waiting longer.
 - Don't wait inside a step for something that takes minutes: start it, then `waitForEvent` for its webhook, or `sleep` and check once.
-- Run independent slow calls in separate steps of separate passes only when each is worth its own retry. Several calls in one step add up their time.
+- Several slow calls in one pass add up their time, whether they are in one step or several.
 
 ### Keep step results small
 
