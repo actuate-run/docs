@@ -29,6 +29,7 @@ On a failed run's page, click **Retry from failed step**. The run continues unde
 - Every other step (the one that failed, one that was cut off mid-attempt, a wait that hadn't finished) is cleared and runs again from the start.
 - The run's pass count starts again at 0, so it has the plan's full passes per run.
 - The log keeps the earlier passes and adds a line such as `Retried on v8 from step "refund"`, with the version, the cleared steps and who retried it.
+- Provider calls in the steps that run again get new [idempotency keys](/docs/concepts/steps-and-replay/#idempotency-keys): `:retry1` (then `:retry2`, ...) is added to the keys derived from the run. So the fixed step reaches Stripe or Resend as a new call, rather than getting the failed call's saved answer or a "different parameters" error. If a call had already succeeded before its step failed, the retry makes it again. To keep such a call to once across retries, pass your own `idempotencyKey` (one that doesn't start with the run ID), such as `refund-${orderId}`.
 
 The run becomes `WAITING`, due now, and carries on in the background within moments. If it fails again, you get another [alert](/docs/guides/alerts/) and can retry again.
 
