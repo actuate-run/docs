@@ -50,13 +50,17 @@ The isolate's environment contains only your declared capability clients. There 
 | Settled runs kept for | 7 days | 30 days | 90 days |
 | Agent analytics kept for | 30 days | 60 days | 90 days |
 | Where alerts go | Email | Email and one messaging channel | Email and one messaging channel |
+| Alert emails per day | 10 | 100 | 300 |
+| Test alerts per day | 5 | 5 | 5 |
+| Days an earlier version runs next to the current one, per month | 60 | 1,000 | 3,000 |
 
 - **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included. **Outbound HTTP requests** count every `ctx.http` call. Provider calls (messaging, payment, LLM) do not count.
 - The SQLite total is checked when a run starts; the per-actuator size before each run and after every statement.
 - The free Sandbox has no messaging, payment or LLM providers: it is for building and exposing MCP tools, not for sending messages or taking payments.
 - The run rate is a sliding window per account.
 - A [retry](/docs/guides/retry-and-rollback/) from the failed step, each run in a bulk retry, and **Run again** each count as one run, against runs per month and the run rate. A rollback counts as a deploy.
-- [Alerts](/docs/guides/alerts/) are emailed on every plan; Maker and Agency can also send them to one of your messaging channels. [Agent analytics](/docs/concepts/agents/#analytics) are kept for the period above.
+- [Alerts](/docs/guides/alerts/) are emailed on every plan; Maker and Agency can also send them to one of your messaging channels. Alert emails (test alerts included) are capped per day (UTC); the last one says so, and alerts after it still reach your messaging channel and the dashboard. [Agent analytics](/docs/concepts/agents/#analytics) are kept for the period above.
+- A run finishes on the version it started on (see [version pinning](/docs/guides/retry-and-rollback/#runs-stay-on-their-version)). Each day an earlier version has runs waking next to the current one counts once against the monthly allowance above (a rollback to the same code doesn't count). Past it, those runs fail with a message saying so, and a retry moves them to the current version. Runs on the current version are never affected.
 - Agency also adds client portals, the approval queue, a white-label domain (portals, webhook URLs, provider callbacks and approval links on your own domain), and Excel and SQLite exports. It arrives with Stage 2.
 
 Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
@@ -87,7 +91,7 @@ Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
 | Deploy churn | Limited to the plan's deploys per 24 hours. A rollback counts as a deploy |
 | One agent running a tool too often | Optional [per-token limits](/docs/concepts/agents/#limits): runs per hour overall and per tool, 1 to 100,000 each, on agent tokens and MCP connections. Calls over a limit are refused with `429` (a tool error over MCP) and start no run |
 | Bulk retries | At most 100 runs per call, each counted as a run; the batch stops when the run budget runs out |
-| Alert floods | At most one [alert](/docs/guides/alerts/#throttling) per actuator per kind per hour (6 hours for missed schedules and rejected credentials, 15 minutes for expiring waits); the rest are counted into the next. One test alert per 30 seconds |
+| Alert floods | At most one [alert](/docs/guides/alerts/#throttling) per actuator per kind per hour (6 hours for missed schedules and rejected credentials, 15 minutes for expiring waits); the rest are counted into the next. Alert emails per day per account (above). Test alerts: one per 30 seconds, five a day |
 | MCP sign-ins | OAuth access tokens last 1 hour and refresh tokens 30 days; each refresh token works once, and a reused one revokes the connection. Sign-in, token and revocation endpoints take 60 requests per minute per IP address, registration 20 |
 
 ## SDK and runtime limits

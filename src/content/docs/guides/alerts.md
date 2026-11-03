@@ -51,6 +51,10 @@ Mute refund_order: https://app.actuate.run/actuators/refund_order/settings
 
 Windows are per actuator and per kind, so a failing actuator never hides an alert from another one. Alerts for a kind you turned off, or for a muted actuator, are dropped, not held back: turning them on again alerts on the next event.
 
+### Daily email cap
+
+Alert emails, test alerts included, are capped per account per day (UTC): 10 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual.
+
 ## Where alerts go
 
 Every alert is emailed to your account's address, from `notices@actuate.run`. That is the only destination on the Sandbox.
@@ -71,7 +75,7 @@ On Maker and Agency you can also send them to one messaging channel. Alerts use 
 
 The recipient is one ID or address, at most 200 characters, with no spaces. Messages to a channel are cut at about 1,900 characters (Discord's limit). If you later remove that provider, alerts go to email only until you pick another channel. If sending to the channel fails, the email still goes out.
 
-**Send test alert** sends a test message to your email and the channel, whatever your toggles and mutes say, and shows what happened to each, including the provider's error if the channel failed. You can send one every 30 seconds.
+**Send test alert** sends a test message to your email and the channel, whatever your toggles and mutes say, and shows what happened to each, including the provider's error if the channel failed. You can send one every 30 seconds, and five a day.
 
 ## Turn alerts off
 

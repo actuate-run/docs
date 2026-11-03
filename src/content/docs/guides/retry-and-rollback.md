@@ -17,6 +17,8 @@ Every deploy creates a new version: v1, v2, v3. A run is pinned to the version t
 
 The run page shows the version, the runs list has a **Version** column, and run records in the API have a `version` field. Runs started before versions were recorded show `null` ("not recorded") and run on the current version.
 
+Running an earlier version next to the current one costs an extra worker that day, so your plan allows a number of such days a month (see [limits](/docs/reference/limits/#plans)). A day counts once per earlier version, whatever the number of its runs. If the allowance runs out, runs still pinned to an earlier version fail with a message saying so; retry them to move them to the current version.
+
 Configuration is not versioned: a pinned run uses the current configuration. When you change the config schema, keep it working for versions that still have runs in flight, or let those runs finish first.
 
 ## Retry a failed run
