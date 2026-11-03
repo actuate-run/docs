@@ -329,9 +329,10 @@ Use the CLI for a quick loop by hand, and `actuate test` with `@actuate/cli/test
    - `fetch()` and `globalThis.fetch()` (error)
    - calls on `ctx.messaging`, `ctx.payment`, `ctx.llm` or `ctx.http` (error)
    - `Date.now()`, `new Date()` with no arguments, `Math.random()`, `crypto.randomUUID()` and `performance.now()` (error)
-   - `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE` (warning)
+   - `ctx.db.commitWithStep()` (error)
+   - `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE`, and such statements in a `ctx.db.batch([...])` (warning)
 
-   It exits with status 1 on errors. The linter only reads the `run` function in one file: it doesn't follow calls into helpers, and it only sees SQL written as a literal. See [actuate check](/docs/reference/cli/#actuate-check).
+   It exits with status 1 on errors. Until you log in or pass `--plan`, it checks against the Sandbox and reports the plan's own rules (capabilities, cron limits) as warnings. The linter only reads the `run` function in one file: it doesn't follow calls into helpers, and it only sees SQL written as a literal. See [actuate check](/docs/reference/cli/#actuate-check).
 2. **`npx actuate dev`** runs the actuator on a local `workerd` with the same step engine and the platform's guards, at `http://localhost:8787`. Messages and approval links print in the terminal, and payments go to a fake provider.
 3. **`npx actuate run '{"name":"Aina"}' --local`** starts a run and prints where it got to after its first pass: its status, passes, the rows it wrote and read, its steps, and the command that moves it on if it waits. `--json` prints the run record instead.
 4. **`npx actuate logs --local`** lists recent runs with their passes and rows, and **`npx actuate logs <runId> --local`** prints one run's steps, log lines, rows and error.
@@ -380,7 +381,7 @@ export default defineActuator({
 });
 ```
 
-And its tests: approve through the signed link, let the approval time out, refuse bad input, and check the steps, the message sent, the rows in the table, and the passes and rows written:
+And its tests: approve through the signed link, let the approval time out and check that its link is then refused, refuse bad input, and check the steps, the message sent, the rows in the table, and the passes and rows written:
 
 ```ts title="actuator.test.ts"
 import { test } from "node:test";
@@ -411,9 +412,11 @@ test("sends only after approval", async () => {
 test("sends nothing when the approval times out", async () => {
   const t = testActuator(actuator);
   const run = await t.start(call);
+  const link = t.approvals[0]!.approveUrl!; // kept, to click it too late
   await t.advance("4 hours"); // fires the timeout; no real waiting
   assert.deepEqual(t.run(run.runId).output, { status: "REJECTED" });
   assert.equal(t.messages.length, 0);
+  assert.deepEqual(await t.followLink(link), { ok: false, reason: "This approval has already been decided or has expired." });
 });
 
 test("refuses an empty message before any code runs", async () => {
@@ -433,16 +436,17 @@ What the test actuator gives you:
 | `t.start(input, { trigger, idempotencyKey })` | Starts a run and returns its record after the first pass. The input is validated with your schema first, as the platform does, and a bad one rejects |
 | `t.cron(expression)` | Fires a schedule (default: the first one): a run with the input `{}` |
 | `t.advance(duration)`, `t.advanceTo(time)` | Move the clock, firing every sleep, retry and timeout due on the way, in order. `t.now()` reads it |
-| `t.approve(step, opts)`, `t.reject(step, opts)` | Decide a `waitForApproval` through its signed link. Without a step, the latest one waiting. `opts`: `runId`, `note`, `by` |
+| `t.approve(step, opts)`, `t.reject(step, opts)` | Decide a `waitForApproval` through its signed link. Without a step, the latest one waiting. `opts`: `runId`, `note`, `by`. Throws, saying what is waiting, when nothing matches |
 | `t.answer(text, opts)` | Answer a `waitForInput` through its signed link. `opts`: `step`, `runId`, `by` |
+| `t.followLink(url, opts)` | Follow an `approveUrl`, `rejectUrl` or `answerUrl` from `t.approvals` as a person would, and return `{ ok, reason }` instead of throwing: to test that an expired or used link is refused. `opts`: `note`, `text`, `by` |
 | `t.event(key, payload)` | Post an event, as `POST /events/:key` does |
 | `t.pay(referenceId, payment)` | Pay a bill: posts `payment.<referenceId>` with a `PaymentEvent` filled in from the bill |
-| `t.run(runId)`, `t.steps(runId)`, `t.logs(runId)` | The run record, its journal and its log lines |
+| `t.run(runId)`, `t.steps(runId)`, `t.logs(runId)` | The run record, its journal and its log lines. The record's `output` (here and from `t.start`) is typed as your `run` returns it; `t.run<T>(runId)` picks another type |
 | `t.pending()` | Steps waiting for a person, oldest first |
 | `t.rows(table)` | Every row of one of your tables |
 | `t.query(sql, params)` | SQL straight against the database, not metered, for assertions |
 | `t.usage(runId)` | The run's passes, statements, and rows read and written. Without a run ID, the totals of every run. See [measuring rows](#measuring-rows) |
-| `t.messages`, `t.bills`, `t.refunds`, `t.prompts`, `t.requests`, `t.approvals` | What the fakes recorded: messages sent, bills created, refunds, LLM requests, HTTP requests, and approval and input requests with their links |
+| `t.messages`, `t.bills`, `t.refunds`, `t.prompts`, `t.requests`, `t.approvals` | What the fakes recorded: messages sent, bills created, refunds, LLM requests, HTTP requests, and approval and input requests with their links (each `message` a string, `""` when the step gave none) |
 | `t.close()` | Closes the database, and gives `Date` back once the last open test actuator closes |
 
 `testActuator(actuator, options)` takes:
@@ -458,9 +462,9 @@ What the test actuator gives you:
 | `fakeDate` | Make `Date.now()` and `new Date()` follow the clock (default `true`) |
 | `logs` | Print run logs to the console (default `false`) |
 
-The fakes record every call and succeed: a message gets an ID, a bill gets a URL and stays `pending` until `t.pay`, and a refund succeeds. The guards are the ones [`actuate dev`](/docs/reference/cli/#guards-in-actuate-dev) applies. They don't check that your plan includes a capability: `actuate check --platform` does.
+The fakes record every call and succeed: a message gets an ID, a bill gets a URL and stays `pending` until `t.pay`, and a refund succeeds. Like real providers, the payment fake returns the first bill or refund again for a repeated idempotency key, without recording another. The guards are the ones [`actuate dev`](/docs/reference/cli/#guards-in-actuate-dev) applies. They don't check that your plan includes a capability: `actuate check --platform` does, and `actuate test` reports the deploy checks after the tests.
 
-`t.rows` returns rows as objects without a prototype, so with `node:assert/strict`, compare their fields, as above, rather than the whole row against an object literal.
+`t.rows` and `t.query` return plain objects, so `assert.deepEqual` from `node:assert/strict` compares a whole row against an object literal.
 
 Tests that import `vitest` work the same, run with your project's Vitest. You can also run the linter in the same suite:
 
@@ -525,8 +529,8 @@ Paste this into `CLAUDE.md`, `AGENTS.md` or a file in `.cursor/rules/`, so your 
 
 Before you deploy:
 
-- Run `npx actuate check --platform` and fix every error and warning. It checks replay safety and runs the platform's deploy checks for your plan (`@actuate/cli` 0.3 or later).
-- Write tests in `actuator.test.ts` with `testActuator` from `@actuate/cli/testing`: start runs with `t.start`, move the clock with `t.advance`, decide with `t.approve`, `t.reject` or `t.answer`, post events with `t.event`, and assert the run's status, its steps, what the fakes recorded (`t.messages`, `t.bills`), the rows in your tables (`t.rows(table)`), and its passes and rows written (`t.usage(runId)`). Run them with `npx actuate test`.
+- Run `npx actuate check --platform` and fix every error and warning. It checks replay safety and runs the platform's deploy checks for your plan (`@actuate/cli` 0.3 or later). If it says the plan is only the default, add `--plan` with the plan you deploy on, rather than removing a capability to silence a warning.
+- Write tests in `actuator.test.ts` with `testActuator` from `@actuate/cli/testing`: start runs with `t.start`, move the clock with `t.advance`, decide with `t.approve`, `t.reject` or `t.answer`, post events with `t.event`, and assert the run's status, its steps, what the fakes recorded (`t.messages`, `t.bills`), the rows in your tables (`t.rows(table)`), and its passes and rows written (`t.usage(runId)`). To test that an expired or used link is refused, keep it from `t.approvals` and call `t.followLink(url)`. Run them with `npx actuate test`.
 - Run the actuator with `npx actuate dev`, start runs with `npx actuate run '<json>' --local`, move waiting runs on with `npx actuate event`, `approve`, `reject` or `answer` (each with `--local`), and read them with `npx actuate logs <runId> --local`. A `[platform guard]` message means the deployed actuator would fail the same way.
 - Run `npx actuate deploy --dry-run`. It must exit with status 0. Check that the capabilities, cron schedules and `httpAllow` it prints are what you meant.
 - Deploy only when all of that passes. Every deploy attempt counts against the monthly deploy budget, failed ones included.

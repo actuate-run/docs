@@ -10,17 +10,19 @@ Outside a project that has `@actuate/cli` installed, don't run a bare `npx actua
 :::
 
 :::note[Requires @actuate/cli 0.3]
-`actuate test`, `doctor`, `event`, `approve`, `reject`, `answer` and `cancel`, `@actuate/cli/testing`, the platform's guards in `actuate dev`, the deploy checks (`check --platform`, and in `deploy`), and the options `--plan`, `--no-guards`, `--force`, `--json`, `--status`, `--limit` and `--idempotency-key` require `@actuate/cli` 0.3 or later. `npx actuate --version` prints the version you have.
+`actuate test`, `doctor`, `event`, `approve`, `reject`, `answer` and `cancel`, `@actuate/cli/testing`, the platform's guards in `actuate dev`, the deploy checks (`check --platform`, and in `deploy`), and the options `--plan`, `--offline`, `--no-guards`, `--force`, `--json`, `--status`, `--limit` and `--idempotency-key` require `@actuate/cli` 0.3 or later. `npx actuate --version` prints the version you have.
 :::
 
 ```text
 actuate init [dir] [--template <name>] [--ref <git-ref>]       Create a project, with an example test
 actuate doctor [file] [--offline] [--plan <plan>] [--json]     Check Node, the project, providers and login
 
-actuate dev [file] [--port 8787] [--plan <plan>] [--no-guards] Run locally on workerd, with the platform's guards
-actuate test [files...] [--watch] [--grep <pattern>] [--plan <plan>]
+actuate dev [file] [--port 8787] [--plan <plan>] [--offline] [--no-guards]
+                                                               Run locally on workerd, with the platform's guards
+actuate test [files...] [--watch] [--grep <pattern>] [--plan <plan>] [--offline] [--no-checks] [--pass-with-no-tests]
                                                                Run the project's tests
-actuate check [file] [--platform] [--plan <plan>] [--json]     Lint for replay safety, and run the deploy checks
+actuate check [file] [--platform] [--plan <plan>] [--offline] [--json]
+                                                               Lint for replay safety, and run the deploy checks
 
 actuate run ['<json>'] [--idempotency-key <key>] [--json]      Start a run and show where it got to
 actuate logs [runId] [--status <status>] [--limit <n>] [--json]
@@ -40,6 +42,8 @@ actuate providers [--json]                                     List providers an
 `[file]` defaults to `actuator.ts`. `run`, `logs`, `event`, `approve`, `reject`, `answer` and `cancel` talk to the deployed actuator, or to `actuate dev` with `--local` (and `--port <port>` if it isn't on 8787); for the deployed actuator, `--name <actuator>` overrides the name read from `name:` in `actuator.ts`.
 
 `actuate --help` lists the commands. Every command has `--help` (`-h`) with its options and examples, and `actuate help <command>` prints the same. `actuate --version` (`-v`) prints the CLI's version. `--json` prints JSON instead of text, for scripts and agents.
+
+With `--json`, stdout carries exactly one JSON value, failures included. A command that fails prints `{ "ok": false, "error": "...", ... }`, with what stopped it where there is something to add (a stopped `deploy` adds its diagnostics or its deploy checks), and exits non-zero; the `✗` message still goes to stderr. Wrong usage that stops before the command runs, such as an unknown option, prints only to stderr. `check` and `deploy` results carry `ok` on success too.
 
 Exit codes are the same for every command:
 
@@ -101,7 +105,7 @@ Checks, in one go, what commonly stops `dev`, `test` or `deploy`, and says how t
 ✓ actuator.ts loads: actuator "reminders"
 · Not logged in: fine for dev and test; deploy needs it.
     → actuate login
-✗ 5 deploy check(s) fail: cron, http-allow, input-regex, plan-capability, config. Checked for the Sandbox plan (the default; pass --plan maker or agency, or log in, to use yours).
+✗ 3 deploy check(s) fail: http-allow, input-regex, config. Checked for the Sandbox plan (the default: not logged in).
     → Run `actuate check --platform` to see them.
 · messaging: none in .dev.vars; actuate dev uses a local stand-in (messages print to the console).
 ! No tests.
@@ -115,16 +119,25 @@ Checks, in one go, what commonly stops `dev`, `test` or `deploy`, and says how t
 ## actuate dev
 
 ```bash
-actuate dev [file] [--port 8787] [--plan <plan>] [--no-guards]
+actuate dev [file] [--port 8787] [--plan <plan>] [--offline] [--no-guards]
 ```
 
 Runs the actuator locally on `workerd` (through wrangler) with the same step engine, a real SQLite-backed Durable Object and real alarms.
 
 - Runs [`actuate check`](#actuate-check) first and prints any problems, without stopping.
-- Runs the [deploy checks](#the-deploy-checks) for [your plan](#which-plan-applies), except the bundle size and the ones that need a login, and prints each problem as a `deploy check` line, without stopping:
+- Runs the [deploy checks](#the-deploy-checks) for [your plan](#which-plan-applies), except the ones that need a login, and prints each problem as a `deploy check` line, without stopping:
 
   ```text
   deploy check  error  Cron "*/5 * * * *" fires more often than every 60 min. The Sandbox plan allows 3 schedules, at least 60 min apart.  (cron)
+  ```
+
+  When no plan was chosen, the plan's own rules are [warnings](#which-plan-applies).
+- When the actuator declares a capability the plan lacks and you chose the plan, warns at startup instead:
+
+  ```text
+  ⚠  The Sandbox plan (from --plan) has no messaging: the platform will refuse to deploy this actuator.
+     With the guards on, calls on ctx.messaging fail here too, with the platform's message.
+     Develop for another plan with --plan maker.
   ```
 - Bundles the file and rebuilds on every save.
 - Serves the [runtime HTTP API](/docs/reference/runtime-http/) at `http://localhost:<port>`.
@@ -146,7 +159,8 @@ When it is ready it prints what to do next:
   Runs and rows:   npx actuate logs [runId] --local
   Post an event:   npx actuate event <key> '{}' --local
   Tables:          curl localhost:8787/tables
-  Platform guards: on, Sandbox plan (the default; pass --plan maker or agency, or log in, to use yours). --no-guards turns them off
+  Platform guards: on, for the Sandbox plan (the default: not logged in). --no-guards turns them off. Pass --plan maker or agency, or run `actuate login`, to use your plan.
+  Providers not set in .dev.vars print to this console (see `actuate providers`).
 ```
 
 Configuration and environment files are read at startup; restart `actuate dev` after changing them.
@@ -176,9 +190,11 @@ After a pass ends, its database and provider clients stop working, as on the pla
     The hosted platform stops a pass here too (Sandbox plan). Restart with --no-guards to turn the local guards off.
 ```
 
-Not mirrored: the 50 ms CPU limit (local machines differ too much), the monthly budgets, the database size limits, and the plan's capabilities. A Sandbox actuator that declares `messaging` still sends messages under `actuate dev`; the deploy check at startup tells you the platform would refuse it.
+The plan's capabilities are guarded only for a plan you chose (with `--plan`, `ACTUATE_PLAN` or your login). Then calls on a capability the plan lacks fail with the platform's message, `The Sandbox plan cannot use messaging. Upgrade to Maker to use providers.`, and an optional capability it lacks is `undefined`, as on the platform. When the plan is only the default, they work, so a fresh project from a template that sends messages runs as it is; the deploy check at startup tells you the platform would refuse it.
 
-`--plan sandbox|maker|agency` picks the plan; see [which plan applies](#which-plan-applies). `--no-guards` turns the guards off; rows are still counted.
+Not mirrored: the 50 ms CPU limit (local machines differ too much), the monthly budgets and the database size limits.
+
+`--plan sandbox|maker|agency` picks the plan and `--offline` skips the API; see [which plan applies](#which-plan-applies). `--no-guards` turns the guards off, capabilities included; rows are still counted.
 
 ### Rows in actuate dev
 
@@ -219,20 +235,22 @@ Credential variable names are `<KIND>_<FIELD>`, e.g. `TELEGRAM_BOT_TOKEN`, `BILL
 ## actuate test
 
 ```bash
-actuate test [files or folders...] [--watch] [--grep <pattern>] [--plan <plan>]
+actuate test [files or folders...] [--watch] [--grep <pattern>] [--plan <plan>] [--offline] [--no-checks] [--pass-with-no-tests]
 ```
 
 Runs the project's tests, with no setup. Requires `@actuate/cli` 0.3 or later.
 
 - **Which files.** Every `*.test.ts` and `*.spec.ts` file (and `.js`, `.mts`, `.tsx` and the like) under the files and folders you name, or under the project if you name none. It skips `node_modules`, `dist`, `build`, `coverage`, `out` and folders whose name starts with a dot.
-- **Which runner.** A file that imports `vitest` runs with the project's own Vitest (`vitest run`). Every other file runs with `node --test`, with TypeScript compiled on the fly, so `import actuator from "./actuator.js"` finds `actuator.ts`. Both can be in one project; `actuate test` runs one after the other. A file that imports `vitest` when Vitest isn't installed is an error: install it with `npm install -D vitest`, or write the test with `node:test`.
-- **`--watch`** (`-w`) re-runs the tests when files change. It works with one runner at a time: if the tests mix Vitest and `node:test`, name the files to watch.
+- **Which runner.** A file that imports `vitest` runs with the project's own Vitest (`vitest run`). Every other file runs with `node --test`, with TypeScript compiled on the fly, so `import actuator from "./actuator.js"` finds `actuator.ts`. Both can be in one project; `actuate test` runs one after the other. When Vitest isn't installed, the `node:test` files still run and the Vitest files are reported as skipped, with how to fix it (`npm install -D vitest`, or write them with `node:test`), and `actuate test` exits with status 1. With only Vitest files, that is an error.
+- **`--watch`** (`-w`) re-runs the tests when files change. When the tests mix Vitest and `node:test`, it runs both watchers side by side; their output interleaves, and Ctrl-C stops both.
 - **`--grep <pattern>`** (`-g`) runs only the tests whose name matches (`--test-name-pattern` for `node:test`, `-t` for Vitest).
-- **`--plan <plan>`** sets the plan whose guards [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) applies, passed to the tests as `ACTUATE_PLAN`. See [which plan applies](#which-plan-applies). `actuate test` prints the plan first, as `Platform guards: Sandbox plan (...)`.
+- **`--plan <plan>`** sets the plan whose guards [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) applies, passed to the tests as `ACTUATE_PLAN`; a test can pick its own with `testActuator(actuator, { plan })`. See [which plan applies](#which-plan-applies); `--offline` skips the API. When tests are about to run, `actuate test` prints the plan once, as `Platform guards: Sandbox plan (...)`.
+- **Deploy checks.** Alongside the tests, it runs `actuator.ts`'s [deploy checks](#the-deploy-checks) locally, without the network, and prints them after the tests, only when they find something. They never fail the tests. `--no-checks` skips them, and `--watch` doesn't run them.
+- **No tests.** With no test files it prints an example test to start from and exits with status 1, so an empty suite doesn't pass in CI. `--pass-with-no-tests` exits with status 0 instead.
 - **Node.js before 22.13.** `actuate test` adds the flag `node:sqlite` needs there.
 
 ```text
-Platform guards: Sandbox plan (the default; pass --plan maker or agency, or log in, to use yours)
+Platform guards: Sandbox plan (the default: not logged in), unless a test passes testActuator(actuator, { plan }). Pass --plan maker or agency, or run `actuate login`, to use your plan.
 ✔ greets, sleeps, then follows up (22.038606ms)
 ✔ refuses an empty name before any code runs (2.950972ms)
 ℹ tests 2
@@ -243,14 +261,17 @@ Platform guards: Sandbox plan (the default; pass --plan maker or agency, or log 
 ℹ skipped 0
 ℹ todo 0
 ℹ duration_ms 311.219531
+
+Deploy checks for actuator.ts, Sandbox plan (the default: not logged in): 0 error(s), 1 warning(s). They don't fail the tests; `actuate check --platform` has the details.
+  warn   The Sandbox plan cannot use messaging. Upgrade to Maker to use providers. That is only the default plan here: log in or pass --plan to check against yours.  (plan-capability)
 ```
 
-It exits with status 1 when a test fails, and also when it finds no test files; then it prints an example test to start from. Write tests with `testActuator` from `@actuate/cli/testing`: see [unit tests with testActuator](/docs/guides/best-practices/#unit-tests-with-testactuator).
+It exits with status 1 when a test fails. Write tests with `testActuator` from `@actuate/cli/testing`: see [unit tests with testActuator](/docs/guides/best-practices/#unit-tests-with-testactuator).
 
 ## actuate check
 
 ```bash
-actuate check [file] [--platform] [--plan <plan>] [--json]
+actuate check [file] [--platform] [--plan <plan>] [--offline] [--json]
 ```
 
 A replay-safety linter. `run` is [replayed from the top](/docs/concepts/steps-and-replay/) after every pause, so side effects and non-determinism must sit inside `ctx.step.do`. `check` parses the file and inspects the `run` function of the object passed to `defineActuator`, flagging these outside a step:
@@ -260,9 +281,10 @@ A replay-safety linter. `run` is [replayed from the top](/docs/concepts/steps-an
 | `no-fetch-outside-step` | error | `fetch()` and `globalThis.fetch()` |
 | `no-provider-outside-step` | error | Calls on `ctx.messaging`, `ctx.payment`, `ctx.llm` or `ctx.http` |
 | `no-nondeterminism-outside-step` | error | `Date.now()`, `new Date()` with no arguments, `Math.random()`, `crypto.randomUUID()`, `performance.now()` |
-| `db-write-outside-step` | warning | `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE` |
+| `no-commit-outside-step` | error | `ctx.db.commitWithStep()`: it queues writes for the step that is running |
+| `db-write-outside-step` | warning | `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE`, and each such statement in a `ctx.db.batch([...])`, written as `` ctx.db.statement`...` `` or `{ sql: "..." }` |
 
-Everything inside the function passed as the last argument of `ctx.step.do` counts as inside a step.
+Everything inside the function passed as the last argument of `ctx.step.do` counts as inside a step. A statement built with `` ctx.db.statement`...` `` isn't flagged on its own: building one does nothing until it runs.
 
 ```text
 actuator.ts:14:5  error  ctx.messaging.send() must be called inside ctx.step.do.  (no-provider-outside-step)
@@ -291,12 +313,14 @@ actuator.ts:20:5  warn   This write runs again on every replay. Put it inside ct
 | `actuator-limit` | A new actuator fits the plan's number of actuators | Login |
 | `deploy-budget` | Deploy attempts are left this month (an error when none are, a warning from 90% used) | Login |
 
-The checks mirror the platform's rules; the platform runs its own checks again on upload and has the final say. Without a login, the last three are skipped, and the output says so. Logged in, a lookup that fails is skipped too, with a `skipped` line saying why.
+The checks mirror the platform's rules; the platform runs its own checks again on upload and has the final say. Without a login, or with `--offline`, the last three are skipped, and the output says so. Logged in, a lookup that fails is skipped too, with a `skipped` line saying why.
+
+With `--plan sandbox`:
 
 ```text
 ✓ No replay-safety problems found
 Bundled reminders: 283.2 KiB, sha256 bb42f71f8506
-Deploy checks: Sandbox plan (the default; pass --plan maker or agency, or log in, to use yours); not logged in, so the provider, actuator-count and deploy-budget checks were skipped
+Deploy checks for the Sandbox plan (from --plan). The provider, actuator-count and deploy-budget checks need a login (`actuate login`).
   error  Cron "*/5 * * * *" fires more often than every 60 min. The Sandbox plan allows 3 schedules, at least 60 min apart.  (cron)
   warn   Every cron run starts with the input {}, which the input schema rejects, so every firing fails. Make the fields optional or give them defaults.  (cron-input)
   error  http.allow entry "10.0.0.1": IP addresses are not allowed.  (http-allow)
@@ -305,9 +329,9 @@ Deploy checks: Sandbox plan (the default; pass --plan maker or agency, or log in
 3 error(s), 1 warning(s)
 ```
 
-The plan is the one [that applies](#which-plan-applies); `--plan` checks against another. `check --platform` exits with status 1 when either the linter or the deploy checks find an error.
+The plan is the one [that applies](#which-plan-applies); `--plan` checks against another. When no plan was chosen, the plan's own rules (its cron limits and capabilities) are warnings, ending `That is only the default plan here: log in or pass --plan to check against yours.` `--plan` and `--offline` imply `--platform`. `check --platform` exits with status 1 when either the linter or the deploy checks find an error.
 
-`--json` prints one object. Without `--platform`: `{ file, diagnostics, errors, warnings }`. With it, also `platform: { plan, planSource, issues, skipped }`, where each issue is `{ severity, rule, message }`.
+`--json` prints one object. Without `--platform`: `{ ok, file, diagnostics, errors, warnings }`. With it, also `platform: { plan, planSource, issues, skipped }`, where `planSource` is `--plan`, `ACTUATE_PLAN`, `account`, `saved` or `default`, and each issue is `{ severity, rule, message }`.
 
 ## actuate deploy
 
@@ -327,7 +351,7 @@ Deploys the actuator to Actuate. It needs [`actuate login`](#actuate-login) or `
 
 ```text
 Bundled hello: 283.8 KiB, sha256 d27b2079d485
-Deploy checks: Maker plan (from your account)
+Deploy checks for the Maker plan (from your account).
   ✓ passes the platform's deploy checks (mirrored locally; the platform has the final say)
 
 ✓ Deployed hello v1
@@ -350,7 +374,7 @@ When the code hasn't changed:
 When a check fails, `deploy` exits with status 1 before uploading:
 
 ```text
-✗ The platform would refuse this deploy (4 errors above), and a refused deploy still counts against your deploy budget. Fix them, or pass --force to deploy anyway.
+✗ The platform would refuse this deploy (4 errors), and a refused deploy still counts against your deploy budget. Fix them, or pass --force to deploy anyway.
 ```
 
 `--force` doesn't skip step 1: replay-safety errors always stop a deploy.
@@ -359,7 +383,7 @@ When a check fails, `deploy` exits with status 1 before uploading:
 
 `--plan` runs the checks against another plan than [yours](#which-plan-applies); the platform still uses your account's plan.
 
-`--json` prints one object instead of text: `name`, `diagnostics`, `bundle` (`bytes`, `sha256`), `plan` (`id`, `source`), `issues`, and `deployed` (`version`, `sameCode`) when the actuator is already deployed. Then, for a dry run, `dryRun: true` and `metadata`; for an upload, `deployedNow: true`, `version`, `urls` and `warnings`; and when the code was unchanged, `deployedNow: false`, `configUpdated` and `version`.
+`--json` prints one object instead of text: `ok`, `name`, `diagnostics`, `bundle` (`bytes`, `sha256`), `plan` (`id`, `source`), `issues`, and `deployed` (`version`, `sameCode`) when the actuator is already deployed. Then, for a dry run, `dryRun: true` and `metadata`; for an upload, `deployedNow: true`, `version`, `urls` and `warnings`; and when the code was unchanged, `deployedNow: false`, `configUpdated` and `version`. A deploy the checks stop prints `{ "ok": false, "error", ... }` with the same fields; one that replay-safety errors stop, `{ "ok": false, "error", "diagnostics" }`.
 
 ## actuate run
 
@@ -389,7 +413,7 @@ Next
   actuate approve run_01a1a2e8d98593acc562658db50c --step manager-ok --local    (or: actuate reject ...)
 ```
 
-- `--json` prints the raw run record instead, with its steps and logs. Before `@actuate/cli` 0.3, `actuate run` printed the record by default; scripts that read its output need `--json` now.
+- `--json` prints the run record as `POST /run` returned it instead (`runId`, `status`, `output`, `error`, `passes`, and `usage` under `actuate dev`), whatever its status. For its steps and logs, use `actuate logs <runId> --json`. Before `@actuate/cli` 0.3, `actuate run` printed the record by default; scripts that read its output need `--json` now.
 - `--idempotency-key <key>` sends an [`Idempotency-Key`](/docs/concepts/triggers/#idempotency-key): a retry with the same key returns the first run instead of starting another.
 - `run` exits with status 1 if the run ended `FAILED`, and when the input fails the schema, which prints each problem, e.g. `name: Too small: expected string to have >=1 characters`.
 - With `--local` it targets `actuate dev` on `localhost:<port>`; otherwise the deployed actuator.
@@ -519,7 +543,7 @@ There are two kinds of token:
 ✓ Logged in as aina@example.com (maker plan). Saved to /home/aina/.config/actuate/credentials.json
 ```
 
-Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`. The file also keeps your account's email and plan, so `actuate dev` and `actuate test` can use your plan's limits without calling the API. `check --platform`, `deploy` and `doctor` update it whenever they read your account.
+Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`. The file also keeps your account's email and plan, so the commands can use your plan's limits when the API can't be reached, or with `--offline`. Every command that reads your account updates it.
 
 ## Which plan applies
 
@@ -527,10 +551,14 @@ Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.c
 
 1. `--plan sandbox|maker|agency`.
 2. The `ACTUATE_PLAN` environment variable.
-3. Your account's plan. `check --platform`, `deploy` and `doctor` ask the API (`GET /v1/me`), and use the limits it reports. `dev` and `test` don't call the API: they use the plan saved by your last `actuate login`, or by the last command that read your account. With `ACTUATE_API_TOKEN` nothing is saved, so set `ACTUATE_PLAN` too.
+3. Your account's plan, when you are logged in. Every one of these commands asks the API (`GET /v1/me`), and uses the limits it reports. If the API doesn't answer within 3 seconds, or can't be reached, it uses the plan saved by your last `actuate login`, or by the last command that read your account. With `ACTUATE_API_TOKEN` nothing is saved.
 4. The Sandbox, the strictest plan.
 
-Each command prints which plan it used and why, e.g. `Maker plan (from your account)`. Any other `--plan` or `ACTUATE_PLAN` value exits with status 2.
+`--offline` (on `dev`, `test`, `check` and `doctor`) skips the API: the plan comes from `--plan`, `ACTUATE_PLAN` or the plan saved at login, and the checks that need your account are skipped. `deploy` and `doctor` ask the API for your account's usage even when `--plan` or `ACTUATE_PLAN` decides the plan; `check --platform` does too.
+
+Each command prints which plan it used and why, e.g. `Maker plan (from your account)`, `Maker plan (saved at your last login, as the API couldn't be reached)` or `Sandbox plan (the default: not logged in)`. Any other `--plan` or `ACTUATE_PLAN` value exits with status 2.
+
+When the plan is only the default, nobody chose it, so its own rules (capabilities and cron limits) are warnings instead of errors in `check`, `test`, `dev`, `doctor` and `deploy --dry-run`: a fresh project from a template that sends messages passes `npm run check`, and `actuate dev` doesn't refuse its providers. With a plan you chose, by flag, environment variable or login, they are errors.
 
 ## Environment variables
 

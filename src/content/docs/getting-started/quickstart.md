@@ -103,7 +103,7 @@ Next
 Logs: actuate logs run_01a1a2e8442f42a93c45c688b5b1 --local
 ```
 
-`WAITING` means the run reached `ctx.step.sleep` and hibernated. The `dev` terminal shows `Hello, Aina!`. The second line is what the run has cost so far: one pass, and the rows it wrote and read in its SQLite database, journal included. Add `--json` for the full run record, as the [runtime HTTP API](/docs/reference/runtime-http/#the-run-record) returns it.
+`WAITING` means the run reached `ctx.step.sleep` and hibernated. The `dev` terminal shows `Hello, Aina!`. The second line is what the run has cost so far: one pass, and the rows it wrote and read in its SQLite database, journal included. Add `--json` for the run record, as the [runtime HTTP API](/docs/reference/runtime-http/#the-run-record) returns it.
 
 Input is validated before any code runs. Try `npx actuate run '{"name":""}' --local`:
 
@@ -148,7 +148,7 @@ npx actuate test
 ```
 
 ```text
-Platform guards: Sandbox plan (the default; pass --plan maker or agency, or log in, to use yours)
+Platform guards: Sandbox plan (the default: not logged in), unless a test passes testActuator(actuator, { plan }). Pass --plan maker or agency, or run `actuate login`, to use your plan.
 ✔ greets, sleeps, then follows up (22.038606ms)
 ✔ refuses an empty name before any code runs (2.950972ms)
 ℹ tests 2
