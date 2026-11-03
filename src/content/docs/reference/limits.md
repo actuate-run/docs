@@ -5,6 +5,8 @@ description: CPU and memory per invocation, outbound HTTP rules, plan limits, th
 
 Actuate is built so that one actuator cannot hurt you, another tenant or the platform. **Every limit is a hard stop, not an overage charge.** Work pauses or is refused, and nothing is ever billed beyond your plan.
 
+For what uses each budget and how to write actuators that stay well inside them, see [Write efficient actuators](/docs/guides/best-practices/).
+
 ## Per invocation
 
 Each pass of a run executes in its own V8 isolate with:
@@ -14,7 +16,7 @@ Each pass of a run executes in its own V8 isolate with:
 | CPU time | 50 ms |
 | Heap | 64 MB |
 
-CPU time is time spent executing your code, not time spent waiting on the network, a provider or the database. A run can last days: each pass between waits is a separate invocation, and sleeps and waits use no CPU at all. Keep heavy computation small, and split large batches across several steps.
+CPU time is time spent executing your code, not time spent waiting on the network, a provider or the database. A run can last days: each pass between waits is a separate invocation, and sleeps and waits use no CPU at all. Keep heavy computation small. Steps in one pass share one invocation, so more steps don't add CPU: process a bounded batch per run, or sleep between chunks so each starts a new pass (see [write efficient actuators](/docs/guides/best-practices/#guards-on-a-single-pass)).
 
 The isolate's environment contains only your declared capability clients. There are no platform bindings, no other tenants' data, and no raw `fetch`.
 
@@ -46,27 +48,38 @@ The isolate's environment contains only your declared capability clients. There 
 | Cron schedules per actuator | 3 | 5 | 5 |
 | Shortest cron interval, all schedules together | 1 hour | 1 minute | 1 minute |
 | Open legacy SSE sessions | 2 | 5 | 20 |
-| Deploys per 24 hours | 30 | 200 | 500 |
+| Deploys per UTC day (failed ones and rollbacks count) | 30 | 200 | 500 |
+| Deploys per month (failed ones and rollbacks count) | 300 | 2,000 | 5,000 |
 | Settled runs kept for | 7 days | 30 days | 90 days |
+| Agent analytics kept for | 30 days | 60 days | 90 days |
+| Where alerts go | Email | Email and one messaging channel | Email and one messaging channel |
+| Alert emails per day | 20 | 100 | 300 |
+| Test alerts per day | 10 | 10 | 10 |
+| Days an earlier version runs next to the current one, per month | 100 | 1,000 | 3,000 |
 
-- **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included. **Outbound HTTP requests** count every `ctx.http` call. Provider calls (messaging, payment, LLM) do not count.
+- **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. A pass that runs or waits longer than 5 seconds (on a slow API or LLM call) counts one more for every further 5 seconds, so a pass of 12 seconds counts as 3; the run page shows them next to the passes, as "+N for long passes". This counts toward the monthly budget only, not the passes per run. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included. **Outbound HTTP requests** count every `ctx.http` call. Provider calls (messaging, payment, LLM) do not count.
 - The SQLite total is checked when a run starts; the per-actuator size before each run and after every statement.
 - The free Sandbox has no messaging, payment or LLM providers: it is for building and exposing MCP tools, not for sending messages or taking payments.
 - The run rate is a sliding window per account.
-- Agency also adds client portals, the approval queue, white-label domains, and Excel and SQLite exports. It arrives with Stage 2.
+- A [retry](/docs/guides/retry-and-rollback/) from the failed step, each run in a bulk retry, and **Run again** each count as one run, against runs per month and the run rate. A rollback counts as a deploy.
+- [Alerts](/docs/guides/alerts/) are emailed on every plan; Maker and Agency can also send them to one of your messaging channels. Alert emails (test alerts included) are capped per day (UTC); the last one says so, and alerts after it still reach your messaging channel and the dashboard. [Agent analytics](/docs/concepts/agents/#analytics) are kept for the period above.
+- A run finishes on the version it started on (see [version pinning](/docs/guides/retry-and-rollback/#runs-stay-on-their-version)). Each day an earlier version has runs waking next to the current one counts once against the monthly allowance above (a rollback to the same code doesn't count). Past it, those runs fail with a message saying so, and a retry moves them to the current version. Runs on the current version are never affected.
+- Agency also adds client portals, the approval queue, a white-label domain (portals, webhook URLs, provider callbacks and approval links on your own domain), and Excel and SQLite exports. It arrives with Stage 2.
 
 Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
 
 ## Guards on the hosted platform
+
+You can hit most of these locally first. With `@actuate/cli` 0.3 or later, `actuate dev` and `actuate test` apply the per-pass guards, the 1 MiB step result limit, the SQL refusals, and the plan's longest wait, passes per run and retry cap, with the platform's messages. `actuate dev` also prints the deploy checks at startup, and `actuate check --platform` and `actuate deploy` run them before anything is uploaded: cron schedules, `http.allow`, input regexes, capabilities on the plan, the configuration and, logged in, providers, the actuator count and the deploy budget. The CPU limit, the monthly budgets and the database size are not mirrored. See [guards in actuate dev](/docs/reference/cli/#guards-in-actuate-dev) and [the deploy checks](/docs/reference/cli/#the-deploy-checks).
 
 | Situation | What happens |
 | --- | --- |
 | Monthly runs used up | New runs are refused until the monthly reset |
 | Monthly passes, rows written, rows read or HTTP requests used up (sleep loops, event storms, heavy queries, request floods) | Passes wait until the monthly reset. No run is lost |
 | One run loops forever | It fails after the plan's passes per run |
-| One pass does too much host work | A pass may run at most 1,000 database statements, write 1,000 steps, write 20,000 rows, read 5,000,000 rows, make 50 HTTP requests, and take 30 seconds of wall time. After a pass ends, its database and provider clients stop working, even if your code is still running |
+| One pass does too much host work | A pass may run at most 1,000 database statements (each statement in a `ctx.db.batch` or `commitWithStep` counts as one), write 1,000 steps, write 20,000 rows, read 5,000,000 rows, make 50 HTTP requests, and take 30 seconds of wall time. After a pass ends, its database and provider clients stop working, even if your code is still running |
 | Passes keep exceeding the CPU limit | A pass whose work exceeds the host's CPU limit is cut short and still counts against your budgets. After 3 in a row the actuator is paused, with the reason shown in the dashboard. Fix it and resume; deploying or resuming starts the count again |
-| One SQL statement does unbounded work | Refused before it runs: recursive queries (including self-referencing CTEs without `RECURSIVE`), `randomblob`/`zeroblob`/`printf`/`format`, `PRAGMA`/`ATTACH`/`DETACH`/`VACUUM`. Bound parameters at most 1 MiB per statement. See [Database](/docs/concepts/database/#what-the-platform-refuses) |
+| One SQL statement does unbounded work | Refused before it runs: recursive queries (including self-referencing CTEs without `RECURSIVE`), `randomblob`/`zeroblob`/`printf`/`format`, `PRAGMA`/`ATTACH`/`DETACH`/`VACUUM`, and transaction control (`BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`; use [`ctx.db.batch`](/docs/concepts/database/#atomic-writes) instead). Bound parameters at most 1 MiB per statement. See [Database](/docs/concepts/database/#what-the-platform-refuses) |
 | Large step results | One step's stored result is at most 1 MiB |
 | Retry storms | Retries are capped at 10 per step, with exponential backoff |
 | Long waits on the Sandbox | Sleeps, and waits with a timeout or deadline, longer than 7 days fail with `ActuatorError`; open-ended waits time out at 7 days |
@@ -80,7 +93,11 @@ Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
 | Journals grow without bound | Settled runs, with their steps and logs, are deleted after the plan's retention period. Your tables are never touched |
 | Database growth | Each actuator's SQLite size is checked against the plan before each run and after every statement; the account's total is checked when a run starts |
 | Suspended accounts | Runs, crons, alarms, events, MCP and SSE stop; state is kept |
-| Deploy churn | Limited to the plan's deploys per 24 hours |
+| Deploy churn | Limited to the plan's deploys per day and per month. Every attempt counts, including deploys that fail their checks, so a loop of failing deploys stops at the daily limit. A rollback counts as a deploy |
+| One agent running a tool too often | Optional [per-token limits](/docs/concepts/agents/#limits): runs per hour overall and per tool, 1 to 100,000 each, on agent tokens and MCP connections. Calls over a limit are refused with `429` (a tool error over MCP) and start no run |
+| Bulk retries | At most 100 runs per call, each counted as a run; the batch stops when the run budget runs out |
+| Alert floods | At most one [alert](/docs/guides/alerts/#throttling) per actuator per kind per hour (6 hours for missed schedules and rejected credentials, 15 minutes for expiring waits); the rest are counted into the next. Alert emails per day per account (above). Test alerts: one per 30 seconds, ten a day |
+| MCP sign-ins | OAuth access tokens last 1 hour and refresh tokens 30 days; each refresh returns a new refresh token, and the previous one keeps working until the new one is used. Sign-in, token and revocation endpoints take 60 requests per minute per IP address, registration 20 |
 
 ## SDK and runtime limits
 

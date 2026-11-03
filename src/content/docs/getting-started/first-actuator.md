@@ -122,14 +122,17 @@ curl -X POST localhost:8787/events/payment.<runId> -H 'content-type: application
 curl localhost:8787/runs/<runId>
 ```
 
+With `@actuate/cli` 0.3 or later, `npx actuate event payment.<runId> '{"status":"paid"}' --local` does the same, and `npx actuate logs <runId> --local` shows where the run got to.
+
 The run is `COMPLETED` with output `{ "status": "CONFIRMED", ... }`, and `curl localhost:8787/tables/bookings` shows the row. To test the reminder path, set `{"reminderDelay": "30 minutes"}` in `actuate.config.json`, restart `actuate dev` (it reads the configuration at startup), start a run and don't pay.
 
 ## Deploying it
 
-`actuate deploy` works as in the [Quickstart](/docs/getting-started/quickstart/#5-deploy), with two differences. This actuator declares `payment` and `messaging`, so it needs the Maker plan: the free Sandbox refuses it with `402`. And it needs providers: set your payment and messaging credentials in the dashboard under Settings → Providers before you deploy, or the deploy is refused.
+`actuate deploy` works as in the [Quickstart](/docs/getting-started/quickstart/#6-deploy), with two differences. This actuator declares `payment` and `messaging`, so it needs the Maker plan: the free Sandbox refuses it with `402`. And it needs providers: set your payment and messaging credentials in the dashboard under Settings → Providers before you deploy, or the deploy is refused. `actuate deploy` checks both before it uploads, and stops without using a deploy.
 
 ## Next
 
 - [Steps and replay](/docs/concepts/steps-and-replay/): retries, idempotency keys and the determinism rules.
 - [Sleeping and waiting](/docs/concepts/sleeping-and-waiting/): timeouts and events that arrive early.
 - [Human approvals](/docs/concepts/approvals/): add a sign-off before money moves.
+- [Write efficient actuators](/docs/guides/best-practices/): keep runs cheap, and test an actuator before you deploy it.

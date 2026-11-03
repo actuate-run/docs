@@ -137,3 +137,5 @@ It works like an approval:
 On the platform, when `notify` is set, links are sent through your actuator's messaging provider: Telegram, WhatsApp, or email through Resend, depending on which one you configured. Actuate does not send them itself. Without `notify`, or on the Sandbox plan (which has no messaging providers), take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they are printed in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is set, and to the console otherwise.
 
 If delivery fails, the error is written to the run's log and the run keeps waiting; fetch the links from the dashboard or the links route instead.
+
+On the platform, the owner also gets an [alert](/docs/guides/alerts/) one hour before an approval or question times out, for waits of two hours or more.

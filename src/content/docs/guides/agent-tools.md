@@ -16,8 +16,8 @@ The model decides that a customer deserves a refund. An actuator, exposed to the
 | Risk with an agent acting directly | What the actuator enforces |
 | --- | --- |
 | Hallucinated or malformed arguments | The InputSchema is the tool's argument schema, and bad arguments are rejected before any code runs |
-| Acting twice when the agent or network retries | A retried tool call returns the first run's receipt; each `ctx.step.do` runs once per run |
-| Exceeding a limit | Caps live in `config` and in code, not in a prompt |
+| Acting twice when the agent or network retries | A retried tool call with the same [idempotency key](/docs/concepts/mcp-and-openapi/#idempotent-receipts) returns the first run's receipt; each `ctx.step.do` runs once per run |
+| Exceeding a limit | Caps live in `config` and in code, not in a prompt. On the platform you can also cap how often each agent may run a tool: [agent limits](/docs/concepts/agents/#limits) |
 | Acting without sign-off | `ctx.step.waitForApproval` pauses until a person clicks |
 | No record of what happened | Every run has a step journal, and you write audit rows to SQLite |
 | Leaked keys | Credentials stay in providers; the model never sees them |
@@ -100,7 +100,7 @@ What the model can and cannot do with this tool:
 - It can choose the order, the amount and one of four reasons. The schema rejects anything else before the actuator wakes.
 - It cannot refund more than the order's paid amount or `maxRefundRM`, because those checks are in code.
 - It cannot skip the approval: above the threshold the run waits for a manager, and a timeout counts as a rejection.
-- It cannot refund twice: a retried tool call gets the first run's receipt, and the `refund` step runs once per run.
+- It cannot refund twice for one retried call: a call retried with the same `_meta` idempotency key gets the first run's receipt, and the `refund` step runs once per run. To stop separate calls for the same order, check for an existing refund row in a step before paying.
 - Every outcome leaves a row in `refunds` that you can browse and export.
 
 ## Designing tools for agents

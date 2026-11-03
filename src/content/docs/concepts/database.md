@@ -28,6 +28,9 @@ const pending = await ctx.db.sql<{ id: string }>`SELECT id FROM bookings WHERE s
 | `query(sql, params?)` | All rows, as objects keyed by column name |
 | `first(sql, params?)` | The first row, or `null` |
 | `` sql`...` `` | All rows. Each `${value}` becomes a `?` parameter |
+| `` statement`...` `` | A statement for `batch` or `commitWithStep`, built like `sql` but not run |
+| `batch(statements)` | Runs several statements all or nothing and returns each one's rows. See [Atomic writes](#atomic-writes) |
+| `commitWithStep(statements)` | Queues writes that commit with the current step. See [Atomic writes](#atomic-writes) |
 | `migrate(statements)` | Applies new schema migrations |
 
 Parameters can be strings, numbers, bigints, booleans (stored as `1` and `0`), `null`, `Uint8Array` or `ArrayBuffer`. The type argument (`query<T>`) types the rows; it is not checked at runtime.
@@ -47,6 +50,75 @@ await ctx.step.do("save-booking", () =>
 `actuate check` warns about literal `INSERT`, `UPDATE`, `DELETE` and `REPLACE` statements outside a step.
 
 Reads outside a step are fine when they only feed a log line or a return value. If a read decides which branch the run takes, do it in a step so every replay sees the same answer.
+
+## Atomic writes
+
+Each statement is atomic on its own, but a step that runs several statements and then fails keeps the ones that already ran. When writes must happen together, use `batch` or `commitWithStep`.
+
+:::note
+`batch` and `commitWithStep` require `@actuate/runtime` 0.3. On the hosted platform they work once the platform runs that version. An older host rejects them with an error and writes nothing.
+:::
+
+### batch
+
+`ctx.db.batch(statements)` runs the statements in order in one transaction. Either all of them apply or none do. It resolves to each statement's rows, in order: the `RETURNING` rows of a write, or an empty array for a write without `RETURNING`.
+
+```ts
+await ctx.step.do("place-order", () =>
+  ctx.db.batch([
+    ctx.db.statement`UPDATE stock SET qty = qty - ${input.qty} WHERE sku = ${input.sku}`,
+    ctx.db.statement`INSERT INTO orders (id, sku, qty) VALUES (${ctx.runId}, ${input.sku}, ${input.qty})`,
+  ]),
+);
+```
+
+Build each statement with the `` ctx.db.statement`...` `` tagged template, which binds every `${value}` like `sql` does, or write it as `{ sql, params }`:
+
+```ts
+const orderId = await ctx.step.do("checkout", async () => {
+  const [, [order]] = await ctx.db.batch<{ id: string }>([
+    { sql: "DELETE FROM carts WHERE id = ?", params: [input.cartId] },
+    { sql: "INSERT INTO orders (id, cart_id) VALUES (?, ?) RETURNING id", params: [ctx.runId, input.cartId] },
+  ]);
+  return order.id;
+});
+```
+
+Later statements see the writes of earlier ones, and nothing else runs in between. If a statement fails, none is applied and the error says which one: `Statement 2 of 2 failed, so none were applied: ...`. Statements that control a transaction (`BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`) are refused, because the batch is already one transaction.
+
+A batch is atomic on its own, not together with the step around it. If the step throws after the batch and is retried, the batch runs again. Make it safe to repeat (natural keys, `ON CONFLICT`), or use `commitWithStep`.
+
+### commitWithStep
+
+`ctx.db.commitWithStep(statements)` works only inside `ctx.step.do`; outside a step it throws an `ActuatorError`. It doesn't run the statements. It queues them, and they commit in the same transaction that records the step as completed:
+
+```ts
+await ctx.step.do("charge", async () => {
+  const bill = await ctx.payment.createBill({ amount: input.amount, referenceId: ctx.runId });
+  ctx.db.commitWithStep([
+    ctx.db.statement`INSERT INTO bills (id, booking_id, url) VALUES (${bill.id}, ${input.bookingId}, ${bill.url})`,
+    ctx.db.statement`UPDATE bookings SET status = 'BILLED' WHERE id = ${input.bookingId}`,
+  ]);
+  return { billId: bill.id, url: bill.url };
+});
+```
+
+- If the step throws or is retried, none of the queued writes is applied. A retry starts with nothing queued.
+- Once the step has completed, they are never applied again, even when the run is replayed. So they happen exactly once, with the step's result.
+- If one of them fails, none is applied, the step isn't recorded as completed, and the attempt fails with that error (and retries if the step has `retries`).
+- They run after the step function returns, so the step can't read their effects or their rows.
+
+### Which to use
+
+| | `batch` | `commitWithStep` |
+| --- | --- | --- |
+| All or nothing | Yes | Yes |
+| Tied to the step's result | No: a retried step runs it again | Yes: exactly once with the step |
+| The step can read the writes and rows | Yes | No |
+
+Use `commitWithStep` for writes that record what the step did, such as a bill ID or a "sent" flag. Use `batch` when the step needs the rows back or reads what it wrote.
+
+The same checks as `query` apply to every statement in either one: tables starting with `_actuate_` are refused, and on the hosted platform each statement is checked like any other and counts toward the 1,000 statements a pass may run, so a batch of 50 statements counts as 50.
 
 ## Migrations
 
@@ -79,6 +151,7 @@ On the hosted platform, every statement is checked by the host before it runs, o
 | Recursive queries | `WITH RECURSIVE ...`, and any CTE that refers to itself (SQLite makes it recursive even without the keyword) |
 | Generator and file functions | `randomblob()`, `zeroblob()`, `printf()`, `format()`, `load_extension()`, `readfile()`, `writefile()` |
 | Database commands | `PRAGMA`, `ATTACH`, `DETACH`, `VACUUM`, `REINDEX` |
+| Transaction control | `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`. Use [`batch` or `commitWithStep`](#atomic-writes) for writes that belong together |
 | Runtime and system tables | `_actuate_*`, `_cf_*`, `sqlite_*` |
 
 And these limits apply:

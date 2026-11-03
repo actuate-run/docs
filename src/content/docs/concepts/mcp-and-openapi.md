@@ -1,14 +1,14 @@
 ---
 title: MCP and OpenAPI
-description: Every deployed actuator is an MCP tool and has an OpenAPI document, generated from its name, description and InputSchema.
+description: Every deployed actuator is an MCP tool and has an OpenAPI document, generated from its name, description and InputSchema. Protocol versions, annotations, caching and idempotency on the hosted MCP server.
 ---
 
 When you deploy an actuator, the platform publishes it two ways:
 
-- a **hosted MCP server**, over SSE and streamable HTTP, where the actuator is a tool an AI agent can call;
+- a **hosted MCP server**, over Streamable HTTP (and the legacy HTTP+SSE transport), where the actuator is a tool an AI agent can call;
 - an **OpenAPI document**, for any HTTP client or agent framework that speaks OpenAPI.
 
-`actuate deploy` prints both URLs. Both need an API token as `Authorization: Bearer <token>`; an Agent (run-scoped) token is enough. See [Connect your agent](/docs/guides/connect-your-agent/).
+`actuate deploy` prints both URLs. MCP clients either [sign in with OAuth](/docs/guides/connect-your-agent/#sign-in-from-your-mcp-client) or send an API token as `Authorization: Bearer <token>`; an Agent (run-scoped) token is enough. The OpenAPI document and the HTTP routes it describes take an API token only. See [Connect your agent](/docs/guides/connect-your-agent/).
 
 ## From actuator to tool
 
@@ -16,10 +16,11 @@ Both are generated from the actuator definition:
 
 | Actuator field | Becomes |
 | --- | --- |
-| `name` | The tool name |
+| `name` | The tool name. The tool's `title` is the name with underscores turned into spaces (`refund_order` becomes "refund order") |
 | `description` | The tool description |
 | `input` (InputSchema) | The tool's argument schema, as JSON Schema |
-| `output` | The published result schema, when you set one |
+| `output` | The tool's `outputSchema`, when you set one and it describes an object |
+| `hints` | The tool's [annotations](#tool-hints) |
 
 This is why `name` is restricted to lowercase letters, digits and underscores (at most 64 characters), and why `description` is required.
 
@@ -44,6 +45,8 @@ export default defineActuator({
 
 The JSON Schema is generated from the schema's input type, so fields with a `.default()` are optional for the caller.
 
+Every endpoint also has `actuate_get_run`, a read-only tool that returns the status and result of a run another tool started. See [what a tool call returns](/docs/guides/connect-your-agent/#what-a-tool-call-returns).
+
 ## Tool hints
 
 MCP clients ask a person before running tools that change things, and some agents treat read-only tools differently. Tell them what your tool does with `hints`:
@@ -60,12 +63,16 @@ export default defineActuator({
 });
 ```
 
-| Hint | MCP annotation | Default | Set it when |
+The hosted server always sends all four annotations, so clients and directories never fall back to their own defaults:
+
+| Hint | MCP annotation | Sent when you don't set it | Set it when |
 | --- | --- | --- | --- |
 | `readOnly` | `readOnlyHint` | `false` | The tool never changes anything |
-| `idempotent` | `idempotentHint` | `false` | Calling it twice with the same arguments has the same effect as once |
-| `destructive` | `destructiveHint` | `true`, unless `readOnly` | It may delete or irreversibly change data. Set `false` for additive tools such as "create a draft" |
-| `openWorld` | `openWorldHint` | `true` | It talks to the outside world: messages, payments, other APIs. Set `false` when it only touches its own database |
+| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool | Calling it twice with the same arguments has the same effect as once |
+| `destructive` | `destructiveHint` | `true`, or `false` for a read-only tool | It may delete or irreversibly change data. Set `false` for additive tools such as "create a draft" |
+| `openWorld` | `openWorldHint` | `true` if the actuator declares any capability (`messaging`, `payment`, `llm`, `http`, required or optional), `false` otherwise | It talks to the outside world: messages, payments, other APIs. Set `false` when it only touches its own database |
+
+`readOnly: true` together with `destructive: true` is treated as not read-only: the tool is sent as destructive. A read-only tool is always sent as idempotent and not destructive, whatever `idempotent` and `destructive` say. `actuate_get_run` is sent as read-only, idempotent, not destructive and closed-world.
 
 Hints describe the tool to clients; they don't enforce anything. The schema, your code and `waitForApproval` do that.
 
@@ -75,14 +82,61 @@ Arguments are validated against the InputSchema at the gateway, before the actua
 
 Put every rule you can into the schema: enums instead of free strings, `min` and `max` on amounts, `regex` on phone numbers. The schema is the contract the model cannot step outside.
 
+## Protocol versions
+
+The hosted server speaks both the stateless 2026-07-28 protocol and the older, session-based versions. Clients pick one; you don't configure anything.
+
+| Version | How the client uses it |
+| --- | --- |
+| `2026-07-28` | Stateless. No `initialize` and no `Mcp-Session-Id`: every request carries its protocol version and client capabilities in `_meta`, and the matching `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers. `server/discover` describes the server |
+| `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05` | `initialize` picks the version. A client that asks for a version not in this list gets `2025-11-25`. The server returns an `Mcp-Session-Id`, which it uses only to [deduplicate retried calls](#idempotent-receipts) |
+
+The server implements `tools/list`, `tools/call` and, for session-based clients, `initialize` and `ping`. It answers every request with a JSON response and never opens a server-to-client stream: `GET` and `DELETE` on an MCP endpoint return `405` with `Allow: POST`. The legacy HTTP+SSE transport (protocol 2024-11-05) is still served at `/sse` and `/a/<id>/sse` for old clients, with an API token only.
+
+Errors follow the protocol:
+
+| Situation | Response |
+| --- | --- |
+| 2026-07-28 request with a header that is missing or doesn't match the body | `400`, JSON-RPC error `-32020` |
+| 2026-07-28 request naming a version the server doesn't support | `400`, error `-32022`, with `data.supported` listing the versions above |
+| 2026-07-28 request without `_meta["io.modelcontextprotocol/protocolVersion"]` or `_meta["io.modelcontextprotocol/clientCapabilities"]` | `400`, error `-32602` |
+| Session-based request with an `MCP-Protocol-Version` header the server doesn't support | `400`, error `-32600`, with `data.supported` |
+| Unknown method | Error `-32601` (`404` for 2026-07-28 requests) |
+| Unknown tool | Error `-32602`, with status `200` |
+
+A request without credentials, or with a token that is expired, revoked or for another endpoint, gets `401` with a `WWW-Authenticate` header that points MCP clients at the sign-in server. See [Platform API](/docs/reference/platform-api/#mcp-authorization).
+
+## Tool list changes
+
+The tool list changes when you deploy, roll back, pause or resume an actuator. The server does not send list-change notifications (they need a server stream, which it doesn't open), so it reports `listChanged: false`. Instead:
+
+- 2026-07-28 clients get `ttlMs: 60000` with `cacheScope: "private"` on `tools/list`: they may cache the list for a minute, for this token only. `server/discover` may be cached for an hour.
+- Session-based clients see changes when they list tools again or reconnect.
+
+The gateway itself picks up a deploy within about 30 seconds.
+
 ## Idempotent receipts
 
-Agents retry. Networks drop responses. An MCP tool call to an actuator returns an **execution receipt**, and a retried tool call returns the first run's receipt instead of running again. Combined with [steps](/docs/concepts/steps-and-replay/), a refund tool called twice refunds once.
+Agents retry. Networks drop responses. An MCP tool call to an actuator returns an **execution receipt**, and a retried tool call can return the first run's receipt instead of running again. Combined with [steps](/docs/concepts/steps-and-replay/), a refund tool called twice refunds once.
+
+To get this, put an idempotency key in the call's `_meta`:
+
+```json
+{
+  "name": "refund_order",
+  "arguments": { "orderId": "2291", "amount": 120, "reason": "damaged" },
+  "_meta": { "run.actuate/idempotencyKey": "refund-2291" }
+}
+```
+
+- The same key on the same tool always returns the same run, across sessions, processes and days. `actuate/idempotencyKey` and `idempotencyKey` are read too, in that order after `run.actuate/idempotencyKey`.
+- Keys are per actuator: the same key on two tools starts two runs. MCP keys are also kept apart from HTTP `Idempotency-Key` values, so a key sent over MCP never matches one sent to `/run`.
+- Without a key, a session-based client (2025-11-25 and earlier) that repeats a call with the same JSON-RPC `id` in the same session gets the first call's receipt. A 2026-07-28 client has no session, and JSON-RPC IDs are reused across processes, so without a key every call starts a new run.
 
 The same guarantee is available over plain HTTP with the [`Idempotency-Key` header](/docs/concepts/triggers/#idempotency-key).
 
 ## Self-hosted
 
-The MCP server and OpenAPI document are part of the hosted platform. The open-source runtime exposes the same generated JSON Schema at `GET /` (see [Runtime HTTP API](/docs/reference/runtime-http/#describe)) and validates input on `/run` and `/webhook` in the same way.
+The MCP server, OAuth sign-in and OpenAPI document are part of the hosted platform. The open-source runtime exposes the same generated JSON Schema at `GET /` (see [Runtime HTTP API](/docs/reference/runtime-http/#describe)) and validates input on `/run` and `/webhook` in the same way.
 
 See [Deterministic agent tools](/docs/guides/agent-tools/) for how to design actuators for agents.
