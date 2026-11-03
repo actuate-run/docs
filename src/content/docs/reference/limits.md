@@ -97,7 +97,7 @@ You can hit most of these locally first. With `@actuate/cli` 0.3 or later, `actu
 | One agent running a tool too often | Optional [per-token limits](/docs/concepts/agents/#limits): runs per hour overall and per tool, 1 to 100,000 each, on agent tokens and MCP connections. Calls over a limit are refused with `429` (a tool error over MCP) and start no run |
 | Bulk retries | At most 100 runs per call, each counted as a run; the batch stops when the run budget runs out |
 | Alert floods | At most one [alert](/docs/guides/alerts/#throttling) per actuator per kind per hour (6 hours for missed schedules and rejected credentials, 15 minutes for expiring waits); the rest are counted into the next. Alert emails per day per account (above). Test alerts: one per 30 seconds, ten a day |
-| MCP sign-ins | OAuth access tokens last 1 hour and refresh tokens 30 days; each refresh token works once (retrying a lost refresh within 60 seconds gets a new pair, up to 10 times a day), and any other reuse revokes the connection. Sign-in, token and revocation endpoints take 60 requests per minute per IP address, registration 20 |
+| MCP sign-ins | OAuth access tokens last 1 hour and refresh tokens 30 days; each refresh token works once (sending it again within 60 seconds, before the new one is used, returns the same pair), and any other reuse revokes the connection. Sign-in, token and revocation endpoints take 60 requests per minute per IP address, registration 20 |
 
 ## SDK and runtime limits
 
