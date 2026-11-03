@@ -155,7 +155,9 @@ The payload is a `PaymentEvent`:
 | `referenceId` | The `referenceId` you passed to `createBill` |
 | `billId`, `amount`, `currency` | Present when the provider reports them |
 
-Check `status`: a provider can report a failed or expired bill under the same key.
+Check `status`: a provider can report a failed or expired bill under the same key. For anything that matters, also check that `billId`, `amount` and `currency` match the bill you created, and use a reference nobody else can guess (for example include `ctx.runId`). The event key is only your reference, so this is what ties the payment to this bill. (The local fake provider under `actuate dev` sends no `billId` or `amount`.)
+
+Stripe events take their reference only from the `actuate_reference_id` metadata that `createBill` sets on the Checkout Session, never from `client_reference_id`: buyers can set that themselves on Payment Links and pricing tables, so it would let any payment on your account claim someone else's reference. Sessions that `createBill` didn't create are ignored.
 
 ToyyibPay's callbacks are not signed, so Actuate never trusts what the callback says. It re-queries the transaction with your ToyyibPay credentials and builds the event only from that answer: the event key uses the re-queried transaction's reference, and the amount is the re-queried amount. A callback that doesn't match a transaction on your account is rejected.
 

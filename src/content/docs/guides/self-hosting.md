@@ -63,22 +63,27 @@ export const ActuatorObject = runtime.ActuatorObject;
 ## 4. Set secrets and deploy
 
 ```bash
-npx wrangler secret put ACTUATE_TOKEN            # required: bearer token for the admin API
+npx wrangler secret put ACTUATE_TOKEN            # required: your own token for the admin API
+npx wrangler secret put ACTUATE_RUN_TOKEN        # the token your agent uses: start and read runs only
 npx wrangler secret put ACTUATE_WEBHOOK_SECRET   # required to accept POST /webhook
 npx wrangler secret put ACTUATE_APPROVAL_SECRET  # optional: generated if unset
 npx wrangler deploy
 ```
 
-The runtime fails closed: without `ACTUATE_TOKEN` the admin API answers `503`, and without `ACTUATE_WEBHOOK_SECRET` so does `/webhook`. Set `ACTUATE_PUBLIC_URL` (step 3) too, so approval links and the self-call check use your real origin rather than whatever host the first request named. Don't set `ACTUATE_DEV` in production: it opens routes whose secret is missing, and exists only for `actuate dev`. The full list of variables is in the [runtime HTTP API reference](/docs/reference/runtime-http/#environment-variables).
+The runtime fails closed: without `ACTUATE_TOKEN` the admin API answers `503`, and without `ACTUATE_WEBHOOK_SECRET` so does `/webhook`. Set `ACTUATE_PUBLIC_URL` (step 3) too, so approval links, payment callbacks and the self-call check use your real origin. Without it, the runtime waits for your first request made with `ACTUATE_TOKEN` to learn the origin, and approval links are relative until then. Don't set `ACTUATE_DEV` in production: it opens routes whose secret is missing, and exists only for `actuate dev`. The full list of variables is in the [runtime HTTP API reference](/docs/reference/runtime-http/#environment-variables).
 
 `npx wrangler dev` runs the same thing locally.
 
+Your agent starts runs with `ACTUATE_RUN_TOKEN`:
+
 ```bash
 curl -X POST https://bot.example.com/run \
-  -H "authorization: Bearer $ACTUATE_TOKEN" \
+  -H "authorization: Bearer $ACTUATE_RUN_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"name":"Aina"}'
 ```
+
+It can also describe the actuator (`GET /`) and read a run (`GET /runs/<runId>`), and nothing else. Keep `ACTUATE_TOKEN` for yourself: it can approve, answer, post events and read tables, so an agent holding it could let its own gated runs through. See [Authentication](/docs/reference/runtime-http/#authentication).
 
 ## 5. Providers
 
