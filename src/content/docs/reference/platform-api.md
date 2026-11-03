@@ -293,7 +293,7 @@ A token that was sent but is expired, revoked or for another endpoint adds `erro
 }
 ```
 
-The authorization server metadata (RFC 8414) is at `https://api.actuate.run/.well-known/oauth-authorization-server`. It lists the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`, `client_id_metadata_document_supported: true` and `authorization_response_iss_parameter_supported: true`. Both metadata documents allow any origin (CORS) and may be cached for 5 minutes. The same authorization server document is also served at `https://run.actuate.run/.well-known/oauth-authorization-server`, for clients on the 2025-03-26 MCP spec that look for it on the MCP server's origin; its `issuer` is still `https://api.actuate.run`.
+The authorization server metadata (RFC 8414) is at `https://api.actuate.run/.well-known/oauth-authorization-server`. It lists the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`, `client_id_metadata_document_supported: true` and `authorization_response_iss_parameter_supported: true`. Both metadata documents allow any origin (CORS) and may be cached for 5 minutes. The same authorization server document is also served at `https://run.actuate.run/.well-known/oauth-authorization-server`, for clients on the 2025-03-26 MCP spec that look for it on the MCP server's origin; its `issuer` is still `https://api.actuate.run`, so clients that insist the issuer match the host they fetched it from won't accept it.
 
 ### Clients
 
@@ -322,7 +322,7 @@ After the user decides, the browser returns to `redirect_uri` with `code` and `s
 **`/oauth/token`** takes form-encoded parameters (JSON is accepted too), at most 16 KB, with `client_id` in the body or as the user name of HTTP Basic auth:
 
 - `grant_type=authorization_code` with `code`, `redirect_uri` and `code_verifier`. A wrong verifier uses up the code. A code presented a second time revokes the connection it was exchanged for.
-- `grant_type=refresh_token` with `refresh_token`. Every refresh returns a new refresh token. A used one presented again within 60 seconds of its use (a client retrying a refresh whose response it lost, or two refreshing at once) gets a new pair, up to 5 refresh tokens per connection at once; after 60 seconds, presenting it revokes the connection.
+- `grant_type=refresh_token` with `refresh_token`. Every refresh returns a new refresh token, and only the newest one works. A client that retries a refresh whose response it lost (the same refresh token again, within 60 seconds, before it has used the new one) gets a new pair, and the pair from the lost response stops working. Any other reuse revokes the connection: a used refresh token presented after 60 seconds, or a pair that a retry replaced. Ten retries per connection per day are allowed; the eleventh revokes. Refresh from one place at a time: two refreshes with the same token at once count as reuse.
 - `resource` is optional on both; if sent, it must name the same endpoint as the authorization request (`invalid_target` otherwise).
 
 ```json
