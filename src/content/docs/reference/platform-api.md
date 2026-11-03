@@ -322,7 +322,7 @@ After the user decides, the browser returns to `redirect_uri` with `code` and `s
 **`/oauth/token`** takes form-encoded parameters (JSON is accepted too), at most 16 KB, with `client_id` in the body or as the user name of HTTP Basic auth:
 
 - `grant_type=authorization_code` with `code`, `redirect_uri` and `code_verifier`. A wrong verifier uses up the code. A code presented a second time revokes the connection it was exchanged for.
-- `grant_type=refresh_token` with `refresh_token`. Every refresh returns a new refresh token. The same refresh token sent again within 60 seconds, before the new one has been used, gets the same pair again: a retry after a lost response, or several refreshes at once, all end up with one pair. Any other reuse of a used refresh token (after 60 seconds, or once the pair it was exchanged for has been used) revokes the connection.
+- `grant_type=refresh_token` with `refresh_token`. Every refresh returns a new refresh token. The same refresh token sent again within 10 seconds, before the new access token has been used, gets the same pair again: a retry after a lost response, or several refreshes at once, all end up with one pair. Any other reuse of a used refresh token (later, or once the new pair has been used) revokes the connection. A connection may refresh 20 times an hour; beyond that the token endpoint answers `429` with `slow_down`.
 - `resource` is optional on both; if sent, it must name the same endpoint as the authorization request (`invalid_target` otherwise).
 
 ```json
