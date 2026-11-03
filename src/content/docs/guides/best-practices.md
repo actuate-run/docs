@@ -12,7 +12,7 @@ At the end there is a [checklist for your coding agent](#instructions-for-your-c
 | Budget | What uses it |
 | --- | --- |
 | Runs | Every run that starts: API, webhook, MCP tool call and cron firing. Each retry, each run in a bulk retry and each **Run again** count too |
-| Passes | The first pass of a run and every wake-up after it: when a sleep ends, an event arrives, a person decides, a wait times out or a retry backoff ends |
+| Passes | The first pass of a run and every wake-up after it: when a sleep ends, an event arrives, a person decides, a wait times out or a retry backoff ends. A pass longer than 5 seconds counts one more for every further 5 seconds |
 | Rows written | Every row inserted, updated or deleted in your actuator's SQLite database, in your tables and in the run journal, plus every index entry those writes change |
 | Rows read | Every row SQLite reads: your queries, the journal each pass loads, and table counts and exports in the dashboard |
 | Outbound HTTP | Every `ctx.http` call, including each attempt of a step that retries. Messaging, payment and LLM provider calls don't count |
@@ -145,6 +145,14 @@ const payment = await ctx.step.waitForEvent<PaymentEvent>("payment", {
 - If an outside system has no webhook and you must poll, poll at the longest interval that works, cap the number of rounds, and lengthen the interval as you go.
 
 See [Sleeping and waiting](/docs/concepts/sleeping-and-waiting/).
+
+### Keep passes short
+
+A pass that runs or waits longer than 5 seconds counts one extra pass for every further 5 seconds, because the platform pays for the time it waits. A few long LLM or API calls cost little, but a dependency that hangs on every call burns through the month's passes six times faster than usual (a pass is cut off at 30 seconds).
+
+- Set a timeout on slow calls you control, shorter than 30 seconds, and retry the step instead of waiting longer.
+- Don't wait inside a step for something that takes minutes: start it, then `waitForEvent` for its webhook, or `sleep` and check once.
+- Run independent slow calls in separate steps of separate passes only when each is worth its own retry. Several calls in one step add up their time.
 
 ### Keep step results small
 
@@ -495,6 +503,7 @@ Paste this into `CLAUDE.md`, `AGENTS.md` or a file in `.cursor/rules/`, so your 
 - Do database work for many rows in one step and one statement: multi-row INSERT, `INSERT ... SELECT ... FROM json_each(?)`, or `INSERT ... ON CONFLICT DO UPDATE` instead of select-then-write. Make writes safe to repeat.
 - Return small JSON from steps: only the fields you use, never whole tables, response bodies or LLM replies. A step result may be at most 1 MiB.
 - Wait with `ctx.step.waitForEvent`, `ctx.step.waitForApproval`, `ctx.step.waitForInput` or `ctx.step.sleepUntil`. Never poll in a loop of short sleeps. Prefer one long sleep to many short ones.
+- Keep passes short: a pass over 5 seconds counts one extra pass per further 5 seconds. Put timeouts under 30 seconds on slow calls, and wait for long jobs with `waitForEvent` instead of inside a step.
 - Use `retries` only on steps that can fail for a while (network, providers). Throw `NonRetryableError` for errors that won't fix themselves.
 - Return a status for expected outcomes (not found, rejected, over a limit) instead of throwing. A failed run sends an alert.
 - Create tables and indexes with `ctx.db.migrate` at the top of `run`. Only append to its list; never edit, reorder or remove entries.
