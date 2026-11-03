@@ -105,7 +105,7 @@ The run comes back `WAITING`, due now, and carries on in the background.
 { "since": "2026-11-03T09:00:00Z", "limit": 100 }
 ```
 
-Retries every run that failed at or after `since` (epoch milliseconds or an ISO date) and hasn't been retried since then, oldest first, at most `limit` per call (1 to 100, default 100). Each retry counts as a run.
+Retries every run that failed at or after `since` (epoch milliseconds or an ISO date) and hasn't already been retried on the current version, oldest first, at most `limit` per call (1 to 100, default 100). Each retry counts as a run.
 
 ```json
 { "ok": true, "retried": ["run_01a1...", "run_01a2..."], "version": 8, "more": true }

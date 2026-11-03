@@ -40,7 +40,7 @@ Replay finds a completed step's result by its name. If your fix renames a step t
 
 After deploying a fix for something that hit many runs, open the **Runs** tab, filter by **Failed**, and click **Retry failed runs**. Choose how far back to go (the last hour, 24 hours or 7 days). Each run that failed in that window is retried as above, oldest first, up to 100 at a time: click **Retry again** while it says more remain. Each retry counts as a run, and the batch stops early, with the reason, if the run budget runs out.
 
-A bulk retry skips runs that were already retried inside the window, so a run that fails again after its retry isn't picked up again by **Retry again**. If your fix didn't work, deploy another and retry those runs one by one from their run pages.
+A bulk retry skips runs that were already retried on the current version, so a run that fails again after its retry isn't picked up again by **Retry again**. If your fix didn't work, deploy another: after that deploy, the same bulk retry picks those runs up again.
 
 ## Run again
 
