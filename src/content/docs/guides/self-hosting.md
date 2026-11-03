@@ -5,7 +5,16 @@ description: Run an actuator on your own Cloudflare account or any workerd host 
 
 The step engine is open source. `@actuate/runtime` runs one actuator as a Worker plus a SQLite-backed Durable Object, on Cloudflare or on plain `workerd`, with no Actuate account. It is the same engine `actuate dev` runs, and it is tested end to end on `workerd` in the Actuate repository.
 
-What you get: durable steps, sleeps, events, approvals, the actuator's SQLite database and the [runtime HTTP API](/docs/reference/runtime-http/). What you don't: the hosted MCP endpoint and OpenAPI document, the dashboard, managed provider setup and quotas. You bring your own provider adapters.
+What you get: durable steps, sleeps, events, approvals and questions, cron schedules, the actuator's SQLite database and the [runtime HTTP API](/docs/reference/runtime-http/), behind your own `ACTUATE_TOKEN` and `ACTUATE_RUN_TOKEN`. You bring your own provider adapters.
+
+What you don't get, because it is part of the hosted platform:
+
+- the MCP endpoint, OAuth sign-in for MCP clients, and the OpenAPI document;
+- the dashboard, accounts and API tokens, and managed provider setup;
+- [alerts](/docs/guides/alerts/): the runtime notifies nobody when a run fails or a wait is about to expire;
+- [version pinning, retry and rollback](/docs/guides/retry-and-rollback/): redeploying replaces the code for every run, including runs in flight, and a failed run stays failed (start a new one with the same input instead);
+- [agents](/docs/concepts/agents/): runs don't record which token started them (`ctx.trigger.agent` is never set), and there are no per-agent analytics or limits;
+- plan quotas and the platform's other [guards](/docs/reference/limits/#guards-on-the-hosted-platform). The runtime's own [guards](#guards) still apply.
 
 ## 1. Install
 
@@ -193,7 +202,7 @@ Point the provider at `https://<your origin>/providers/mybank/webhook`. Payment 
 
 ## Using the engine directly
 
-The engine also runs in-process, for example on `node:sqlite`, which is handy for unit tests or for building your own host. `RunManager` drives runs, and `executePass` executes your actuator:
+The engine also runs in-process, for example on `node:sqlite`, for building your own host or test harness. To test an actuator, use [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) from `@actuate/cli/testing`, which is built on this and adds a clock, fake providers, the platform's guards and a rows meter. `RunManager` drives runs, and `executePass` executes your actuator:
 
 ```ts title="actuator.test.ts"
 import { DatabaseSync } from "node:sqlite";
@@ -242,6 +251,11 @@ console.log(manager.getRun(run.runId)?.status, manager.getSteps(run.runId));
 | `maxPasses` | `10000` | Passes per run before the run fails |
 | `maxLogLinesPerPass` | `100` | Log lines kept per pass |
 | `eventBufferTtlMs` | 7 days | Buffered events older than this are deleted when the alarm runs |
+
+Two helpers in `@actuate/runtime` 0.3 and later bring your own host closer to the hosted platform:
+
+- `checkActuatorSql(sql, params)` throws, with the platform's message, for a statement the hosted platform [refuses](/docs/concepts/database/#what-the-platform-refuses): recursive queries (including self-referencing CTEs), `PRAGMA`, `ATTACH`, `DETACH`, `VACUUM` and `REINDEX`, `printf`, `format`, `randomblob`, `zeroblob` and the file functions, tables starting with `_actuate_`, `_cf_` or `sqlite_`, and more than 1 MiB of bound parameters. The runtime doesn't call it for you: on its own it refuses only tables starting with `_actuate_`, and transaction control inside `ctx.db.batch` and `commitWithStep`. Call it where your host passes SQL on, if you want the platform's rules.
+- `meteredNodeSqlite(db, { onStatement })` is `nodeSqlite` with a meter of the rows Durable Objects would bill. Its `meter` holds the totals (`statements`, `rowsRead`, `rowsWritten`), and `onStatement` receives each statement's SQL, parameters and cost, for example to count rows per run. Rows written match Cloudflare's count; rows read are exact for full table scans and an estimate on the low side for index searches. On a Durable Object, `durableObjectSql(storage, meter)` fills a meter from Cloudflare's own counters instead.
 
 `manager.pruneRuns(before, limit = 500)` deletes settled runs (`COMPLETED`, `FAILED`, `CANCELLED`) last updated before `before` (epoch ms), with their steps and logs, and returns how many it removed. Your tables are never touched. Call it on a schedule to keep the journal small.
 
