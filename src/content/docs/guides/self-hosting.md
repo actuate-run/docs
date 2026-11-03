@@ -5,7 +5,16 @@ description: Run an actuator on your own Cloudflare account or any workerd host 
 
 The step engine is open source. `@actuate/runtime` runs one actuator as a Worker plus a SQLite-backed Durable Object, on Cloudflare or on plain `workerd`, with no Actuate account. It is the same engine `actuate dev` runs, and it is tested end to end on `workerd` in the Actuate repository.
 
-What you get: durable steps, sleeps, events, approvals, the actuator's SQLite database and the [runtime HTTP API](/docs/reference/runtime-http/). What you don't: the hosted MCP endpoint and OpenAPI document, the dashboard, managed provider setup and quotas. You bring your own provider adapters.
+What you get: durable steps, sleeps, events, approvals and questions, cron schedules, the actuator's SQLite database and the [runtime HTTP API](/docs/reference/runtime-http/), behind your own `ACTUATE_TOKEN` and `ACTUATE_RUN_TOKEN`. You bring your own provider adapters.
+
+What you don't get, because it is part of the hosted platform:
+
+- the MCP endpoint, OAuth sign-in for MCP clients, and the OpenAPI document;
+- the dashboard, accounts and API tokens, and managed provider setup;
+- [alerts](/docs/guides/alerts/): the runtime notifies nobody when a run fails or a wait is about to expire;
+- [version pinning, retry and rollback](/docs/guides/retry-and-rollback/): redeploying replaces the code for every run, including runs in flight, and a failed run stays failed (start a new one with the same input instead);
+- [agents](/docs/concepts/agents/): runs don't record which token started them (`ctx.trigger.agent` is never set), and there are no per-agent analytics or limits;
+- plan quotas and the platform's other [guards](/docs/reference/limits/#guards-on-the-hosted-platform). The runtime's own [guards](#guards) still apply.
 
 ## 1. Install
 

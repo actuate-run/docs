@@ -122,9 +122,11 @@ Published as the MCP tool's annotations. MCP clients use them to decide how to a
 | Hint | MCP annotation | Default |
 | --- | --- | --- |
 | `readOnly` | `readOnlyHint` | `false` |
-| `idempotent` | `idempotentHint` | `false` |
-| `destructive` | `destructiveHint` | `true`, unless `readOnly` is `true` |
-| `openWorld` | `openWorldHint` | `true` |
+| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool |
+| `destructive` | `destructiveHint` | `true`, or `false` for a read-only tool |
+| `openWorld` | `openWorldHint` | `true` if the actuator declares any capability, `false` otherwise |
+
+These are the values the hosted MCP server sends when a hint is unset. It always sends all four. A tool marked both `readOnly` and `destructive` is sent as not read-only.
 
 See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/#tool-hints).
 
@@ -188,7 +190,13 @@ interface Trigger {
 }
 ```
 
-See [Triggers](/docs/concepts/triggers/).
+On the hosted platform, runs started with an API token (over MCP or the gateway's `/a/<id>/run`) also carry `agent: { id: string; name: string }`: the ID and name of the token that started the run. The `Trigger` type doesn't declare it yet, so read it with a cast:
+
+```ts
+const agent = (ctx.trigger as { agent?: { id: string; name: string } }).agent;
+```
+
+It is never set by the open-source runtime, `actuate dev`, webhooks or cron. See [Triggers](/docs/concepts/triggers/) and [Agents](/docs/concepts/agents/).
 
 ### Logger
 

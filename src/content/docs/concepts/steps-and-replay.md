@@ -53,7 +53,7 @@ The result is stored as JSON and **the JSON round-trip is what you get back, on 
 
 - Names are 1 to 200 characters.
 - Steps cannot be nested. Calling any `ctx.step.*` inside a `ctx.step.do` function throws.
-- Names are how replay finds results. If a run in flight replays against code where a step was renamed, that step runs again.
+- Names are how replay finds results. If a run in flight replays against code where a step was renamed, that step runs again. On the hosted platform a run keeps the version it started on, so a deploy doesn't do this to runs in flight, but [retrying a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) moves it to the current version. In `actuate dev` and a self-hosted runtime, a deploy changes the code of every run, including those in flight.
 
 ## Retries and backoff
 

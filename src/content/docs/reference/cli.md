@@ -170,7 +170,7 @@ There are two kinds of token:
 | **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, posting events, deploying, configuration or management |
 | **Full** | The CLI and management | Everything your account can do, including `deploy` and fetching approval links |
 
-`actuate login` needs a **full** token. Give agents Agent tokens. `--api` overrides the API URL (default `https://api.actuate.run`).
+`actuate login` needs a **full** token. Give agents Agent tokens, or let MCP clients that support it [sign in](/docs/guides/connect-your-agent/#sign-in-from-your-mcp-client) instead: each sign-in becomes an agent token you can revoke. `--api` overrides the API URL (default `https://api.actuate.run`).
 
 Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`.
 

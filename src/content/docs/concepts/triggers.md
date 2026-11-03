@@ -17,6 +17,8 @@ if (ctx.trigger.kind === "cron") ctx.log.info(`Scheduled run: ${ctx.trigger.cron
 | `mcp` | An MCP tool call |
 | `manual` | Reserved for runs started by hand |
 
+On the hosted platform, a run started with an API token, over MCP or `POST https://run.actuate.run/a/<id>/run`, also has `ctx.trigger.agent`: `{ id, name }` of the token that started it (never the token itself). It is absent for webhooks, cron and the open-source runtime. See [Agents](/docs/concepts/agents/#which-agent-started-a-run).
+
 A request to `/run` or `/webhook` returns after the run's **first pass**: the response is the run record with status `COMPLETED`, `FAILED` or `WAITING`. A run that finishes without waiting returns its output immediately; one that sleeps returns `WAITING` and carries on in the background.
 
 ## API
@@ -82,7 +84,7 @@ Locally, `actuate dev` registers the schedules. To fire one without waiting, cal
 
 ## MCP tool calls
 
-On the platform every actuator is also an MCP tool. An agent's tool call is validated against the input schema and starts a run with `trigger.kind = "mcp"`. A retried tool call returns the first call's receipt instead of running twice. Use the streamable HTTP endpoint; legacy SSE sessions are capped per account (Sandbox 2, Maker 5, Agency 20 open at once), and a session over the cap is refused with `429`. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
+On the platform every actuator is also an MCP tool. An agent's tool call is validated against the input schema and starts a run with `trigger.kind = "mcp"` and `trigger.agent` set to the calling token. A retried tool call with the same `_meta` idempotency key (or, for session-based clients, the same JSON-RPC `id` in the same session) returns the first call's receipt instead of running twice; see [idempotent receipts](/docs/concepts/mcp-and-openapi/#idempotent-receipts). Use the streamable HTTP endpoint; legacy SSE sessions are capped per account (Sandbox 2, Maker 5, Agency 20 open at once), and a session over the cap is refused with `429`. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
 
 ## Events are not triggers
 

@@ -19,14 +19,22 @@ export const sidebar = [
       "concepts/capabilities",
       "concepts/triggers",
       "concepts/mcp-and-openapi",
+      "concepts/agents",
     ],
   },
   {
     label: "Reference",
-    items: ["reference/sdk", "reference/cli", "reference/runtime-http", "reference/limits"],
+    items: ["reference/sdk", "reference/cli", "reference/runtime-http", "reference/platform-api", "reference/limits"],
   },
   {
     label: "Guides",
-    items: ["guides/connect-your-agent", "guides/agent-tools", "guides/self-hosting", "guides/templates"],
+    items: [
+      "guides/connect-your-agent",
+      "guides/agent-tools",
+      "guides/alerts",
+      "guides/retry-and-rollback",
+      "guides/self-hosting",
+      "guides/templates",
+    ],
   },
 ];

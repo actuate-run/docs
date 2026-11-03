@@ -3,7 +3,7 @@ title: Runtime HTTP API
 description: Every route of the open-source runtime served by actuate dev and self-hosted workers, with auth rules and environment variables.
 ---
 
-The open-source runtime (`@actuate/runtime/worker`) serves one actuator over HTTP. This is the API you talk to under `actuate dev` at `http://localhost:8787` and when you [self-host](/docs/guides/self-hosting/). The hosted platform puts its own gateway in front, with MCP, OpenAPI and account authentication.
+The open-source runtime (`@actuate/runtime/worker`) serves one actuator over HTTP. This is the API you talk to under `actuate dev` at `http://localhost:8787` and when you [self-host](/docs/guides/self-hosting/). The hosted platform puts its own gateway in front, with MCP, OpenAPI and account authentication; its routes are in the [Platform API](/docs/reference/platform-api/) reference.
 
 All responses are JSON unless noted. Trailing slashes are ignored.
 
@@ -80,6 +80,8 @@ There is no `/mcp` route: the MCP endpoint is served by the hosted platform's ga
 | `wakeAt` | Epoch ms of the next scheduled wake (sleep, timeout, retry), or `null` |
 | `passes` | How many times `run` has executed |
 | `createdAt`, `updatedAt` | Epoch ms |
+
+On the hosted platform, run records also have `version` and, for runs an API token started, `trigger.agent`. See [Platform API](/docs/reference/platform-api/#run-records).
 
 ## Health
 
