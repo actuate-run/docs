@@ -156,7 +156,7 @@ Makes version 6's code, metadata and cron schedules current again as a **new** v
 | `404` | No such actuator or version |
 | `409` | The version is already current; a provider that version needs isn't configured; the current config doesn't fit (the response has `issues`); or another deploy landed at the same moment |
 | `422` | The version no longer passes the deploy checks (cron schedules, `http.allow`, input patterns) |
-| `429` | The plan's deploys per 24 hours are used up. A rollback counts as a deploy |
+| `429` | The plan's deploys per 24 hours or per month are used up. A rollback counts as a deploy |
 
 ## Alerts
 
