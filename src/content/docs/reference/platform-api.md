@@ -43,6 +43,7 @@ Run records on the platform have the same fields as in the [runtime](/docs/refer
 | Field | Meaning |
 | --- | --- |
 | `version` | The actuator version the run is pinned to, or `null` for runs started before versions were recorded (those run on the current version). See [Fix, retry and roll back](/docs/guides/retry-and-rollback/) |
+| `extraWakeups` | Wake-ups this run's long passes counted on top of their own: a pass longer than 5 seconds counts one more for every further 5 seconds. Reset when the run is retried. See [limits](/docs/reference/limits/#plans) |
 | `trigger.agent` | `{ "id": "tok_...", "name": "..." }` for runs started over MCP or `/a/:id/run`: the token's ID and its name when the run started. Never the token itself |
 
 ```json
