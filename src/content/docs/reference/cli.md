@@ -126,7 +126,7 @@ Deploys the actuator to Actuate.
 4. Uploads the bundle with `actuate.config.json` as the configuration, unless you pass `--no-config`.
 5. Prints the version number and the actuator's webhook, MCP, OpenAPI and dashboard URLs, plus any warnings from the platform.
 
-`--dry-run` stops after step 3 and prints the metadata without uploading. Requires [`actuate login`](#actuate-login) or `ACTUATE_API_TOKEN`.
+`--dry-run` stops after step 3 and prints the metadata without uploading. It needs no login and doesn't count against the deploy budget. Without `--dry-run`, deploying requires [`actuate login`](#actuate-login) or `ACTUATE_API_TOKEN`.
 
 ## actuate run
 

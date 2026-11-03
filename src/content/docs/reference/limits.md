@@ -16,7 +16,7 @@ Each pass of a run executes in its own V8 isolate with:
 | CPU time | 50 ms |
 | Heap | 64 MB |
 
-CPU time is time spent executing your code, not time spent waiting on the network, a provider or the database. A run can last days: each pass between waits is a separate invocation, and sleeps and waits use no CPU at all. Keep heavy computation small, and split large batches across several steps.
+CPU time is time spent executing your code, not time spent waiting on the network, a provider or the database. A run can last days: each pass between waits is a separate invocation, and sleeps and waits use no CPU at all. Keep heavy computation small. Steps in one pass share one invocation, so more steps don't add CPU: process a bounded batch per run, or sleep between chunks so each starts a new pass (see [write efficient actuators](/docs/guides/best-practices/#guards-on-a-single-pass)).
 
 The isolate's environment contains only your declared capability clients. There are no platform bindings, no other tenants' data, and no raw `fetch`.
 
