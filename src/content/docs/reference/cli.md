@@ -167,7 +167,7 @@ There are two kinds of token:
 
 | Token | For | Can |
 | --- | --- | --- |
-| **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, deploying, configuration or management |
+| **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, posting events, deploying, configuration or management |
 | **Full** | The CLI and management | Everything your account can do, including `deploy` and fetching approval links |
 
 `actuate login` needs a **full** token. Give agents Agent tokens. `--api` overrides the API URL (default `https://api.actuate.run`).

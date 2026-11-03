@@ -217,4 +217,6 @@ On the platform, `http.allow` is also checked when you deploy. The deploy is ref
 
 A wildcard must sit under a domain you control: `*.example.com`, or list the exact hosts (`myorg.github.io`).
 
+On the platform, a pass may make at most 50 `ctx.http` requests, and every request counts against the plan's monthly HTTP budget (see [Limits](/docs/reference/limits/#plans)). Spread larger batches across steps that sleep, or page through them over several runs.
+
 There is no raw `fetch` in a hosted actuator; `ctx.http` is the way out.

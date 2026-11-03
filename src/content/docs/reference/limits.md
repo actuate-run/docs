@@ -23,6 +23,7 @@ The isolate's environment contains only your declared capability clients. There 
 - Outbound HTTP goes only to the domains you declare in `http.allow`, through `ctx.http`. See [Capabilities and providers](/docs/concepts/capabilities/#http).
 - HTTPS only. Redirects are not followed.
 - An actuator cannot call its own URL. `ctx.http` refuses the platform's own origin, and every call counts against the same quotas.
+- On the platform, a pass may make at most 50 `ctx.http` requests, and requests count against the plan's monthly HTTP budget.
 - IP addresses are refused at call time.
 - At deploy, `http.allow` may list at most 20 hostnames, with no IPs, no platform domains and no broad wildcards. See [Capabilities and providers](/docs/concepts/capabilities/#http).
 
@@ -40,6 +41,7 @@ The isolate's environment contains only your declared capability clients. There 
 | Passes per month | 10,000 | 800,000 | 3,000,000 |
 | Rows written per month | 250,000 | 4,000,000 | 15,000,000 |
 | Rows read per month | 50,000,000 | 1,000,000,000 | 5,000,000,000 |
+| Outbound HTTP requests per month | 25,000 | 2,000,000 | 10,000,000 |
 | Passes per run | 200 | 1,000 | 1,000 |
 | Cron schedules per actuator | 3 | 5 | 5 |
 | Shortest cron interval, all schedules together | 1 hour | 1 minute | 1 minute |
@@ -47,7 +49,7 @@ The isolate's environment contains only your declared capability clients. There 
 | Deploys per 24 hours | 30 | 200 | 500 |
 | Settled runs kept for | 7 days | 30 days | 90 days |
 
-- **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included.
+- **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included. **Outbound HTTP requests** count every `ctx.http` call. Provider calls (messaging, payment, LLM) do not count.
 - The SQLite total is checked when a run starts; the per-actuator size before each run and after every statement.
 - The free Sandbox has no messaging, payment or LLM providers: it is for building and exposing MCP tools, not for sending messages or taking payments.
 - The run rate is a sliding window per account.
@@ -60,17 +62,18 @@ Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
 | Situation | What happens |
 | --- | --- |
 | Monthly runs used up | New runs are refused until the monthly reset |
-| Monthly passes, rows written or rows read used up (sleep loops, event storms, heavy queries) | Passes wait until the monthly reset. No run is lost |
+| Monthly passes, rows written, rows read or HTTP requests used up (sleep loops, event storms, heavy queries, request floods) | Passes wait until the monthly reset. No run is lost |
 | One run loops forever | It fails after the plan's passes per run |
-| One pass does too much host work | A pass may run at most 1,000 database statements, write 1,000 steps, write 20,000 rows, read 5,000,000 rows, and take 30 seconds of wall time |
-| One SQL statement does unbounded work | Refused before it runs: recursive queries, `randomblob`/`zeroblob`/`printf`/`format`, `PRAGMA`/`ATTACH`/`DETACH`/`VACUUM`. Bound parameters at most 1 MiB per statement. See [Database](/docs/concepts/database/#what-the-platform-refuses) |
+| One pass does too much host work | A pass may run at most 1,000 database statements, write 1,000 steps, write 20,000 rows, read 5,000,000 rows, make 50 HTTP requests, and take 30 seconds of wall time. After a pass ends, its database and provider clients stop working, even if your code is still running |
+| Passes keep exceeding the CPU limit | A pass whose work exceeds the host's CPU limit is cut short and still counts against your budgets. After 3 in a row the actuator is paused, with the reason shown in the dashboard. Fix it and resume; deploying or resuming starts the count again |
+| One SQL statement does unbounded work | Refused before it runs: recursive queries (including self-referencing CTEs without `RECURSIVE`), `randomblob`/`zeroblob`/`printf`/`format`, `PRAGMA`/`ATTACH`/`DETACH`/`VACUUM`. Bound parameters at most 1 MiB per statement. See [Database](/docs/concepts/database/#what-the-platform-refuses) |
 | Large step results | One step's stored result is at most 1 MiB |
 | Retry storms | Retries are capped at 10 per step, with exponential backoff |
 | Long waits on the Sandbox | Sleeps, and waits with a timeout or deadline, longer than 7 days fail with `ActuatorError`; open-ended waits time out at 7 days |
 | Slow regular expressions in input schemas | Refused at deploy if a hand-written pattern has nested quantifiers, such as `(a+)+` or `(\w*)*`, which can backtrack for minutes on a crafted input. Zod's built-in formats (`z.email()`, `z.uuid()`, `z.iso.datetime()` and the like) are allowed. Rewrite the pattern without a repeated group that itself repeats |
 | Cron too frequent | Refused at deploy if the actuator has more schedules than the plan allows, or if its schedules together fire more often than the plan's minimum interval |
 | Too many SSE sessions | Opening one more than the plan's limit is refused with `429`; use the streamable HTTP endpoint |
-| Agents approving their own gates | Run tokens (the default) can only start and read runs, and approval links never appear in run logs |
+| Agents approving their own gates | Run tokens (the default) can only start and read runs: they cannot approve, answer questions or post events (such as a faked `payment.<ref>`). Approval links never appear in run logs |
 | Broad outbound access | `http.allow` is validated at deploy |
 | Event spam or large payloads | At most 1,000 buffered events per actuator (oldest dropped), 64 KiB per event payload, 256 KiB per request body |
 | Unauthenticated endpoints called too often | Provider webhooks are limited to 120 and approval link `POST`s to 30 per minute |
