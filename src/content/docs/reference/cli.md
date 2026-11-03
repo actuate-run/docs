@@ -46,9 +46,9 @@ Runs the actuator locally on `workerd` (through wrangler) with the same step eng
 - Bundles the file and rebuilds on every save.
 - Serves the [runtime HTTP API](/docs/reference/runtime-http/) at `http://localhost:<port>`.
 - Configuration: `actuate.config.json`, passed as `ACTUATE_CONFIG`.
-- Environment: variables from `.env` and then `.dev.vars` in the project directory. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally. Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway.
+- Environment: variables from `.env` and then `.dev.vars` in the project directory. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally: on `localhost` only, and never for a request a web page makes (those get `403`, so a site you have open can't start runs with your real providers). Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway, or to use those routes through a tunnel.
 - Providers: pick real ones in `.dev.vars` (see [`actuate providers`](#actuate-providers)). Anything you don't pick stays local: messages (and approval links) print in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`; open it to "pay". Its refunds always succeed and are printed. Declared `http` uses your `http.allow` list for real. `ctx.llm` needs `ACTUATE_LLM` set; otherwise calls fail with "no llm provider is configured".
-- Payment webhooks: real payment providers call back to `POST /providers/<kind>/webhook`. Expose your local port with a tunnel (e.g. `cloudflared tunnel --url localhost:8787`) and set `ACTUATE_PUBLIC_URL` to the tunnel URL so callback links point there.
+- Payment webhooks: real payment providers call back to `POST /providers/<kind>/webhook`. Expose your local port with a tunnel (e.g. `cloudflared tunnel --url localhost:8787`) and set `ACTUATE_PUBLIC_URL` to the tunnel URL so callback links point there. Provider webhooks and approval links work through the tunnel; the admin API stays local unless you set `ACTUATE_TOKEN`.
 - Cron schedules are registered. Fire one with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
 - State persists in `.actuate/state` between restarts. Delete the folder to start fresh.
 
