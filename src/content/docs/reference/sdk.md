@@ -539,6 +539,8 @@ The payload of the `payment.<referenceId>` event a payment provider's webhook de
 const paid = await ctx.step.waitForEvent<PaymentEvent>("paid", { event: `payment.${bookingId}`, timeout: "1 day" });
 ```
 
+Before acting on it, check `status`, and that `billId`, `amount` and `currency` match the bill you created. See [Payment](/docs/concepts/capabilities/#payment).
+
 ### InboundMessage
 
 ```ts

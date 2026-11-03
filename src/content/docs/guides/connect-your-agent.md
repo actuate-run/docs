@@ -12,7 +12,7 @@ Every deployed actuator is an MCP tool. Its `name` is the tool name, its `descri
 | `https://run.actuate.run/a/<actuator-id>/mcp` | One actuator, plus `actuate_get_run` |
 | `https://run.actuate.run/mcp` | Every active actuator on your account, plus `actuate_get_run` |
 
-Both take an API token as `Authorization: Bearer <token>`. Create an **agent token** in the dashboard under Settings → API tokens: run-scoped, the default for new tokens. It can start and read runs, and nothing else: it cannot approve, deploy, change configuration or manage your account, so an agent holding it cannot sign off its own approval gates. Keep full tokens for the CLI. Treat any token like a password. The dashboard's **Connect** tab on each actuator shows these snippets with the real URL filled in.
+Both take an API token as `Authorization: Bearer <token>`. Create an **agent token** in the dashboard under Settings → API tokens: run-scoped, the default for new tokens. It can start and read runs, and nothing else: it cannot approve, post events, deploy, change configuration or manage your account, so an agent holding it cannot sign off its own approval gates or fake an event a run is waiting for, such as a payment. Keep full tokens for the CLI. Treat any token like a password. The dashboard's **Connect** tab on each actuator shows these snippets with the real URL filled in.
 
 ## Claude Code
 
