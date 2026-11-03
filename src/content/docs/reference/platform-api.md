@@ -33,6 +33,7 @@ Send tokens as `Authorization: Bearer <token>`. Create API tokens in the dashboa
 | `POST` | `/a/:id/webhook` | Webhook secret or signature | Start a run (trigger `webhook`). See [Triggers](/docs/concepts/triggers/#webhook) |
 | `GET` | `/a/:id/openapi.json` | API token | The actuator's OpenAPI document |
 | `GET` | `/.well-known/oauth-protected-resource`, `.../mcp`, `.../a/:id/mcp` | none | OAuth protected resource metadata. See [MCP authorization](#mcp-authorization) |
+| `GET` | `/.well-known/oauth-authorization-server` | none | The authorization server metadata, for MCP clients on the 2025-03-26 spec. See [MCP authorization](#mcp-authorization) |
 
 `:id` is the actuator's ID (`act_...`), shown in the dashboard and printed by `actuate deploy`. A run started on `/a/:id/run` or over MCP records the token that started it in [`trigger.agent`](/docs/concepts/agents/), and counts against that token's [limits](/docs/concepts/agents/#limits).
 
@@ -292,16 +293,16 @@ A token that was sent but is expired, revoked or for another endpoint adds `erro
 }
 ```
 
-The authorization server metadata (RFC 8414) is at `https://api.actuate.run/.well-known/oauth-authorization-server`. It lists the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`, `client_id_metadata_document_supported: true` and `authorization_response_iss_parameter_supported: true`. Both metadata documents allow any origin (CORS) and may be cached for 5 minutes.
+The authorization server metadata (RFC 8414) is at `https://api.actuate.run/.well-known/oauth-authorization-server`. It lists the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`, `client_id_metadata_document_supported: true` and `authorization_response_iss_parameter_supported: true`. Both metadata documents allow any origin (CORS) and may be cached for 5 minutes. The same authorization server document is also served at `https://run.actuate.run/.well-known/oauth-authorization-server`, for clients on the 2025-03-26 MCP spec that look for it on the MCP server's origin; its `issuer` is still `https://api.actuate.run`.
 
 ### Clients
 
 Only public clients are supported: there are no client secrets, and PKCE is required. A client identifies itself in one of two ways:
 
 - **A Client ID Metadata Document (preferred).** The `client_id` is an `https` URL of a JSON document you host. Actuate fetches it when a user signs in and shows its `client_name` with the host it came from. The URL must be in normalised form, have a path, and have no query, fragment or credentials; its host must be a public DNS name (no IP addresses, single-label names, `.local`, `.internal`, `.test` and similar, or Actuate's own hosts). The document is fetched with a 3-second timeout and redirects are not followed. It must be at most 5 KB of JSON, its `client_id` must equal its URL, it must have no `client_secret`, `token_endpoint_auth_method` must be absent or `"none"`, `grant_types`, if present, must include `authorization_code`, and it needs 1 to 10 `redirect_uris`. A valid document is cached for its `Cache-Control: max-age`, between 60 seconds and 1 hour (5 minutes by default), and not at all with `no-store`.
-- **Dynamic Client Registration (RFC 7591).** `POST /oauth/register` with JSON: 1 to 10 `redirect_uris`, and optionally `client_name`, `grant_types` (only `authorization_code` and `refresh_token`) and `response_types` (only `code`). The response has a `client_id` (`dcr_...`) and `token_endpoint_auth_method: "none"`, whatever you asked for. The consent page marks these clients **unverified**. Registrations that no user approves within a week are deleted.
+- **Dynamic Client Registration (RFC 7591).** `POST /oauth/register` with JSON: 1 to 5 `redirect_uris`, and optionally `client_name`, `grant_types` (only `authorization_code` and `refresh_token`) and `response_types` (only `code`). The response has a `client_id` (`dcr_...`) and `token_endpoint_auth_method: "none"`, whatever you asked for. The consent page marks these clients **unverified**. Registrations that no user approves within 24 hours are deleted.
 
-Redirect URIs may be `https`, `http` on `localhost`, `127.0.0.1` or `[::1]` only, or a private-use scheme for native apps (such as `cursor://`). `javascript:`, `data:`, `file:` and other unsafe schemes, fragments and credentials are refused. The `redirect_uri` of a request must match a registered one exactly, except that a loopback IP redirect (`http://127.0.0.1` or `http://[::1]`) may use any port.
+Redirect URIs may be `https`, `http` on `localhost`, `127.0.0.1` or `[::1]` only, or a private-use scheme for native apps (such as `cursor://`). `javascript:`, `data:`, `file:` and other unsafe schemes, fragments and credentials are refused. The `redirect_uri` of a request must match a registered one exactly, except that a loopback redirect (`http://localhost`, `http://127.0.0.1` or `http://[::1]`) may use any port. Its host, path and query must still match: `localhost` and `127.0.0.1` don't stand in for each other.
 
 ### OAuth endpoints
 
@@ -314,14 +315,14 @@ On `https://api.actuate.run`:
 | `POST` | `/oauth/register` | Dynamic Client Registration |
 | `POST` | `/oauth/revoke` | Revoke a connection (RFC 7009) |
 
-**`/oauth/authorize`** takes `response_type=code`, `client_id`, `redirect_uri`, `code_challenge` with `code_challenge_method=S256`, an optional `state` (at most 2,048 characters) and **exactly one `resource`**: the MCP URL the user pasted, such as `https://run.actuate.run/mcp` or `https://run.actuate.run/a/<id>/mcp` (RFC 8707). `scope` is not needed; every token gets `mcp`. An unknown client or a redirect URI that isn't registered is shown to the user as an error page, never redirected. Other problems redirect back with `error` (`unsupported_response_type`, `invalid_request`, `invalid_target`). The sign-in request is valid for 10 minutes.
+**`/oauth/authorize`** takes `response_type=code`, `client_id`, `redirect_uri`, `code_challenge` with `code_challenge_method=S256`, an optional `state` (at most 2,048 characters) and one `resource`: the MCP URL the user pasted, such as `https://run.actuate.run/mcp` or `https://run.actuate.run/a/<id>/mcp` (RFC 8707). Without a `resource` (clients on MCP specs before 2025-06-18), the connection is to `https://run.actuate.run/mcp`, every actuator in the account, and the consent page says so. More than one is refused. `scope` is not needed; every token gets `mcp`. An unknown client or a redirect URI that isn't registered is shown to the user as an error page, never redirected. Other problems redirect back with `error` (`unsupported_response_type`, `invalid_request`, `invalid_target`). The sign-in request is valid for 10 minutes.
 
 After the user decides, the browser returns to `redirect_uri` with `code` and `state`, or `error=access_denied`, plus `iss=https://api.actuate.run` (RFC 9207). The code is valid for 5 minutes, once.
 
 **`/oauth/token`** takes form-encoded parameters (JSON is accepted too), at most 16 KB, with `client_id` in the body or as the user name of HTTP Basic auth:
 
 - `grant_type=authorization_code` with `code`, `redirect_uri` and `code_verifier`. A wrong verifier uses up the code. A code presented a second time revokes the connection it was exchanged for.
-- `grant_type=refresh_token` with `refresh_token`. Every refresh returns a new refresh token; presenting a used one revokes the connection.
+- `grant_type=refresh_token` with `refresh_token`. Every refresh returns a new refresh token. A used one presented again within 60 seconds of its use (a client retrying a refresh whose response it lost, or two refreshing at once) gets a new pair, up to 5 refresh tokens per connection at once; after 60 seconds, presenting it revokes the connection.
 - `resource` is optional on both; if sent, it must name the same endpoint as the authorization request (`invalid_target` otherwise).
 
 ```json

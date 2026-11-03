@@ -78,7 +78,7 @@ A connection is an agent token that the client manages for you:
 ### Lifetime and revoking
 
 - The client gets an access token that lasts **1 hour** and a refresh token that lasts **30 days**. The client refreshes on its own; every refresh issues a new refresh token, valid for another 30 days. A connection the client doesn't use for 30 days has to sign in again.
-- Each refresh token works once. If an old one is presented again, Actuate assumes it was copied and revokes the whole connection; sign in again from the client.
+- Each refresh token works once. A client that retries a refresh within 60 seconds (its response was lost, or two windows refreshed at once) gets a new pair. If an old one is presented again later, Actuate assumes it was copied and revokes the whole connection; sign in again from the client.
 - Connections are listed under **Settings → API tokens**, tagged **connected app** and named after the app. The row keeps the same ID for the life of the connection, so its limits and analytics carry over between refreshes. Signing in again from scratch creates a new connection with a new ID.
 - **Revoke** it there to disconnect the app. The gateway stops accepting it within 30 seconds. A client can also end its own connection through the [revocation endpoint](/docs/reference/platform-api/#oauth-endpoints).
 
