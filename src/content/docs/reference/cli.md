@@ -1,12 +1,12 @@
 ---
 title: CLI
-description: The actuate command - init, doctor, dev, test, check, deploy, run, logs, event, approve, reject, answer, cancel, login and providers.
+description: The actuate command and its subcommands, which are init, doctor, dev, test, check, deploy, run, logs, event, approve, reject, answer, cancel, login and providers.
 ---
 
 The CLI ships as `@actuate/cli` and installs the `actuate` command. Projects created with `npm create actuate` list it as a dev dependency, so run it with `npx actuate` or through the `package.json` scripts (`npm run dev`, `npm test`, `npm run check`, `npm run deploy`). It needs Node.js 22 or later (its `wrangler` dependency does).
 
 :::caution
-Outside a project that has `@actuate/cli` installed, don't run a bare `npx actuate`: the unscoped `actuate` package on npm is an unrelated library. Install the CLI with `npm install -g @actuate/cli`, or use `npx @actuate/cli <command>`.
+Outside a project that has `@actuate/cli` installed, don't run a bare `npx actuate`, because the unscoped `actuate` package on npm is an unrelated library. Install the CLI with `npm install -g @actuate/cli`, or use `npx @actuate/cli <command>`.
 :::
 
 :::note[Requires @actuate/cli 0.3]
@@ -39,11 +39,11 @@ actuate login [--token <token>] [--api <url>]                  Save an API token
 actuate providers [--json]                                     List providers and their variables
 ```
 
-`[file]` defaults to `actuator.ts`. `run`, `logs`, `event`, `approve`, `reject`, `answer` and `cancel` talk to the deployed actuator, or to `actuate dev` with `--local` (and `--port <port>` if it isn't on 8787); for the deployed actuator, `--name <actuator>` overrides the name read from `name:` in `actuator.ts`.
+`[file]` defaults to `actuator.ts`. `run`, `logs`, `event`, `approve`, `reject`, `answer` and `cancel` talk to the deployed actuator, or to `actuate dev` with `--local` (and `--port <port>` if it isn't on 8787). For the deployed actuator, `--name <actuator>` overrides the name read from `name:` in `actuator.ts`.
 
 `actuate --help` lists the commands. Every command has `--help` (`-h`) with its options and examples, and `actuate help <command>` prints the same. `actuate --version` (`-v`) prints the CLI's version. `--json` prints JSON instead of text, for scripts and agents.
 
-With `--json`, stdout carries exactly one JSON value, failures included. A command that fails prints `{ "ok": false, "error": "...", ... }`, with what stopped it where there is something to add (a stopped `deploy` adds its diagnostics or its deploy checks), and exits non-zero; the `✗` message still goes to stderr. Wrong usage that stops before the command runs, such as an unknown option, prints only to stderr. `check` and `deploy` results carry `ok` on success too.
+With `--json`, stdout carries exactly one JSON value, failures included. A command that fails prints `{ "ok": false, "error": "...", ... }`, with what stopped it where there is something to add (a stopped `deploy` adds its diagnostics or its deploy checks), and exits non-zero. The `✗` message still goes to stderr. Wrong usage that stops before the command runs, such as an unknown option, prints only to stderr. `check` and `deploy` results carry `ok` on success too.
 
 Exit codes are the same for every command:
 
@@ -59,7 +59,7 @@ Exit codes are the same for every command:
 actuate init [dir] [--template <name>] [--ref <git-ref>]
 ```
 
-Creates a project in `dir` (default: the current directory), which must be empty apart from `.git`. Without `--template` (`-t`) it writes the built-in `hello` starter; with one, it downloads `actuator.ts`, and `README.md`, `.env.example`, `actuate.config.json` and `actuator.test.ts` when present, from the folder of that name in [actuate-run/templates](https://github.com/actuate-run/templates). `--ref` picks a branch or tag of that repository (default `main`).
+Creates a project in `dir` (default: the current directory), which must be empty apart from `.git`. Without `--template` (`-t`) it writes the built-in `hello` starter. With one, it downloads `actuator.ts`, and `README.md`, `.env.example`, `actuate.config.json` and `actuator.test.ts` when present, from the folder of that name in [actuate-run/templates](https://github.com/actuate-run/templates). `--ref` picks a branch or tag of that repository (default `main`).
 
 The project contains:
 
@@ -67,7 +67,7 @@ The project contains:
 | --- | --- |
 | `actuator.ts` | The actuator |
 | `actuator.test.ts` | Tests written with [`@actuate/cli/testing`](/docs/guides/best-practices/#unit-tests-with-testactuator), run by [`actuate test`](#actuate-test). The `hello` starter has two; a template has one only if the template ships it |
-| `AGENTS.md` | Instructions for coding agents: replay safety, and the commands to run before calling a change done |
+| `AGENTS.md` | Instructions for coding agents: replay safety, keeping API keys in `secret()` fields set in the dashboard, and the commands to run before calling a change done |
 | `actuate.config.json` | The operator configuration, `{}` to start |
 | `package.json` | `@actuate/sdk`, `@actuate/cli` and TypeScript, and the scripts below |
 | `tsconfig.json` | |
@@ -85,11 +85,11 @@ actuate doctor [file] [--offline] [--plan <plan>] [--json]
 
 Checks, in one go, what commonly stops `dev`, `test` or `deploy`, and says how to fix each problem. Requires `@actuate/cli` 0.3 or later.
 
-- Node.js: 22 or later (a warning before 22.13, where `node:sqlite` needs a flag).
+- Node.js 22 or later (a warning before 22.13, where `node:sqlite` needs a flag).
 - The CLI and its `wrangler`.
-- The project: the actuator file, `package.json`, and `@actuate/sdk` on the same minor version as `@actuate/cli` (they are released together).
-- The actuator: replay-safety errors and warnings, and whether the file loads.
-- Login: whether a token is saved and, unless `--offline`, whether the API accepts it, with your plan and the deploys used this month.
+- The project, meaning the actuator file, `package.json`, and `@actuate/sdk` on the same minor version as `@actuate/cli` (they are released together).
+- The actuator's replay-safety errors and warnings, and whether the file loads.
+- Login, meaning whether a token is saved and, unless `--offline`, whether the API accepts it, with your plan and the deploys used this month.
 - The [deploy checks](#the-deploy-checks) that run locally, for [your plan](#which-plan-applies).
 - Providers in `.env` and `.dev.vars` for each capability the actuator declares, and missing credentials for the ones you picked.
 - That `.dev.vars` and `.env`, if present, are in `.gitignore`.
@@ -114,7 +114,7 @@ Checks, in one go, what commonly stops `dev`, `test` or `deploy`, and says how t
 1 problem(s) to fix, 1 warning(s).
 ```
 
-`✓` is fine, `!` a warning, `✗` a problem and `·` information. `doctor` exits with status 1 when there is a problem (`✗`), so it works in CI. It changes nothing; its only network call is `GET /v1/me` with the saved token. `--json` prints an array of `{ check, status, message, fix }`, where `status` is `ok`, `warn`, `fail` or `info`.
+`✓` is fine, `!` a warning, `✗` a problem and `·` information. `doctor` exits with status 1 when there is a problem (`✗`), so it works in CI. It changes nothing. Its only network call is `GET /v1/me` with the saved token. `--json` prints an array of `{ check, status, message, fix }`, where `status` is `ok`, `warn`, `fail` or `info`.
 
 ## actuate dev
 
@@ -131,7 +131,7 @@ Runs the actuator locally on `workerd` (through wrangler) with the same step eng
   deploy check  error  Cron "*/5 * * * *" fires more often than every 60 min. The Sandbox plan allows 3 schedules, at least 60 min apart.  (cron)
   ```
 
-  When no plan was chosen, the plan's own rules are [warnings](#which-plan-applies).
+  When no plan was chosen, the plan's own rules are [warnings](#which-plan-applies). The [`config-secret`](#the-deploy-checks) warning is printed the same way, for the committed `actuate.config.json` only.
 - When the actuator declares a capability the plan lacks and you chose the plan, warns at startup instead:
 
   ```text
@@ -143,12 +143,14 @@ Runs the actuator locally on `workerd` (through wrangler) with the same step eng
 - Serves the [runtime HTTP API](/docs/reference/runtime-http/) at `http://localhost:<port>`.
 - Applies the hosted platform's guards for your plan. See [guards](#guards-in-actuate-dev) below.
 - Adds what each run read and wrote to its run record. See [rows](#rows-in-actuate-dev) below.
-- Configuration: `actuate.config.json`, passed as `ACTUATE_CONFIG`.
-- Environment: variables from `.env` and then `.dev.vars` in the project directory. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally: on `localhost` only, and never for a request a web page makes (those get `403`, so a site you have open can't start runs with your real providers). Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway, or to use those routes through a tunnel.
-- Providers: pick real ones in `.dev.vars` (see [`actuate providers`](#actuate-providers)). Anything you don't pick stays local: messages (and approval links) print in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`; open it to "pay". Its refunds always succeed and are printed. Declared `http` uses your `http.allow` list for real. `ctx.llm` needs `ACTUATE_LLM` set; otherwise calls fail with "no llm provider is configured".
-- Payment webhooks: real payment providers call back to `POST /providers/<kind>/webhook`. Expose your local port with a tunnel (e.g. `cloudflared tunnel --url localhost:8787`) and set `ACTUATE_PUBLIC_URL` to the tunnel URL so callback links point there. Provider webhooks and approval links work through the tunnel; the admin API stays local unless you set `ACTUATE_TOKEN`.
-- Cron schedules are registered. Fire one with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
-- State persists in `.actuate/state` between restarts. Delete the folder to start fresh.
+- Reads the configuration from `actuate.config.json`, and passes it as `ACTUATE_CONFIG`. To keep local secrets out of that committed file, set `ACTUATE_CONFIG` in `.dev.vars` to a JSON object on one line, such as `ACTUATE_CONFIG={"apiKey":"sk_test_..."}`. It is merged over `actuate.config.json` (objects key by key; anything else from `.dev.vars` wins), and the banner says so. Invalid JSON there stops `actuate dev` with its line and column (never the text around the error), and an empty `ACTUATE_CONFIG=` is ignored. A merged configuration the schema rejects is reported with both sources named. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens).
+- Reads environment variables from `.env` and then `.dev.vars` in the project directory. It hands them to wrangler as secrets (in a generated `.actuate/.dev.vars`), so its startup banner shows them as `(hidden)` instead of printing them. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally, but on `localhost` only, and never for a request a web page makes (those get `403`, so a site you have open can't start runs with your real providers). Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway, or to use those routes through a tunnel.
+- Uses real providers when you pick them in `.dev.vars` (see [`actuate providers`](#actuate-providers)). Anything you don't pick stays local. Messages (and approval links) print in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`. Open it to "pay". Its refunds always succeed and print in the terminal. Declared `http` uses your `http.allow` list for real. `ctx.llm` needs `ACTUATE_LLM` set, and otherwise calls fail with "no llm provider is configured".
+- Real payment providers send payment webhooks to `POST /providers/<kind>/webhook`. Expose your local port with a tunnel (for example `cloudflared tunnel --url localhost:8787`) and set `ACTUATE_PUBLIC_URL` to the tunnel URL so callback links point there. Provider webhooks and approval links work through the tunnel. The admin API stays local unless you set `ACTUATE_TOKEN`.
+- Prints `ctx.notifyOwner` messages in the terminal, as `📣  [owner notification: <subject>]` followed by the text, and reports them sent.
+- Secret config values (fields wrapped in [`secret()`](/docs/reference/sdk/#secret)) become `[secret]` in run records, logs and errors, as on a self-hosted runtime.
+- Registers cron schedules. Fire one with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
+- Keeps state in `.actuate/state` between restarts. Delete the folder to start fresh.
 
 When it is ready it prints what to do next:
 
@@ -163,7 +165,13 @@ When it is ready it prints what to do next:
   Providers not set in .dev.vars print to this console (see `actuate providers`).
 ```
 
-Configuration and environment files are read at startup; restart `actuate dev` after changing them.
+When `.dev.vars` sets `ACTUATE_CONFIG`, a line before the last says where the configuration came from:
+
+```text
+  Config:          actuate.config.json, with ACTUATE_CONFIG in .dev.vars merged over it
+```
+
+`actuate dev` reads configuration and environment files at startup, so restart it after changing them.
 
 ### Guards in actuate dev
 
@@ -179,8 +187,8 @@ Configuration and environment files are read at startup; restart `actuate dev` a
 | Wall time per pass | 30 seconds |
 | A step's stored result | 1 MiB of JSON |
 | SQL | The statements the platform [refuses](/docs/concepts/database/#what-the-platform-refuses): recursive queries, `PRAGMA`, `ATTACH`, `DETACH`, `VACUUM`, `REINDEX`, `printf`, `format`, `randomblob`, `zeroblob`, reserved table names, and more than 1 MiB of bound parameters |
-| The longest sleep or wait | The plan's: 7 days on the Sandbox, none on Maker and Agency |
-| Passes per run | The plan's: 200 on the Sandbox, 1,000 on Maker and Agency |
+| The longest sleep or wait | The plan's limit, which is 7 days on the Sandbox and none on Maker and Agency |
+| Passes per run | The plan's limit, which is 200 on the Sandbox and 1,000 on Maker and Agency |
 | Retries per step | 10 |
 
 After a pass ends, its database and provider clients stop working, as on the platform. A guard throws the platform's error where the limit is crossed, so the run fails the way it would once deployed, and the terminal says which guard stopped it:
@@ -192,13 +200,13 @@ After a pass ends, its database and provider clients stop working, as on the pla
 
 The plan's capabilities are guarded only for a plan you chose (with `--plan`, `ACTUATE_PLAN` or your login). Then calls on a capability the plan lacks fail with the platform's message, `The Sandbox plan cannot use messaging. Upgrade to Maker to use providers.`, and an optional capability it lacks is `undefined`, as on the platform. When the plan is only the default, they work, so a fresh project from a template that sends messages runs as it is; the deploy check at startup tells you the platform would refuse it.
 
-Not mirrored: the 50 ms CPU limit (local machines differ too much), the monthly budgets and the database size limits.
+`actuate dev` doesn't mirror the 50 ms CPU limit (local machines differ too much), the monthly budgets or the database size limits.
 
-`--plan sandbox|maker|agency` picks the plan and `--offline` skips the API; see [which plan applies](#which-plan-applies). `--no-guards` turns the guards off, capabilities included; rows are still counted.
+`--plan sandbox|maker|agency` picks the plan and `--offline` skips the API. See [which plan applies](#which-plan-applies). `--no-guards` turns the guards off, capabilities included, but rows are still counted.
 
 ### Rows in actuate dev
 
-Under `actuate dev`, every run record that `/run`, `/webhook`, `/runs` and `/runs/:runId` return has a `usage` field: `{ "statements", "rowsRead", "rowsWritten" }`, the rows the run read and wrote, journal included. They come from Cloudflare's own SQLite counters in `workerd`, the counters the platform bills with. The platform's count for the same run can be a few rows higher, because it also records the version each run started on. Reads made to answer `GET` requests, such as `actuate logs` or the table browser, aren't counted against a run. [`actuate run --local`](#actuate-run) and [`actuate logs --local`](#actuate-logs) show them. Requires `@actuate/cli` 0.3 or later.
+Under `actuate dev`, every run record that `/run`, `/webhook`, `/runs` and `/runs/:runId` return has a `usage` field, `{ "statements", "rowsRead", "rowsWritten" }`, with the rows the run read and wrote, journal included. They come from Cloudflare's own SQLite counters in `workerd`, the counters the platform bills with. The platform's count for the same run can be a few rows higher, because it also records the version each run started on. Reads made to answer `GET` requests, such as `actuate logs` or the table browser, aren't counted against a run. [`actuate run --local`](#actuate-run) and [`actuate logs --local`](#actuate-logs) show them. Requires `@actuate/cli` 0.3 or later.
 
 ## actuate providers
 
@@ -230,7 +238,7 @@ ANTHROPIC_API_KEY=...
 | `payment` | `ACTUATE_PAYMENT` | `stripe`, `toyyibpay`, `billplz`, `chip` |
 | `llm` | `ACTUATE_LLM` | `anthropic`, `openai`, `google`, `openai-compatible` |
 
-Credential variable names are `<KIND>_<FIELD>`, e.g. `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`. `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (Settings → Providers).
+Credential variable names are `<KIND>_<FIELD>`, for example `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`. `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (under Providers in Settings).
 
 ## actuate test
 
@@ -240,11 +248,11 @@ actuate test [files or folders...] [--watch] [--grep <pattern>] [--plan <plan>] 
 
 Runs the project's tests, with no setup. Requires `@actuate/cli` 0.3 or later.
 
-- **Which files.** Every `*.test.ts` and `*.spec.ts` file (and `.js`, `.mts`, `.tsx` and the like) under the files and folders you name, or under the project if you name none. It skips `node_modules`, `dist`, `build`, `coverage`, `out` and folders whose name starts with a dot.
+- **Which files.** It runs every `*.test.ts` and `*.spec.ts` file (and `.js`, `.mts`, `.tsx` and the like) under the files and folders you name, or under the project if you name none. It skips `node_modules`, `dist`, `build`, `coverage`, `out` and folders whose name starts with a dot.
 - **Which runner.** A file that imports `vitest` runs with the project's own Vitest (`vitest run`). Every other file runs with `node --test`, with TypeScript compiled on the fly, so `import actuator from "./actuator.js"` finds `actuator.ts`. Both can be in one project; `actuate test` runs one after the other. When Vitest isn't installed, the `node:test` files still run and the Vitest files are reported as skipped, with how to fix it (`npm install -D vitest`, or write them with `node:test`), and `actuate test` exits with status 1. With only Vitest files, that is an error.
 - **`--watch`** (`-w`) re-runs the tests when files change. When the tests mix Vitest and `node:test`, it runs both watchers side by side; their output interleaves, and Ctrl-C stops both.
 - **`--grep <pattern>`** (`-g`) runs only the tests whose name matches (`--test-name-pattern` for `node:test`, `-t` for Vitest).
-- **`--plan <plan>`** sets the plan whose guards [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) applies, passed to the tests as `ACTUATE_PLAN`; a test can pick its own with `testActuator(actuator, { plan })`. See [which plan applies](#which-plan-applies); `--offline` skips the API. When tests are about to run, `actuate test` prints the plan once, as `Platform guards: Sandbox plan (...)`.
+- **`--plan <plan>`** sets the plan whose guards [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) applies, passed to the tests as `ACTUATE_PLAN`. A test can pick its own with `testActuator(actuator, { plan })`. See [which plan applies](#which-plan-applies). `--offline` skips the API. When tests are about to run, `actuate test` prints the plan once, as `Platform guards: Sandbox plan (...)`.
 - **Deploy checks.** Alongside the tests, it runs `actuator.ts`'s [deploy checks](#the-deploy-checks) locally, without the network, and prints them after the tests, only when they find something. They never fail the tests. `--no-checks` skips them, and `--watch` doesn't run them.
 - **No tests.** With no test files it prints an example test to start from and exits with status 1, so an empty suite doesn't pass in CI. `--pass-with-no-tests` exits with status 0 instead.
 - **Node.js before 22.13.** `actuate test` adds the flag `node:sqlite` needs there.
@@ -266,7 +274,7 @@ Deploy checks for actuator.ts, Sandbox plan (the default: not logged in): 0 erro
   warn   The Sandbox plan cannot use messaging. Upgrade to Maker to use providers. That is only the default plan here: log in or pass --plan to check against yours.  (plan-capability)
 ```
 
-It exits with status 1 when a test fails. Write tests with `testActuator` from `@actuate/cli/testing`: see [unit tests with testActuator](/docs/guides/best-practices/#unit-tests-with-testactuator).
+It exits with status 1 when a test fails. Write tests with `testActuator` from `@actuate/cli/testing`. See [unit tests with testActuator](/docs/guides/best-practices/#unit-tests-with-testactuator).
 
 ## actuate check
 
@@ -274,17 +282,18 @@ It exits with status 1 when a test fails. Write tests with `testActuator` from `
 actuate check [file] [--platform] [--plan <plan>] [--offline] [--json]
 ```
 
-A replay-safety linter. `run` is [replayed from the top](/docs/concepts/steps-and-replay/) after every pause, so side effects and non-determinism must sit inside `ctx.step.do`. `check` parses the file and inspects the `run` function of the object passed to `defineActuator`, flagging these outside a step:
+`check` is a replay-safety linter. The runtime [replays `run` from the top](/docs/concepts/steps-and-replay/) after every pause, so side effects and non-determinism must be inside `ctx.step.do`. `check` parses the file, inspects the `run` function of the object passed to `defineActuator`, and flags these outside a step:
 
 | Rule | Severity | Flags |
 | --- | --- | --- |
 | `no-fetch-outside-step` | error | `fetch()` and `globalThis.fetch()` |
 | `no-provider-outside-step` | error | Calls on `ctx.messaging`, `ctx.payment`, `ctx.llm` or `ctx.http` |
 | `no-nondeterminism-outside-step` | error | `Date.now()`, `new Date()` with no arguments, `Math.random()`, `crypto.randomUUID()`, `performance.now()` |
-| `no-commit-outside-step` | error | `ctx.db.commitWithStep()`: it queues writes for the step that is running |
+| `no-commit-outside-step` | error | `ctx.db.commitWithStep()`, which queues writes for the step that is running |
+| `no-notify-outside-step` | error | `ctx.notifyOwner()`, which sends a message, so outside a step it would send again on every replay |
 | `db-write-outside-step` | warning | `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE`, and each such statement in a `ctx.db.batch([...])`, written as `` ctx.db.statement`...` `` or `{ sql: "..." }` |
 
-Everything inside the function passed as the last argument of `ctx.step.do` counts as inside a step. A statement built with `` ctx.db.statement`...` `` isn't flagged on its own: building one does nothing until it runs.
+Everything inside the function passed as the last argument of `ctx.step.do` counts as inside a step. `check` doesn't flag a statement built with `` ctx.db.statement`...` `` on its own, because building one does nothing until it runs.
 
 ```text
 actuator.ts:14:5  error  ctx.messaging.send() must be called inside ctx.step.do.  (no-provider-outside-step)
@@ -293,7 +302,13 @@ actuator.ts:20:5  warn   This write runs again on every replay. Put it inside ct
 1 error(s), 1 warning(s)
 ```
 
-`check` exits with status 1 when there are errors, so you can run it in a pre-commit hook. It is a syntactic check of one file: it does not follow calls into helper functions, and it only recognises SQL written as a string literal. The runtime still enforces the provider rule at run time.
+`check` also warns when `actuate.config.json` sets a value for a [`secret()`](/docs/reference/sdk/#secret) field and git would commit the file, which happens when the project is a git repository and the file isn't ignored. It reports the warning on `actuate.config.json` with the rule `config-secret`. Set those values in the dashboard instead (see [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens)). It loads the actuator only when the file holds a value and git would commit it. With `--platform`, the same warning is one of the deploy checks.
+
+```text
+actuate.config.json:1:1  warn   actuate.config.json sets the secret field apiKey, and git does not ignore the file, so it would be committed. Set it in the dashboard (Config tab) and leave it out of the file: the platform keeps a stored secret when the file omits it. For `actuate dev`, put it in .dev.vars as ACTUATE_CONFIG.  (config-secret)
+```
+
+`check` exits with status 1 when there are errors, so you can run it in a pre-commit hook. It is a syntactic check of one file. It does not follow calls into helper functions, and it only recognises SQL written as a string literal. The runtime still enforces the provider rule at run time.
 
 ### The deploy checks
 
@@ -302,18 +317,19 @@ actuator.ts:20:5  warn   This write runs again on every replay. Put it inside ct
 | Rule | Checks | Needs |
 | --- | --- | --- |
 | `bundle-size` | The bundle is at most 5 MB | |
-| `name` | The name is lowercase letters, digits and underscores, at most 64 characters | |
+| `name` | The name is lowercase letters, digits and underscores, at most 64 characters, and doesn't start with `actuate_`, which the hosted platform keeps for its built-in MCP tools (`actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`) and refuses at deploy. Self-hosted actuators may still use the prefix | |
 | `cron` | Cron syntax, the number of schedules, and how often they fire, alone and together | The plan |
 | `cron-input` | The input schema accepts `{}`, the input every cron run gets (a warning) | |
-| `http-allow` | `http.allow`: at most 20 hostnames, no IP addresses, no `actuate.run`, no wildcard over a shared zone such as `*.co.uk` or `*.workers.dev` | |
+| `http-allow` | `http.allow` has at most 20 hostnames, no IP addresses, no `actuate.run`, no wildcard over a shared zone such as `*.co.uk` or `*.workers.dev` | |
 | `input-regex` | No regex in the input schema with nested quantifiers, such as `(a+)+` (Zod's built-in formats are fine) | |
 | `plan-capability` | Every capability in `capabilities` is on the plan; optional capabilities that aren't get a warning | The plan |
-| `config` | `actuate.config.json` is valid JSON and matches the config schema | |
+| `config` | `actuate.config.json` is valid JSON and matches the config schema. It reports invalid JSON by line and column, never by quoting the text around the error, which could be part of a secret | |
+| `config-secret` | `actuate.config.json` sets no `secret()` field while git would commit it (a warning; checked locally only, also with `--no-config`, and once when `actuate dev` starts) | |
 | `provider-missing` | A provider is set up in the dashboard for every required capability | Login |
 | `actuator-limit` | A new actuator fits the plan's number of actuators | Login |
 | `deploy-budget` | Deploy attempts are left this month (an error when none are, a warning from 90% used) | Login |
 
-The checks mirror the platform's rules; the platform runs its own checks again on upload and has the final say. Without a login, or with `--offline`, the last three are skipped, and the output says so. Logged in, a lookup that fails is skipped too, with a `skipped` line saying why.
+The checks mirror the platform's rules. The platform runs its own checks again on upload, and its result is the one that counts. Without a login, or with `--offline`, `check` skips the last three, and the output says so. When you are logged in, it also skips a lookup that fails, with a `skipped` line saying why.
 
 With `--plan sandbox`:
 
@@ -329,9 +345,9 @@ Deploy checks for the Sandbox plan (from --plan). The provider, actuator-count a
 3 error(s), 1 warning(s)
 ```
 
-The plan is the one [that applies](#which-plan-applies); `--plan` checks against another. When no plan was chosen, the plan's own rules (its cron limits and capabilities) are warnings, ending `That is only the default plan here: log in or pass --plan to check against yours.` `--plan` and `--offline` imply `--platform`. `check --platform` exits with status 1 when either the linter or the deploy checks find an error.
+The plan is the one [that applies](#which-plan-applies). `--plan` checks against another. When no plan was chosen, the plan's own rules (its cron limits and capabilities) are warnings, ending `That is only the default plan here: log in or pass --plan to check against yours.` `--plan` and `--offline` imply `--platform`. `check --platform` exits with status 1 when either the linter or the deploy checks find an error.
 
-`--json` prints one object. Without `--platform`: `{ ok, file, diagnostics, errors, warnings }`. With it, also `platform: { plan, planSource, issues, skipped }`, where `planSource` is `--plan`, `ACTUATE_PLAN`, `account`, `saved` or `default`, and each issue is `{ severity, rule, message }`.
+`--json` prints one object. Without `--platform`, it is `{ ok, file, diagnostics, errors, warnings }`. With it, the object also has `platform: { plan, planSource, issues, skipped }`, where `planSource` is `--plan`, `ACTUATE_PLAN`, `account`, `saved` or `default`, and each issue is `{ severity, rule, message }`.
 
 ## actuate deploy
 
@@ -342,10 +358,10 @@ actuate deploy [file] [--dry-run] [--no-config] [--plan <plan>] [--force] [--jso
 Deploys the actuator to Actuate. It needs [`actuate login`](#actuate-login) or `ACTUATE_API_TOKEN`, except with `--dry-run`.
 
 1. Runs `actuate check` and stops if there are errors.
-2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it. Whitespace and syntax are minified but names are kept, so stack traces stay readable, and Zod's non-English locales are left out.
+2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it. It minifies whitespace and syntax but keeps names, so stack traces stay readable, and it leaves out Zod's non-English locales.
 3. Reads the actuator's metadata: name, description, capabilities, `http.allow`, cron schedules, and the input, config and output schemas as JSON Schema.
 4. Runs the [deploy checks](#the-deploy-checks), including the ones that need your account, and stops if any fails. A refused deploy would still count against your deploy budget. `--force` deploys anyway.
-5. If the deployed version already runs exactly this code, it uploads nothing and uses no deploy: it updates the configuration when `actuate.config.json` differs from the deployed one, and otherwise does nothing. `--force` deploys anyway.
+5. If the deployed version already runs exactly this code, it uploads nothing and uses no deploy. It updates the configuration when `actuate.config.json` differs from the deployed one, and otherwise does nothing. It leaves secret fields out of that comparison, because the platform shows them as `null`. It sends a file that leaves every secret field out only when something else changed, and the platform keeps the stored secrets. It always sends a file that mentions a secret field at all (a value, `null`, or `""` or `[]` to clear it). See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for how the platform merges it. `--force` deploys anyway.
 6. Uploads the bundle with `actuate.config.json` as the configuration, unless you pass `--no-config`.
 7. Prints the version number, the actuator's webhook, MCP, OpenAPI and dashboard URLs, any warnings from the platform, and, when your account reports it, the deploys you have used this month.
 
@@ -377,13 +393,13 @@ When a check fails, `deploy` exits with status 1 before uploading:
 ✗ The platform would refuse this deploy (4 errors), and a refused deploy still counts against your deploy budget. Fix them, or pass --force to deploy anyway.
 ```
 
-`--force` doesn't skip step 1: replay-safety errors always stop a deploy.
+`--force` doesn't skip step 1, so replay-safety errors always stop a deploy.
 
-`--dry-run` runs steps 1 to 4 and prints the metadata as JSON, without uploading. It needs no login and doesn't count against the deploy budget; logged in, it reads your account to run the account checks. It exits with status 1 when a check fails.
+`--dry-run` runs steps 1 to 4 and prints the metadata as JSON, without uploading. It needs no login and doesn't count against the deploy budget. When you are logged in, it reads your account to run the account checks. It exits with status 1 when a check fails.
 
-`--plan` runs the checks against another plan than [yours](#which-plan-applies); the platform still uses your account's plan.
+`--plan` runs the checks against another plan than [yours](#which-plan-applies). The platform still uses your account's plan.
 
-`--json` prints one object instead of text: `ok`, `name`, `diagnostics`, `bundle` (`bytes`, `sha256`), `plan` (`id`, `source`), `issues`, and `deployed` (`version`, `sameCode`) when the actuator is already deployed. Then, for a dry run, `dryRun: true` and `metadata`; for an upload, `deployedNow: true`, `version`, `urls` and `warnings`; and when the code was unchanged, `deployedNow: false`, `configUpdated` and `version`. A deploy the checks stop prints `{ "ok": false, "error", ... }` with the same fields; one that replay-safety errors stop, `{ "ok": false, "error", "diagnostics" }`.
+`--json` prints one object instead of text: `ok`, `name`, `diagnostics`, `bundle` (`bytes`, `sha256`), `plan` (`id`, `source`), `issues`, and `deployed` (`version`, `sameCode`) when the actuator is already deployed. Then, for a dry run, `dryRun: true` and `metadata`; for an upload, `deployedNow: true`, `version`, `urls` and `warnings`; and when the code was unchanged, `deployedNow: false`, `configUpdated` and `version`. A deploy the checks stop prints `{ "ok": false, "error", ... }` with the same fields. A deploy that replay-safety errors stop prints `{ "ok": false, "error", "diagnostics" }`.
 
 ## actuate run
 
@@ -414,9 +430,9 @@ Next
 ```
 
 - `--json` prints the run record as `POST /run` returned it instead (`runId`, `status`, `output`, `error`, `passes`, and `usage` under `actuate dev`), whatever its status. For its steps and logs, use `actuate logs <runId> --json`. Before `@actuate/cli` 0.3, `actuate run` printed the record by default; scripts that read its output need `--json` now.
-- `--idempotency-key <key>` sends an [`Idempotency-Key`](/docs/concepts/triggers/#idempotency-key): a retry with the same key returns the first run instead of starting another.
-- `run` exits with status 1 if the run ended `FAILED`, and when the input fails the schema, which prints each problem, e.g. `name: Too small: expected string to have >=1 characters`.
-- With `--local` it targets `actuate dev` on `localhost:<port>`; otherwise the deployed actuator.
+- `--idempotency-key <key>` sends an [`Idempotency-Key`](/docs/concepts/triggers/#idempotency-key), so a retry with the same key returns the first run instead of starting another.
+- `run` exits with status 1 if the run ended `FAILED`, and when the input fails the schema, which prints each problem, for example `name: Too small: expected string to have >=1 characters`.
+- With `--local` it targets `actuate dev` on `localhost:<port>`, and otherwise the deployed actuator.
 
 ## actuate logs
 
@@ -424,7 +440,7 @@ Next
 actuate logs [runId] [--local] [--status <status>] [--limit <n>] [--json]
 ```
 
-Without a run ID, lists recent runs, newest first: ID, status, passes, start time and trigger. Under `actuate dev` (`--local`) it also shows the rows each run wrote and read:
+Without a run ID, it lists recent runs, newest first: ID, status, passes, start time and trigger. Under `actuate dev` (`--local`) it also shows the rows each run wrote and read:
 
 ```text
 RUN                               STATUS     PASSES  ROWS W/R  STARTED                   TRIGGER
@@ -434,9 +450,9 @@ run_01a1a2e8fb8561faf9fb3d4d8daf  FAILED     1       2000/6    2026-11-03T19:35:
 ```
 
 - `--status` lists only runs with that status: `RUNNING`, `WAITING`, `COMPLETED`, `FAILED` or `CANCELLED`.
-- `--limit` sets how many (default 20, at most 500).
+- `--limit` sets how many runs to list (default 20, at most 500).
 
-With a run ID, prints the run as [`actuate run`](#actuate-run) does: its status, passes and rows, each step in the journal with its status and error, the log lines, and its output or error. A log line's `data` is printed as JSON on the line below it:
+With a run ID, it prints the run as [`actuate run`](#actuate-run) does: its status, passes and rows, each step in the journal with its status and error, the log lines, and its output or error. It prints a log line's `data` as JSON on the line below it:
 
 ```text
 run_01a1a2e8442f42a93c45c688b5b1  COMPLETED  api  2026-11-03T19:34:53.231Z
@@ -451,7 +467,7 @@ run_01a1a2e8442f42a93c45c688b5b1  COMPLETED  api  2026-11-03T19:34:53.231Z
 
 It exits with status 1 if the run ended `FAILED`. `--json` prints the raw records.
 
-Rows are shown only under `actuate dev`: the hosted API doesn't report them per run yet. For the deployed actuator, the line shows passes only. Approval links are never in the logs; see [Human approvals](/docs/concepts/approvals/#getting-the-links).
+`logs` shows rows only under `actuate dev`, because the hosted API doesn't report them per run yet. For the deployed actuator, the line shows passes only. Approval links are never in the logs. See [Human approvals](/docs/concepts/approvals/#getting-the-links).
 
 ## actuate event
 
@@ -459,7 +475,7 @@ Rows are shown only under `actuate dev`: the hosted API doesn't report them per 
 actuate event <key> ['<json>'] [--local] [--json]
 ```
 
-Posts an event with the JSON payload (default `{}`). Every step waiting for `key` completes with the payload and its run resumes; if none is waiting, the event is buffered for the next wait. Requires `@actuate/cli` 0.3 or later.
+Posts an event with the JSON payload (default `{}`). Every step waiting for `key` completes with the payload and its run resumes. If none is waiting, the runtime buffers the event for the next wait. Requires `@actuate/cli` 0.3 or later.
 
 ```text
 ✓ order.shipped.A-1002: resumed run_01a1a2e8db32732cfbbb0eefb6e5
@@ -471,7 +487,7 @@ See where it got to: actuate logs run_01a1a2e8db32732cfbbb0eefb6e5 --local
 No run is waiting for order.shipped.ZZZ: buffered, so a run that waits for it later gets it at once.
 ```
 
-Under `actuate dev`, the fake payment provider's bills are paid with the event `payment.<referenceId>`: `actuate event payment.A-1001 '{"status":"paid"}' --local`. `--json` prints `{ "resumed": [...], "buffered": ... }`. On the deployed actuator it needs a full token: agent tokens can't post events.
+Under `actuate dev`, the event `payment.<referenceId>` pays the fake payment provider's bills, for example `actuate event payment.A-1001 '{"status":"paid"}' --local`. `--json` prints `{ "resumed": [...], "buffered": ... }`. On the deployed actuator it needs a full token, because agent tokens can't post events.
 
 ## actuate approve
 
@@ -482,8 +498,8 @@ actuate approve <runId> [--step <name>] [--note <text>] [--local] [--json]
 Approves a run waiting in `waitForApproval`, without the signed link, then prints the run as [`actuate run`](#actuate-run) does. Requires `@actuate/cli` 0.3 or later.
 
 - `--step` names the waiting step. You only need it when the run waits at several; otherwise `approve` finds the step itself.
-- `--note` is passed to the run in [`ApprovalResult.note`](/docs/reference/sdk/#approvalresult).
-- The decision is recorded as made through the API (`via: "api"`), by the account that owns the token.
+- `--note` reaches the run in [`ApprovalResult.note`](/docs/reference/sdk/#approvalresult).
+- The run records the decision as made through the API (`via: "api"`), by the account that owns the token.
 
 ```text
 ✓ Approved "manager-ok"
@@ -496,7 +512,7 @@ run_01a1a2e8d98593acc562658db50c  COMPLETED  api  2026-11-03T19:35:31.461Z
   output {"approved":true,"note":"ok, refund it"}
 ```
 
-`approve` exits with status 1 if the run isn't waiting for an approval (`run_... is COMPLETED and waits for no approval.`) or ends `FAILED`, and with status 2 if it waits at several steps and you didn't pass `--step`. On the deployed actuator it needs a full token: agent tokens can't approve.
+`approve` exits with status 1 if the run isn't waiting for an approval (`run_... is COMPLETED and waits for no approval.`) or ends `FAILED`, and with status 2 if it waits at several steps and you didn't pass `--step`. On the deployed actuator it needs a full token, because agent tokens can't approve.
 
 ## actuate reject
 
@@ -528,22 +544,22 @@ Cancels a `RUNNING` or `WAITING` run, which then never wakes. It prints `✓ Can
 actuate login [--token <token>] [--api <url>]
 ```
 
-Saves an API token for `deploy`, `run`, `logs` and the other commands that reach your account. Without `--token` it prompts for one; create it in the dashboard under Settings → API tokens, choosing **Full**. You sign in to the dashboard with Google or another social login; the CLI and agents use API tokens instead.
+Saves an API token for `deploy`, `run`, `logs` and the other commands that reach your account. Without `--token` it prompts for one. Create it in the dashboard under API tokens in Settings, choosing **Full**. You sign in to the dashboard with Google or another social login. The CLI and agents use API tokens instead.
 
 There are two kinds of token:
 
 | Token | For | Can |
 | --- | --- | --- |
-| **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, posting events, deploying, configuration or management |
+| **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`, and cancel the runs it started if you [allow it](/docs/concepts/agents/#cancelling-runs). Nothing else, so no approving, posting events, deploying, configuration or management |
 | **Full** | The CLI and management | Everything your account can do, including `deploy` and fetching approval links |
 
-`actuate login` needs a **full** token, and checks it before saving it: it refuses a token the API rejects, and an agent token (`That is an agent (run-scoped) token: it can only start and read runs. Create a Full token for the CLI.`). If the API can't be reached, it warns and saves the token anyway. Give agents Agent tokens, or let MCP clients that support it [sign in](/docs/guides/connect-your-agent/#sign-in-from-your-mcp-client) instead: each sign-in becomes an agent token you can revoke. `--api` overrides the API URL (default `https://api.actuate.run`).
+`actuate login` needs a **full** token, and checks it before saving it. It refuses a token the API rejects, and an agent token (`That is an agent (run-scoped) token: it can only start and read runs. Create a Full token for the CLI.`). If the API can't be reached, it warns and saves the token anyway. Give agents Agent tokens, or let MCP clients that support it [sign in](/docs/guides/connect-your-agent/#sign-in-from-your-mcp-client) instead. Each sign-in becomes an agent token you can revoke. `--api` overrides the API URL (default `https://api.actuate.run`).
 
 ```text
 ✓ Logged in as aina@example.com (maker plan). Saved to /home/aina/.config/actuate/credentials.json
 ```
 
-Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`. The file also keeps your account's email and plan, so the commands can use your plan's limits when the API can't be reached, or with `--offline`. Every command that reads your account updates it.
+`actuate login` writes credentials to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.config/actuate/credentials.json`, with mode `0600`. The file also keeps your account's email and plan, so the commands can use your plan's limits when the API can't be reached, or with `--offline`. Every command that reads your account updates it.
 
 ## Which plan applies
 
@@ -551,21 +567,21 @@ Credentials are written to `$XDG_CONFIG_HOME/actuate/credentials.json`, or `~/.c
 
 1. `--plan sandbox|maker|agency`.
 2. The `ACTUATE_PLAN` environment variable.
-3. Your account's plan, when you are logged in. Every one of these commands asks the API (`GET /v1/me`), and uses the limits it reports. If the API doesn't answer within 3 seconds, or can't be reached, it uses the plan saved by your last `actuate login`, or by the last command that read your account. With `ACTUATE_API_TOKEN` nothing is saved.
+3. Your account's plan, when you are logged in. Every one of these commands asks the API (`GET /v1/me`), and uses the limits it reports. If the API doesn't answer within 3 seconds, or can't be reached, it uses the plan saved by your last `actuate login`, or by the last command that read your account. With `ACTUATE_API_TOKEN`, the commands save nothing.
 4. The Sandbox, the strictest plan.
 
-`--offline` (on `dev`, `test`, `check` and `doctor`) skips the API: the plan comes from `--plan`, `ACTUATE_PLAN` or the plan saved at login, and the checks that need your account are skipped. `deploy` and `doctor` ask the API for your account's usage even when `--plan` or `ACTUATE_PLAN` decides the plan; `check --platform` does too.
+`--offline` (on `dev`, `test`, `check` and `doctor`) skips the API. The plan comes from `--plan`, `ACTUATE_PLAN` or the plan saved at login, and the commands skip the checks that need your account. `deploy` and `doctor` ask the API for your account's usage even when `--plan` or `ACTUATE_PLAN` decides the plan, and so does `check --platform`.
 
-Each command prints which plan it used and why, e.g. `Maker plan (from your account)`, `Maker plan (saved at your last login, as the API couldn't be reached)` or `Sandbox plan (the default: not logged in)`. Any other `--plan` or `ACTUATE_PLAN` value exits with status 2.
+Each command prints which plan it used and why, for example `Maker plan (from your account)`, `Maker plan (saved at your last login, as the API couldn't be reached)` or `Sandbox plan (the default: not logged in)`. Any other `--plan` or `ACTUATE_PLAN` value exits with status 2.
 
-When the plan is only the default, nobody chose it, so its own rules (capabilities and cron limits) are warnings instead of errors in `check`, `test`, `dev`, `doctor` and `deploy --dry-run`: a fresh project from a template that sends messages passes `npm run check`, and `actuate dev` doesn't refuse its providers. With a plan you chose, by flag, environment variable or login, they are errors.
+When the plan is only the default, nobody chose it, so its own rules (capabilities and cron limits) are warnings instead of errors in `check`, `test`, `dev`, `doctor` and `deploy --dry-run`. So a fresh project from a template that sends messages passes `npm run check`, and `actuate dev` doesn't refuse its providers. With a plan you chose, by flag, environment variable or login, they are errors.
 
 ## Environment variables
 
 | Variable | Effect |
 | --- | --- |
-| `ACTUATE_API_TOKEN` | A full API token. Takes precedence over the saved credentials; useful in CI |
+| `ACTUATE_API_TOKEN` | A full API token. Takes precedence over the saved credentials, which is useful in CI |
 | `ACTUATE_API_URL` | API URL. Overrides the saved or default URL (`https://api.actuate.run`) |
-| `ACTUATE_PLAN` | `sandbox`, `maker` or `agency`: the plan whose rules apply when you pass no `--plan`. See [which plan applies](#which-plan-applies) |
+| `ACTUATE_PLAN` | `sandbox`, `maker` or `agency`, the plan whose rules apply when you pass no `--plan`. See [which plan applies](#which-plan-applies) |
 | `ACTUATE_DEBUG` | Set to any value to print the stack trace of an unexpected error, for a bug report |
 | `XDG_CONFIG_HOME` | Where the credentials file is stored |

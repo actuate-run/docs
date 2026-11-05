@@ -33,13 +33,13 @@ const pending = await ctx.db.sql<{ id: string }>`SELECT id FROM bookings WHERE s
 | `commitWithStep(statements)` | Queues writes that commit with the current step. See [Atomic writes](#atomic-writes) |
 | `migrate(statements)` | Applies new schema migrations |
 
-Parameters can be strings, numbers, bigints, booleans (stored as `1` and `0`), `null`, `Uint8Array` or `ArrayBuffer`. The type argument (`query<T>`) types the rows; it is not checked at runtime.
+Parameters can be strings, numbers, bigints, booleans (stored as `1` and `0`), `null`, `Uint8Array` or `ArrayBuffer`. The type argument (`query<T>`) types the rows, but nothing checks it at runtime.
 
 Because `sql` binds every interpolated value, you cannot interpolate identifiers such as table or column names. Write those in the SQL text.
 
 ## Writes belong in steps
 
-`run` is [replayed](/docs/concepts/steps-and-replay/) from the top after every pause, so a write outside a step runs again on every pass. Put inserts, updates and deletes inside `ctx.step.do`:
+The runtime [replays](/docs/concepts/steps-and-replay/) `run` from the top after every pause, so a write outside a step runs again on every pass. Put inserts, updates and deletes inside `ctx.step.do`:
 
 ```ts
 await ctx.step.do("save-booking", () =>
@@ -84,9 +84,9 @@ const orderId = await ctx.step.do("checkout", async () => {
 });
 ```
 
-Later statements see the writes of earlier ones, and nothing else runs in between. If a statement fails, none is applied and the error says which one: `Statement 2 of 2 failed, so none were applied: ...`. Statements that control a transaction (`BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`) are refused, because the batch is already one transaction.
+Later statements see the writes of earlier ones, and nothing else runs in between. If a statement fails, the batch applies none of them, and the error says which one: `Statement 2 of 2 failed, so none were applied: ...`. The batch refuses statements that control a transaction (`BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`), because the batch is already one transaction.
 
-A batch is atomic on its own, not together with the step around it. If the step throws after the batch and is retried, the batch runs again. Make it safe to repeat (natural keys, `ON CONFLICT`), or use `commitWithStep`.
+A batch is atomic on its own, not together with the step around it. If the step throws after the batch and is retried, the batch runs again. Make it safe to repeat (with natural keys or `ON CONFLICT`), or use `commitWithStep`.
 
 ### commitWithStep
 
@@ -103,9 +103,9 @@ await ctx.step.do("charge", async () => {
 });
 ```
 
-- If the step throws or is retried, none of the queued writes is applied. A retry starts with nothing queued.
-- Once the step has completed, they are never applied again, even when the run is replayed. So they happen exactly once, with the step's result.
-- If one of them fails, none is applied, the step isn't recorded as completed, and the attempt fails with that error (and retries if the step has `retries`).
+- If the step throws or is retried, none of the queued writes applies. A retry starts with nothing queued.
+- Once the step has completed, they never apply again, even when the runtime replays the run. So they happen exactly once, with the step's result.
+- If one of them fails, none applies, the journal doesn't record the step as completed, and the attempt fails with that error (and retries if the step has `retries`).
 - They run after the step function returns, so the step can't read their effects or their rows.
 
 ### Which to use
@@ -113,12 +113,12 @@ await ctx.step.do("charge", async () => {
 | | `batch` | `commitWithStep` |
 | --- | --- | --- |
 | All or nothing | Yes | Yes |
-| Tied to the step's result | No: a retried step runs it again | Yes: exactly once with the step |
+| Tied to the step's result | No, a retried step runs it again | Yes, exactly once with the step |
 | The step can read the writes and rows | Yes | No |
 
 Use `commitWithStep` for writes that record what the step did, such as a bill ID or a "sent" flag. Use `batch` when the step needs the rows back or reads what it wrote.
 
-The same checks as `query` apply to every statement in either one: tables starting with `_actuate_` are refused, and on the hosted platform each statement is checked like any other and counts toward the 1,000 statements a pass may run, so a batch of 50 statements counts as 50.
+The same checks as `query` apply to every statement in either one. The runtime refuses tables starting with `_actuate_`. On the hosted platform, the host checks each statement like any other, and each one counts toward the 1,000 statements a pass may run, so a batch of 50 statements counts as 50.
 
 ## Migrations
 
@@ -130,7 +130,7 @@ await ctx.db.migrate([
 ]);
 ```
 
-`migrate` applies each entry **once per actuator, tracked by its index** in the array. Entries that have already been applied are skipped; new entries are applied in order, in a transaction. That makes it cheap and safe to call at the top of every run, before your first step, and it keeps `CREATE TABLE` out of your business logic.
+`migrate` applies each entry **once per actuator, tracked by its index** in the array. It skips entries that have already been applied, and applies new entries in order, in a transaction. That makes it cheap and safe to call at the top of every run, before your first step, and it keeps `CREATE TABLE` out of your business logic.
 
 The rules that follow from tracking by index:
 
@@ -140,11 +140,11 @@ The rules that follow from tracking by index:
 
 ## Reserved tables
 
-Table names starting with `_actuate_` belong to the runtime (`_actuate_runs`, `_actuate_steps`, `_actuate_events`, `_actuate_migrations`, `_actuate_logs`). Any query or migration whose SQL mentions `_actuate_` is refused with an `ActuatorError`. Don't use the prefix for your own tables. On the platform, `_cf_` and `sqlite_` tables are refused too.
+Table names starting with `_actuate_` belong to the runtime (`_actuate_runs`, `_actuate_steps`, `_actuate_events`, `_actuate_migrations`, `_actuate_logs`). The runtime throws an `ActuatorError` for any query or migration whose SQL mentions `_actuate_`. Don't use the prefix for your own tables. On the platform, the host also refuses `_cf_` and `sqlite_` tables.
 
 ## What the platform refuses
 
-On the hosted platform, every statement is checked by the host before it runs, outside your code, so it cannot be bypassed. The check reads the statement the way SQLite does (strings, quoted names and comments), so quoting or commenting cannot hide part of it. A single SQLite statement can do unbounded work, so these are refused with a readable error:
+On the hosted platform, the host checks every statement before it runs, outside your code, so your code cannot bypass the check. The check reads the statement the way SQLite does (strings, quoted names and comments), so quoting or commenting cannot hide part of it. A single SQLite statement can do unbounded work, so the host refuses these with a readable error:
 
 | Refused | Examples |
 | --- | --- |
@@ -154,7 +154,7 @@ On the hosted platform, every statement is checked by the host before it runs, o
 | Transaction control | `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`. Use [`batch` or `commitWithStep`](#atomic-writes) for writes that belong together |
 | Runtime and system tables | `_actuate_*`, `_cf_*`, `sqlite_*` |
 
-And these limits apply:
+These limits also apply:
 
 | Limit | Value |
 | --- | --- |
@@ -171,7 +171,7 @@ When a statement would push the database over its size limit, the statement fail
 
 ### Instead of a recursive query
 
-Recursive CTEs are mostly used to generate a series: dates, slots, numbers. Generate it in TypeScript inside a step instead:
+The usual use of a recursive CTE is to generate a series of dates, slots or numbers. Generate it in TypeScript inside a step instead:
 
 ```ts
 // 30 daily slots from the appointment date, written once.
@@ -190,10 +190,10 @@ Build formatted strings (the job of `printf` or `format`) in TypeScript, not in 
 
 ## Browsing and exporting
 
-Your tables are yours to read outside of runs:
+You can read your tables outside of runs:
 
-- **Dashboard:** the platform has a table browser for each actuator with row counts (counted up to 10,000, then shown as "10,000+", because counting reads rows), a CSV download per table, and **Export database (.sql)**: a SQL dump of all your tables, indexes, views and triggers (runtime tables excluded). Load it into a local file with `sqlite3 mine.db < mine.sql`. The same dump is `GET /v1/actuators/<name>/export.sql` with a full API token. Each export, `.sql` or CSV, holds up to a thousandth of your plan's monthly rows-read budget (Sandbox 50,000 rows, Maker 1,000,000, Agency 5,000,000). A `.sql` export that reaches it ends with a `-- Truncated` comment; for CSV, the dashboard tells you. Exports read rows, so they count against your monthly [rows-read budget](/docs/reference/limits/).
-- **Runtime API:** `GET /tables` lists your tables (runtime tables excluded), and `GET /tables/<name>` returns `{ columns, rows }`. Add `?format=csv` to download CSV (text cells starting with `=`, `+`, `-` or `@` are prefixed with `'` so spreadsheets don't run them as formulas), and page with `?limit=` (default 100, at most 10,000) and `?offset=`. See [Runtime HTTP API](/docs/reference/runtime-http/#tables).
+- In the dashboard, the platform has a table browser for each actuator. It has row counts (counted up to 10,000, then shown as "10,000+", because counting reads rows), a CSV download per table, and **Export database (.sql)**, which produces a SQL dump of all your tables, indexes, views and triggers (runtime tables excluded). Load it into a local file with `sqlite3 mine.db < mine.sql`. With a full API token, `GET /v1/actuators/<name>/export.sql` returns the same dump. Each export, `.sql` or CSV, holds up to a thousandth of your plan's monthly rows-read budget (Sandbox 50,000 rows, Maker 1,000,000, Agency 5,000,000). A `.sql` export that reaches it ends with a `-- Truncated` comment; for CSV, the dashboard tells you. Exports read rows, so they count against your monthly [rows-read budget](/docs/reference/limits/).
+- On the runtime API, `GET /tables` lists your tables (runtime tables excluded), and `GET /tables/<name>` returns `{ columns, rows }`. Add `?format=csv` to download CSV (the runtime prefixes text cells starting with `=`, `+`, `-` or `@` with `'`, so spreadsheets don't run them as formulas), and page with `?limit=` (default 100, at most 10,000) and `?offset=`. See [Runtime HTTP API](/docs/reference/runtime-http/#tables).
 
 ```bash
 curl 'localhost:8787/tables/bookings?format=csv' -o bookings.csv
