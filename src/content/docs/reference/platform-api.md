@@ -218,7 +218,7 @@ Which fields are secret is decided over every version the actuator has had: a fi
 | `400` | The body isn't JSON. The message gives the line and column, not the text around the error |
 | `400` | The configuration has a `__proto__` key anywhere, holds more than 5,000 values, or its schemas declare more than 500 secret fields |
 | `404` | No such actuator (`NOT_FOUND`) |
-| `409` | Another save, deploy or rollback changed the configuration while this one was saving it: `The config changed while this request was saving it (another save, deploy or rollback). Load it again and retry.` Nothing was written |
+| `409` | Another save, deploy or rollback changed the configuration while this one was saving it: `The config changed while this request was saving it (another save, deploy or rollback). Load it again and retry.` The body also has `"code": "CONFIG_CHANGED"` and `"retryable": true`. Nothing was written |
 
 ## Alerts
 
