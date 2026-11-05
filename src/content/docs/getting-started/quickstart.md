@@ -3,7 +3,7 @@ title: Quickstart
 description: Create an actuator, run it locally, watch it sleep and wake, and deploy it.
 ---
 
-You need Node.js 22 or later. Five minutes, no account until the last step.
+You need Node.js 22 or later. This takes five minutes, and you don't need an account until the last step.
 
 ## 1. Create a project
 
@@ -78,7 +78,7 @@ To start from a template instead, pass its name: `npm create actuate my-bot -- -
 npx actuate dev
 ```
 
-`actuate dev` lints the file, bundles it, and runs it on a local `workerd` with a real SQLite-backed Durable Object at `http://localhost:8787`. It rebuilds when you save. Messages and payment links are printed to the terminal instead of being sent. It also applies the hosted platform's [guards](/docs/reference/cli/#guards-in-actuate-dev) for your plan (the free Sandbox until you log in), so code that would fail once deployed fails here first.
+`actuate dev` lints the file, bundles it, and runs it on a local `workerd` with a real SQLite-backed Durable Object at `http://localhost:8787`. It rebuilds when you save. It prints messages and payment links to the terminal instead of sending them. It also applies the hosted platform's [guards](/docs/reference/cli/#guards-in-actuate-dev) for your plan (the free Sandbox until you log in), so code that would fail once deployed fails here first.
 
 ## 3. Start a run
 
@@ -105,7 +105,7 @@ Logs: actuate logs run_01a1a2e8442f42a93c45c688b5b1 --local
 
 `WAITING` means the run reached `ctx.step.sleep` and hibernated. The `dev` terminal shows `Hello, Aina!`. The second line is what the run has cost so far: one pass, and the rows it wrote and read in its SQLite database, journal included. Add `--json` for the run record, as the [runtime HTTP API](/docs/reference/runtime-http/#the-run-record) returns it.
 
-Input is validated before any code runs. Try `npx actuate run '{"name":""}' --local`:
+Actuate validates the input before any code runs. Try `npx actuate run '{"name":""}' --local`:
 
 ```text
 ✗ 400: Invalid input
@@ -184,7 +184,7 @@ npx actuate deploy
 
 New tokens are **Agent** tokens by default, which can only start and read runs; choose **Full** for the CLI. `actuate login` checks the token and refuses an Agent token.
 
-Before it uploads anything, `deploy` runs [`actuate check`](/docs/reference/cli/#actuate-check) and the platform's [deploy checks](/docs/reference/cli/#the-deploy-checks) for your plan, and stops on errors: a refused deploy would still count against your monthly deploy budget. Then it bundles `actuator.ts`, sends `actuate.config.json` as the configuration, and prints the actuator's webhook, MCP, OpenAPI and dashboard URLs. To see what a deploy would send, and run the checks without deploying, use `npx actuate deploy --dry-run`. If something doesn't work, `npx actuate doctor` checks Node, the project, providers and your login.
+Before it uploads anything, `deploy` runs [`actuate check`](/docs/reference/cli/#actuate-check) and the platform's [deploy checks](/docs/reference/cli/#the-deploy-checks) for your plan, and stops on errors, because a refused deploy would still count against your monthly deploy budget. Then it bundles `actuator.ts`, sends `actuate.config.json` as the configuration, and prints the actuator's webhook, MCP, OpenAPI and dashboard URLs. To see what a deploy would send, and run the checks without deploying, use `npx actuate deploy --dry-run`. If something doesn't work, `npx actuate doctor` checks Node, the project, providers and your login.
 
 The free Sandbox plan deploys this `hello` actuator as it is. Actuators that declare `messaging`, `payment` or `llm` need the Maker plan; on Sandbox, the deploy checks stop them with `The Sandbox plan cannot use messaging. Upgrade to Maker to use providers.`
 
@@ -197,6 +197,6 @@ npx actuate logs
 
 ## Next
 
-- [Your first actuator](/docs/getting-started/first-actuator/): payments, events and reminders.
-- [Steps and replay](/docs/concepts/steps-and-replay/): the one rule you need to know.
-- [Write efficient actuators](/docs/guides/best-practices/): patterns that save limits, and how to test before you deploy.
+- [Your first actuator](/docs/getting-started/first-actuator/) adds payments, events and reminders.
+- [Steps and replay](/docs/concepts/steps-and-replay/) explains the one rule you need to know.
+- [Write efficient actuators](/docs/guides/best-practices/) covers patterns that save limits, and how to test before you deploy.

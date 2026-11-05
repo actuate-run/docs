@@ -3,9 +3,9 @@ title: Your first actuator
 description: Build a deposit-booking bot that sends a payment link, waits for the payment, and reminds the customer if it does not arrive.
 ---
 
-This page walks through a real actuator: a clinic takes a booking, sends the customer a payment link for a deposit, and waits. If the payment webhook arrives, the booking is confirmed. If it does not arrive in time, the customer gets one reminder.
+This page walks through a real actuator. A clinic takes a booking, sends the customer a payment link for a deposit, and waits. If the payment webhook arrives, the actuator confirms the booking. If it does not arrive in time, the customer gets one reminder.
 
-It uses every core primitive: configuration, validated input, the database, two [capabilities](/docs/concepts/capabilities/), memoized steps and an event wait with a timeout.
+It uses every core part of the SDK: configuration, validated input, the database, two [capabilities](/docs/concepts/capabilities/), memoized steps and an event wait with a timeout.
 
 ## The whole file
 
@@ -75,7 +75,7 @@ export default defineActuator({
 
 `ConfigSchema` is what the operator sets once: the business name, the deposit and the reminder delay. Every field has a default, so the actuator runs with an empty configuration. Locally, configuration comes from `actuate.config.json`; on the platform the dashboard renders this schema as a form.
 
-`InputSchema` is the payload of one run. It arrives by API, webhook, cron or MCP tool call and is validated before any of your code runs, so `run` never sees a malformed phone number.
+`InputSchema` is the payload of one run. It arrives by API, webhook, cron or MCP tool call, and Actuate validates it before any of your code runs, so `run` never sees a malformed phone number.
 
 ### Capabilities
 
@@ -83,11 +83,11 @@ export default defineActuator({
 
 ### The database
 
-`ctx.db.migrate` creates the `bookings` table the first time any run reaches it and does nothing afterwards, so it is safe at the top of `run`. The insert is a parameterised query inside a step, so it happens once even though `run` is replayed. See [Database](/docs/concepts/database/).
+`ctx.db.migrate` creates the `bookings` table the first time any run reaches it and does nothing afterwards, so it is safe at the top of `run`. The insert is a parameterised query inside a step, so it happens once even though the runtime replays `run`. See [Database](/docs/concepts/database/).
 
 ### Steps
 
-`run` is replayed from the top every time the run wakes. Each `ctx.step.do` writes its result to the run's journal, and on replay it returns that result without calling the function again. That is why the booking is inserted once and the payment link is created and sent once, even if the run wakes many times.
+The runtime replays `run` from the top every time the run wakes. Each `ctx.step.do` writes its result to the run's journal, and on replay it returns that result without calling the function again. That is why the actuator inserts the booking once, and creates and sends the payment link once, even if the run wakes many times.
 
 Two details matter here:
 
@@ -96,20 +96,20 @@ Two details matter here:
 
 ### Waiting for the payment
 
-`waitForEvent` suspends the run until an event with the key `payment.<bookingId>` arrives. The payment provider's webhook delivers exactly that: `createBill` was given `referenceId: bookingId`, and the payment webhook surfaces as the event `payment.<referenceId>`.
+`waitForEvent` suspends the run until an event with the key `payment.<bookingId>` arrives. The payment provider's webhook delivers exactly that event. The step passed `referenceId: bookingId` to `createBill`, and the payment webhook arrives as the event `payment.<referenceId>`.
 
-While it waits nothing runs and nothing is billed. If the event does not arrive within `reminderDelay`, `waitForEvent` resolves to `null` and the run sends a reminder instead.
+While it waits, nothing runs and nothing is billed. If the event does not arrive within `reminderDelay`, `waitForEvent` resolves to `null` and the run sends a reminder instead.
 
-Check the status, not just that an event arrived. The payload is a [`PaymentEvent`](/docs/concepts/capabilities/#payment), and a failed card attempt or an expired bill arrives on the same key with `status` `"failed"` or `"expired"`. That is why the booking is confirmed only when `payment?.status === "paid"`; anything else gets the reminder. The [deposit-reminder template](/docs/guides/templates/) goes further: it waits again after the reminder and releases the slot if the deposit never comes.
+Check the status, not just that an event arrived. The payload is a [`PaymentEvent`](/docs/concepts/capabilities/#payment), and a failed card attempt or an expired bill arrives on the same key with `status` `"failed"` or `"expired"`. That is why the actuator confirms the booking only when `payment?.status === "paid"`, and anything else gets the reminder. The [deposit-reminder template](/docs/guides/templates/) goes further. It waits again after the reminder and releases the slot if the deposit never comes.
 
 The return value is the run's output, stored with the run record and returned to API and MCP callers.
 
 ## Try it locally
 
-Start from a fresh project (`npm create actuate deposit-bot`), save the file as its `actuator.ts`, and run `npx actuate dev`. Locally, messages are printed in the terminal and the payment provider is a fake whose bill URL points back at your actuator.
+Start from a fresh project (`npm create actuate deposit-bot`), save the file as its `actuator.ts`, and run `npx actuate dev`. Locally, the terminal shows messages, and the payment provider is a fake whose bill URL points back at your actuator.
 
 :::note
-If you reuse the Quickstart project instead, stop `actuate dev` and delete its `.actuate/state` folder first. Its database already applied migration 0 (`CREATE TABLE greetings`), and [migrations are tracked by index](/docs/concepts/database/#migrations), so `CREATE TABLE bookings` would be skipped and the first run would fail with `no such table: bookings`. Runs still waiting from the old code would also replay against the new file and fail.
+If you reuse the Quickstart project instead, stop `actuate dev` and delete its `.actuate/state` folder first. Its database already applied migration 0 (`CREATE TABLE greetings`), and [Actuate tracks migrations by index](/docs/concepts/database/#migrations), so `CREATE TABLE bookings` would never run and the first run would fail with `no such table: bookings`. Runs still waiting from the old code would also replay against the new file and fail.
 :::
 
 ```bash
@@ -130,11 +130,11 @@ The run is `COMPLETED` with output `{ "status": "CONFIRMED", ... }`, and `curl l
 
 ## Deploying it
 
-`actuate deploy` works as in the [Quickstart](/docs/getting-started/quickstart/#6-deploy), with two differences. This actuator declares `payment` and `messaging`, so it needs the Maker plan: the free Sandbox refuses it with `402`. And it needs providers: set your payment and messaging credentials in the dashboard under Settings → Providers before you deploy, or the deploy is refused. `actuate deploy` checks both before it uploads, and stops without using a deploy.
+`actuate deploy` works as in the [Quickstart](/docs/getting-started/quickstart/#6-deploy), with two differences. This actuator declares `payment` and `messaging`, so it needs the Maker plan, and the free Sandbox refuses it with `402`. It also needs providers. Set your payment and messaging credentials under Providers in the dashboard's Settings before you deploy, or the platform refuses the deploy. `actuate deploy` checks both before it uploads, and stops without using a deploy.
 
 ## Next
 
-- [Steps and replay](/docs/concepts/steps-and-replay/): retries, idempotency keys and the determinism rules.
-- [Sleeping and waiting](/docs/concepts/sleeping-and-waiting/): timeouts and events that arrive early.
-- [Human approvals](/docs/concepts/approvals/): add a sign-off before money moves.
-- [Write efficient actuators](/docs/guides/best-practices/): keep runs cheap, and test an actuator before you deploy it.
+- [Steps and replay](/docs/concepts/steps-and-replay/) covers retries, idempotency keys and the determinism rules.
+- [Sleeping and waiting](/docs/concepts/sleeping-and-waiting/) covers timeouts and events that arrive early.
+- [Human approvals](/docs/concepts/approvals/) shows how to add a sign-off before money moves.
+- [Write efficient actuators](/docs/guides/best-practices/) shows how to keep runs cheap, and how to test an actuator before you deploy it.
