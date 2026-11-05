@@ -207,7 +207,7 @@ To check a query, see [measuring rows](#measuring-rows).
 
 ### Keep cron schedules coarse and cheap
 
-Every cron firing is a run, even when it finds nothing to do. A schedule that fires every minute starts 43,200 runs in a 30-day month, every 15 minutes 2,880, and hourly 720. On the Sandbox (1,000 runs a month, at most one firing an hour) an hourly schedule uses most of the month's runs by itself.
+Every cron firing is a run, even when it finds nothing to do. A schedule that fires every minute starts 43,200 runs in a 30-day month, every 15 minutes 2,880, and hourly 720. On the Sandbox (at most one firing an hour), scheduled runs have their own 750 a month, enough for one hourly schedule; a second one spills into your 1,000 runs. See [how scheduled runs are counted](/docs/concepts/triggers/#cron).
 
 - Use the longest interval that works.
 - Make a run with nothing to do return after one cheap, indexed query. It then costs about what a one-step tool call does: one run, one pass and about 4 rows written.

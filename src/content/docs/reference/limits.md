@@ -35,6 +35,7 @@ The isolate's environment contains only your declared capability clients. There 
 | --- | --- | --- | --- |
 | Actuators | 2 | 15 | 50, grouped by client |
 | Runs per month | 1,000 | 100,000 | 500,000 |
+| Scheduled runs per month, apart from runs | 750 | None: they count as runs | None: they count as runs |
 | SQLite per actuator | 25 MB | 500 MB | 5 GB |
 | SQLite in total, all actuators | 50 MB | 500 MB | 5 GB, pooled |
 | Providers | `http` to declared domains only | All | All |
@@ -57,7 +58,7 @@ The isolate's environment contains only your declared capability clients. There 
 | Test alerts per day | 10 | 10 | 10 |
 | Days an earlier version runs next to the current one, per month | 100 | 1,000 | 3,000 |
 
-- **Runs** count every run, including cron runs. **Passes** count the first pass of a run and every wake-up after it. A pass that runs or waits longer than 5 seconds (on a slow API or LLM call) counts one more for every further 5 seconds, so a pass of 12 seconds counts as 3; the run page shows them next to the passes, as "+N for long passes". This counts toward the monthly budget only, not the passes per run. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included. **Outbound HTTP requests** count every `ctx.http` call. Provider calls (messaging, payment, LLM) do not count.
+- **Runs** count every run, including cron runs. On the Sandbox, a run a [cron schedule](/docs/concepts/triggers/#cron) starts counts against the month's 750 scheduled runs first, and against runs once those are used; runs started any other way never use them. **Passes** count the first pass of a run and every wake-up after it. A pass that runs or waits longer than 5 seconds (on a slow API or LLM call) counts one more for every further 5 seconds, so a pass of 12 seconds counts as 3; the run page shows them next to the passes, as "+N for long passes". This counts toward the monthly budget only, not the passes per run. **Rows written** and **rows read** count every billed SQLite row your actuators write or read, journal included. **Outbound HTTP requests** count every `ctx.http` call. Provider calls (messaging, payment, LLM) do not count.
 - The SQLite total is checked when a run starts; the per-actuator size before each run and after every statement.
 - The free Sandbox has no messaging, payment or LLM providers: it is for building and exposing MCP tools, not for sending messages or taking payments.
 - The run rate is a sliding window per account.
@@ -74,7 +75,7 @@ You can hit most of these locally first. With `@actuate/cli` 0.3 or later, `actu
 
 | Situation | What happens |
 | --- | --- |
-| Monthly runs used up | New runs are refused until the monthly reset |
+| Monthly runs used up | New runs are refused until the monthly reset. On the Sandbox, scheduled runs still start until the month's 750 scheduled runs are used too |
 | Monthly passes, rows written, rows read or HTTP requests used up (sleep loops, event storms, heavy queries, request floods) | Passes wait until the monthly reset. No run is lost |
 | One run loops forever | It fails after the plan's passes per run |
 | One pass does too much host work | A pass may run at most 1,000 database statements (each statement in a `ctx.db.batch` or `commitWithStep` counts as one), write 1,000 steps, write 20,000 rows, read 5,000,000 rows, make 50 HTTP requests, and take 30 seconds of wall time. After a pass ends, its database and provider clients stop working, even if your code is still running |

@@ -80,6 +80,13 @@ On the platform, schedules are checked when you deploy:
 - At most 3 schedules per actuator on the Sandbox and 5 on other plans.
 - The plan's shortest interval (1 hour on the Sandbox, 1 minute otherwise) applies to all of an actuator's schedules **together**. Two hourly schedules offset by 30 minutes fire every 30 minutes, so the Sandbox refuses them.
 
+Each firing is a run, counted like this:
+
+- **Sandbox:** scheduled runs have their own 750 a month, enough for one hourly schedule (at most 744 firings in a 31-day month). Past 750, further scheduled runs count against your 1,000 runs. Runs started any other way never use the 750.
+- **Maker and Agency:** scheduled runs count against runs per month, like every other run.
+
+On every plan, a scheduled run's wake-ups, rows and HTTP requests count against the monthly budgets, and its start against the run rate. When the runs a schedule can use are used up, its firings are skipped until the 1st (UTC). Settings → Plan shows **Scheduled runs** next to **Runs** on the Sandbox. See [plans](/docs/reference/limits/#plans).
+
 Locally, `actuate dev` registers the schedules. To fire one without waiting, call wrangler's test route: `curl 'localhost:8787/__scheduled?cron=0+1+*+*+*'`.
 
 ## MCP tool calls
