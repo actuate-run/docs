@@ -10,7 +10,7 @@ It uses every core primitive: configuration, validated input, the database, two 
 ## The whole file
 
 ```ts title="actuator.ts"
-import { defineActuator, z } from "@actuate/sdk";
+import { defineActuator, z, type PaymentEvent } from "@actuate/sdk";
 
 export const ConfigSchema = z.object({
   businessName: z.string().default("Klinik Pergigian Senyum"),
@@ -52,11 +52,11 @@ export default defineActuator({
       return bill.url;
     });
 
-    const paid = await ctx.step.waitForEvent("payment", {
+    const payment = await ctx.step.waitForEvent<PaymentEvent>("payment", {
       event: `payment.${bookingId}`,
       timeout: config.reminderDelay,
     });
-    if (!paid) {
+    if (payment?.status !== "paid") {
       await ctx.step.do("remind", () => ctx.messaging.send(input.phone, `Reminder: ${payUrl}`));
       return { status: "REMINDER_SENT", bookingId };
     }
@@ -99,6 +99,8 @@ Two details matter here:
 `waitForEvent` suspends the run until an event with the key `payment.<bookingId>` arrives. The payment provider's webhook delivers exactly that: `createBill` was given `referenceId: bookingId`, and the payment webhook surfaces as the event `payment.<referenceId>`.
 
 While it waits nothing runs and nothing is billed. If the event does not arrive within `reminderDelay`, `waitForEvent` resolves to `null` and the run sends a reminder instead.
+
+Check the status, not just that an event arrived. The payload is a [`PaymentEvent`](/docs/concepts/capabilities/#payment), and a failed card attempt or an expired bill arrives on the same key with `status` `"failed"` or `"expired"`. That is why the booking is confirmed only when `payment?.status === "paid"`; anything else gets the reminder. The [deposit-reminder template](/docs/guides/templates/) goes further: it waits again after the reminder and releases the slot if the deposit never comes.
 
 The return value is the run's output, stored with the run record and returned to API and MCP callers.
 

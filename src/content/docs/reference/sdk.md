@@ -95,6 +95,7 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
 | `input` | Zod schema for the payload of one run. Validated before any code runs |
 | `output` | Zod schema for the return value. The return value is validated against it, and it is published in the MCP tool and OpenAPI document. Optional |
 | `capabilities` | Capabilities this actuator uses. Undeclared ones are absent from `ctx` |
+| `optionalCapabilities` | Capabilities the actuator can do without. They are on `ctx` but `undefined` when no provider is configured, and never block a deploy. `http` cannot be optional. Optional |
 | `http.allow` | Hostnames `ctx.http` may reach: exact (`api.github.com`) or wildcard (`*.example.com`) |
 | `cron` | Cron schedules. Each firing starts a run with input `{}` |
 | `hints` | What calling the tool does, for MCP clients: [`ToolHints`](#toolhints). Optional |
