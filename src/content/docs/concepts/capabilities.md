@@ -239,3 +239,40 @@ A wildcard must sit under a domain you control: `*.example.com`, or list the exa
 On the platform, a pass may make at most 50 `ctx.http` requests, and every request counts against the plan's monthly HTTP budget (see [Limits](/docs/reference/limits/#plans)). Spread larger batches across steps that sleep, or page through them over several runs.
 
 There is no raw `fetch` in a hosted actuator; `ctx.http` is the way out.
+
+### Keys and tokens
+
+Providers keep their own credentials, but a service you call with `ctx.http` (an API key, a bot token, a Discord or Slack webhook URL) has no provider. Put its secret in `config`:
+
+```ts
+export const ConfigSchema = z.object({
+  discordWebhookUrl: z.string().url().describe("Discord webhook URL; treat it as a password"),
+});
+
+export default defineActuator({
+  name: "price_watch",
+  description: "Checks a price every hour and posts to Discord when it drops.",
+  config: ConfigSchema,
+  input: z.object({}),
+  capabilities: ["http"],
+  http: { allow: ["discord.com"] },
+  cron: ["0 * * * *"],
+  async run(ctx, _input, config) {
+    await ctx.step.do("post", () =>
+      ctx.http.fetch(config.discordWebhookUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: "Price dropped" }),
+      }),
+    );
+  },
+});
+```
+
+What protects it, and what doesn't:
+
+- On the platform, configuration is encrypted at rest. Agent (run-scoped) tokens and MCP connections cannot read it. Anyone signed in to your dashboard can see it on the actuator's **Config** tab, and a full API token can read it, both in plain text.
+- `http.allow` limits where any request can go, so a leaked value can only be sent to the hosts you listed.
+- Step results, logs and the run's output are stored and shown on the run page. Don't log a secret, return it from a step or put it in the output. A webhook URL is itself the secret, so this includes error messages that quote the URL.
+- `actuate.config.json` is not in the starter's `.gitignore`, and `actuate deploy` sends it as the configuration. Either add it to `.gitignore`, or leave secrets out of the file, set them on the **Config** tab and deploy with `--no-config` so the file doesn't replace them.
+- Self-hosted, the configuration is the `ACTUATE_CONFIG` variable. When it holds a secret, set it with `wrangler secret put ACTUATE_CONFIG` instead of under `vars`, which sit in the wrangler file in plain text (see [Self-hosting](/docs/guides/self-hosting/)).
