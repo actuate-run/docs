@@ -234,7 +234,7 @@ export const ActuatorObject = runtime.ActuatorObject;
 - Secret config values in the text and subject are replaced with `[secret]` before your notifier sees them.
 - Each message carries an `idempotencyKey` that is the same on every retry of the step. Telegram doesn't deduplicate, so a step retried after a timeout can send twice; a notifier that stores the keys it has sent can skip repeats.
 - Return `{ sent: false, reason }` for a limit you chose, such as a daily cap: the call resolves to that, the reason is logged as a warning, and the step carries on. A notifier that throws fails the step's attempt, which is then retried if the step has `retries`.
-- Without `notifyOwner`, each message is written to the run's log, and `ctx.notifyOwner` resolves to `{ sent: false, reason: "No owner notifier is configured; the message was logged." }`.
+- Without `notifyOwner`, each message is written to the run's log as an `info` line, and `ctx.notifyOwner` resolves to `{ sent: false, reason: "No owner notifier is configured; the message was logged." }`.
 
 Hosts that call `executePass` themselves pass the notifier as `owner`.
 
@@ -242,7 +242,7 @@ Hosts that call `executePass` themselves pass the notifier as `owner`.
 
 `createRuntime` also takes `config: (env) => unknown` if you want to build the configuration from something other than `ACTUATE_CONFIG`.
 
-A configuration that isn't valid JSON sets `configError` to its position only, such as `Invalid ACTUATE_CONFIG: it is not valid JSON (line 1, column 24).`, never the text around the error, because `GET /` serves `configError` to run tokens too. One the schema rejects says why, with secret values replaced.
+`configError` never carries a secret, because `GET /` serves it to run tokens too. A configuration that isn't valid JSON gives only its position (`Invalid ACTUATE_CONFIG: it is not valid JSON (line 1, column 24).`). One the schema rejects, or whose `transform` or `refine` throws, gives `Invalid configuration: <message>` with secret values replaced. If your `config(env)` throws, only the error's name is given (`Invalid configuration: config(env) threw TypeError. The error is in the worker's logs.`), and the full error goes to the worker's logs. See [describe](/docs/reference/runtime-http/#describe).
 
 ### Secret config fields
 

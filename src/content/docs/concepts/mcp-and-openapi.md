@@ -31,7 +31,7 @@ Both are generated from the actuator definition:
 | `output` | The tool's `outputSchema`, when you set one and it describes an object |
 | `hints` | The tool's [annotations](#tool-hints) |
 
-This is why `name` is restricted to lowercase letters, digits and underscores (at most 64 characters), and why `description` is required. Names starting with `actuate_` are kept for the [built-in tools](#built-in-tools): `actuate check --platform` and `actuate deploy` refuse them.
+This is why `name` is restricted to lowercase letters, digits and underscores (at most 64 characters), and why `description` is required. Names starting with `actuate_` are kept for the [built-in tools](#built-in-tools): the platform refuses to deploy them, and `actuate check --platform` and `actuate deploy` say so before you upload.
 
 Write the description and field descriptions for a model, because a model reads them to decide when and how to call the tool:
 
@@ -61,7 +61,7 @@ Besides your actuators, an endpoint has these tools:
 | Tool | What it does | Listed for |
 | --- | --- | --- |
 | `actuate_get_run` | The status and result of a run another tool started, as the original call would answer. See [what a tool call returns](/docs/guides/connect-your-agent/#what-a-tool-call-returns) | Every token |
-| `actuate_list_runs` | A tool's recent runs, newest first, with what each waiting run waits for. An agent token sees only the runs it started. See [list runs](/docs/guides/connect-your-agent/#list-runs) | Every token |
+| `actuate_list_runs` | A tool's recent runs, newest first, with what each waiting run waits for. An agent token sees only the runs it started, and may call it 30 times a minute. See [list runs](/docs/guides/connect-your-agent/#list-runs) | Every token |
 | `actuate_cancel_run` | Cancels a running or waiting run. An agent token cancels only the runs it started. See [cancel a run](/docs/guides/connect-your-agent/#cancel-a-run) | Full tokens, and agent tokens you allowed to cancel |
 
 On an endpoint with more than one actuator, each takes an `actuator` argument naming the tool whose run it is.
@@ -122,6 +122,8 @@ Errors follow the protocol:
 | Session-based request with an `MCP-Protocol-Version` header the server doesn't support | `400`, error `-32600`, with `data.supported` |
 | Unknown method | Error `-32601` (`404` for 2026-07-28 requests) |
 | Unknown tool | Error `-32602`, with status `200` |
+| A request body over 256 KiB | `413`, with `{ "error", "code": "PAYLOAD_TOO_LARGE", "retryable": false }` rather than a JSON-RPC error |
+| A request body that isn't JSON | `400`, with `{ "error", "code": "INVALID_ARGUMENTS", "retryable": false }` rather than a JSON-RPC error |
 
 Errors in a tool call itself, such as invalid arguments, a refused run or a failed run, are not protocol errors: the result has `isError: true`, a message for the model, and a JSON line with a `code` and whether to retry, also in `_meta["run.actuate/error"]`. See [tool errors](/docs/guides/connect-your-agent/#tool-errors).
 

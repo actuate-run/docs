@@ -141,7 +141,13 @@ The route needs no admin token: verification is your function's job.
 }
 ```
 
-`input` and `config` are JSON Schema generated from the Zod schemas (input side, so fields with defaults are optional). `configError` is a message when the configuration is invalid; while it is set, every run fails with a `ConfigError`. Invalid JSON is reported by position only, never quoting the text: `Invalid ACTUATE_CONFIG: it is not valid JSON (line 1, column 24).` A configuration the schema rejects gives `Invalid configuration: ...` with the reasons, secret values replaced.
+`input` and `config` are JSON Schema generated from the Zod schemas (input side, so fields with defaults are optional). `configError` is a message when the configuration is invalid; while it is set, every run fails with a `ConfigError`. Because `GET /` serves it to run tokens too, it never carries a secret:
+
+| Problem | `configError` |
+| --- | --- |
+| `ACTUATE_CONFIG` isn't JSON | `Invalid ACTUATE_CONFIG: it is not valid JSON (line 1, column 24).` Only the position, never the text around the error |
+| The schema rejects the configuration, or a `transform` or `refine` in it throws | `Invalid configuration: <message>`, with secret values replaced |
+| A custom `config(env)` throws, or the schema throws and can't be described as JSON Schema | `Invalid configuration: config(env) threw TypeError. The error is in the worker's logs.` (or `the config schema threw ...`): only the error's name. The full error goes to the worker's logs |
 
 ## Run
 

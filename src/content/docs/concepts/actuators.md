@@ -112,15 +112,38 @@ if (waiting && waiting.n >= 3) {
 
 - Call it inside `ctx.step.do`, like a provider call. Outside a step it throws, and [`actuate check`](/docs/reference/cli/#actuate-check) reports it as `no-notify-outside-step`. Each message gets an idempotency key derived from the step's (`<runId>:<stepName>:notifyOwner:<n>`), so a retried step does not send it twice.
 - `text` is 1 to 4,000 characters. `subject` is optional: one line of at most 200 characters.
-- It resolves to `{ sent: true }`, or to `{ sent: false, reason }` when the message can't go out, for example when a daily cap is reached. It doesn't throw for that, so the step carries on; the reason goes to the run's log as a warning.
+- It resolves to `{ sent: true }`, or to `{ sent: false, reason }` when the message can't go out, for example when a daily cap is reached. It doesn't throw for that, so the step carries on, and the reason goes to the run's log as a `warn` line.
 - Secret config values in the text and subject become `[secret]`.
 
 Where the message goes:
 
-- **On the platform:** the platform sends it to you. <!-- TODO(platform-notify): delivery (email to the account's address, the alert channel on Maker and Agency), the daily caps, deduplication on the idempotency key, the default subject -->
+- **On the platform:** it is emailed to your account's address and, on Maker and Agency, sent to your alert channel. See [below](#on-the-platform).
 - **Under `actuate dev`:** it is printed in the terminal, as `📣  [owner notification: <subject>]` followed by the text.
 - **In tests:** [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) records it in `t.ownerNotifications`.
-- **Self-hosted:** it goes to the `notifyOwner` you pass to `createRuntime`. Without one, the message is written to the run's log and the call resolves to `{ sent: false }`. See [Self-hosting](/docs/guides/self-hosting/#messages-to-the-owner).
+- **Self-hosted:** it goes to the `notifyOwner` you pass to `createRuntime`. Without one, the message is written to the run's log as an `info` line and the call resolves to `{ sent: false, reason }`. See [Self-hosting](/docs/guides/self-hosting/#messages-to-the-owner).
+
+### On the platform
+
+The message is emailed to your account's address, like an [alert](/docs/guides/alerts/), and on Maker and Agency also sent to your [alert channel](/docs/guides/alerts/#where-alerts-go), if you set one. Only the account owner gets it: your code chooses the text and the subject, never the recipient.
+
+```text
+Subject: refund_watch: message from your actuator
+
+3 refunds are waiting for approval.
+
+Run: run_01a19b8e7c2d4f60a1b2c3d4e5f6
+Open the run: https://app.actuate.run/actuators/refund_watch/runs/run_01a19b8e7c2d4f60a1b2c3d4e5f6
+
+—
+Sent by ctx.notifyOwner in refund_watch. Only the account owner gets these. To change or stop them, change that call in the actuator's code.
+```
+
+- The subject is the one you pass, or `<actuator>: message from your actuator`.
+- These messages are not alerts: they aren't throttled, and turning alerts off or muting the actuator doesn't stop them.
+- Their emails count with alert emails against your plan's [daily cap](/docs/guides/alerts/#daily-email-cap), and may use at most half of it, counted against every alert email sent that day, so failure alerts always have the other half. The last one emailed that day says so. Past that, until 00:00 UTC, messages aren't emailed; your alert channel still gets them. The call resolves to `{ sent: true }` when the email or the channel got the message, and to `{ sent: false, reason }` when neither did.
+- At most 10 calls per pass. Further calls in the same pass resolve to `{ sent: false, reason }`.
+- Each message's key is remembered for 48 hours, so a retried step gets the first call's answer and sends nothing. [Retrying a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) is different: its steps' messages get new keys and are sent again, as provider calls are.
+- If the email fails and nothing else got the message, the call throws, so the step's attempt fails; give the step `retries` and the retry sends it.
 
 ## Output
 

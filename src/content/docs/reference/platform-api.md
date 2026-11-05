@@ -39,7 +39,7 @@ Send tokens as `Authorization: Bearer <token>`. Create API tokens in the dashboa
 
 ## Errors
 
-When a run can't start on `/a/:id/run`, a webhook, or the API's `/run` and `/rerun` routes, the error body also has the fields an MCP [tool error](/docs/guides/connect-your-agent/#tool-errors) has, so a script can branch on them instead of on the message:
+When a run can't start, the error body also has the fields an MCP [tool error](/docs/guides/connect-your-agent/#tool-errors) has, so a script can branch on them instead of on the message. That holds on the gateway's `/a/:id/run` and webhook routes, including refusals before the actuator is reached, and on the API's run, rerun and retry routes (single and bulk):
 
 ```json
 { "error": "Rate limit: 600 runs per 60s on the Maker plan.", "code": "RATE_LIMITED", "retryable": true, "retryAfterSeconds": 4 }
@@ -47,13 +47,23 @@ When a run can't start on `/a/:id/run`, a webhook, or the API's `/run` and `/rer
 
 | Field | Meaning |
 | --- | --- |
-| `code` | `INVALID_ARGUMENTS`, `RATE_LIMITED`, `BUDGET_EXHAUSTED`, `STORAGE_FULL`, `ACTUATOR_PAUSED`, `ACCOUNT_SUSPENDED`, `NOT_FOUND` or `INTERNAL`. See [the codes](/docs/guides/connect-your-agent/#tool-errors) |
+| `code` | What went wrong (below) |
 | `retryable` | Whether the same request may succeed later, unchanged, without the owner doing anything |
-| `retryAfterSeconds` | With `RATE_LIMITED`: when there is room again. The gateway also sends it as a `Retry-After` header |
+| `retryAfterSeconds` | With `RATE_LIMITED`: when there is room again. Also sent as a `Retry-After` header |
 | `resetsAt` | With `BUDGET_EXHAUSTED`: when the monthly budget resets, in ISO 8601 |
-| `issues` | With `INVALID_ARGUMENTS`: each problem, as `{ path, field, message }`, where `path` is a JSON Pointer such as `/amount` |
+| `issues` | With `INVALID_ARGUMENTS` for input the schema rejects: each problem, as `{ path, field, message }`, where `path` is a JSON Pointer such as `/amount` |
 
-The status code is the one each route documents: `400` for invalid input, `423` for a paused actuator, `429` for rates and budgets, and so on. Other errors may carry a `code` too, such as `NOT_FOUND` for an unknown run on the gateway and `INTERNAL` for a `500`.
+| Status | `code` |
+| --- | --- |
+| `400` | `INVALID_ARGUMENTS`: the input doesn't match the schema, or, on the gateway, the body isn't JSON (the message gives the line and column) |
+| `403` | `ACCOUNT_SUSPENDED` |
+| `404` | `NOT_FOUND`: no such actuator on the gateway, or no such run to retry. On the API, an unknown actuator name, or a rerun of an unknown run, is a plain `404` |
+| `413` | `PAYLOAD_TOO_LARGE`: on the gateway, the body is over 256 KiB |
+| `423` | `ACTUATOR_PAUSED`, or `ACCOUNT_SUSPENDED` |
+| `429` | `RATE_LIMITED`, `BUDGET_EXHAUSTED` or `STORAGE_FULL` (the account's total storage) |
+| `507` | `STORAGE_FULL`: the actuator's database is over the plan's limit |
+
+Only `RATE_LIMITED` and `INTERNAL` (an unexpected `500` on the gateway) are retryable. A retry of a run that isn't `FAILED` is a plain `409`, with no code. On the gateway, `GET /a/:id/runs/:runId` answers an unknown run with `NOT_FOUND`. Other errors, such as `401` for a missing token, are `{ "error" }` alone.
 
 ## Run records
 
@@ -162,7 +172,7 @@ Retries every run that failed at or after `since` (epoch milliseconds or an ISO 
 { "version": 6 }
 ```
 
-Makes version 6's code, metadata and cron schedules current again as a **new** version (current + 1). Add `"config": { ... }` to replace the configuration at the same time; otherwise the current configuration is kept and must fit version 6's config schema. Returns:
+Makes version 6's code, metadata and cron schedules current again as a **new** version (current + 1). Add `"config": { ... }` to replace the configuration at the same time, merged with the stored [secret fields](#configuration) as a config save is; otherwise the current configuration is kept and must fit version 6's config schema. Returns:
 
 ```json
 { "id": "act_8KcN2fQ1xY7pLm3T", "name": "refund_order", "version": 9, "rolledBackTo": 6, "codeHash": "9f2c..." }
@@ -177,6 +187,34 @@ Makes version 6's code, metadata and cron schedules current again as a **new** v
 | `409` | The version is already current; a provider that version needs isn't configured; the current config doesn't fit (the response has `issues`); or another deploy landed at the same moment |
 | `422` | The version no longer passes the deploy checks (cron schedules, `http.allow`, input patterns) |
 | `429` | The plan's deploy attempts per day (UTC) or per month are used up. Failed deploys count; a rollback counts once it passes its checks |
+
+## Configuration
+
+Under `https://api.actuate.run/v1`, with a full token.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/actuators/:name/config` | The configuration, without the values of secret fields |
+| `PUT` | `/actuators/:name/config` | Replace the configuration: `{ "config": { ... } }` |
+
+`GET` returns the stored configuration with `null` in place of every [secret field](/docs/concepts/capabilities/#keys-and-tokens) that holds a value, and `secrets`, which says which secret fields are set:
+
+```json
+{
+  "config": { "region": "eu", "apiKey": null },
+  "secrets": { "apiKey": { "set": true }, "slack.botToken": { "set": false } }
+}
+```
+
+`secrets` has an entry for every secret field the config schema declares, written with dots between keys, `[]` for each element of an array and `*` for each value of a record (`webhooks[].secret`, `keys.*`), plus one for each such field that holds a value (`webhooks[0].secret`, `keys.eu`). No route returns a secret's value.
+
+`PUT` returns `{ "ok": true }`. The configuration you send is merged with the stored secrets before it is validated: a secret field you leave out or send as `null` keeps its value, `""` removes it, and a list that changed length keeps none of its secrets. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for the rules. A deploy that sends a configuration, and a [rollback](#roll-back) with `config`, merge the same way.
+
+| Status | When |
+| --- | --- |
+| `400` | The merged configuration doesn't match the config schema: `Invalid config: ...`, with `issues`. A list whose secrets were dropped is named, so you can enter them again. Messages never quote a secret value |
+| `400` | The body isn't JSON. The message gives the line and column, not the text around the error |
+| `404` | No such actuator |
 
 ## Alerts
 
@@ -257,7 +295,7 @@ Under `https://api.actuate.run/v1`, with a full token. Agent tokens can't read a
 { "id": "tok_Hn3vQ8sWk2Ze0RbY", "token": "ak_...", "scope": "run", "limits": { "runsPerHour": 200, "tools": { "refund_order": 5 } } }
 ```
 
-`GET /v1/tokens` returns rows with `id`, `name`, `scope`, `kind` (`"api"`, or `"oauth"` for an MCP connection), `oauth_client_id` and `resource` (the client and MCP URL of a connection), `created_at`, `last_used_at`, `revoked_at` and `can_cancel_runs` (`1` when an agent token may cancel its runs; it stays `0` on full tokens, which always can).
+`GET /v1/tokens` returns rows with `id`, `name`, `scope`, `kind` (`"api"`, or `"oauth"` for an MCP connection), `oauth_client_id` and `resource` (the client and MCP URL of a connection), `created_at`, `last_used_at`, `revoked_at` and `canCancelRuns` (whether the token may use `actuate_cancel_run`: always `true` for a full token).
 
 `PATCH /v1/tokens/:id` takes any of `name` (1 to 64 characters), `limits` and `canCancelRuns`, and returns the token as an agent (below).
 

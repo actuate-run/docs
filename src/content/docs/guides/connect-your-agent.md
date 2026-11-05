@@ -197,6 +197,8 @@ The sentence changes with `waitingFor`, so the model can tell the user what happ
 
 A run that is waiting before it reached any step, for example because the actuator is paused or the month's budget is spent, has no `waitingFor` or `step`, and the sentence says only that it is waiting.
 
+Secret config values never appear in a receipt or any other tool result: they are replaced with `[secret]` (see [keys and tokens](/docs/concepts/capabilities/#redaction)).
+
 `actuate_get_run` answers the same way as the original call: the output once the run is `COMPLETED`; a tool error once it is `FAILED` (`RUN_FAILED`, naming the step that failed) or `CANCELLED` (`RUN_CANCELLED`); otherwise the same receipt, worded "is still waiting".
 
 ### Tool errors
@@ -217,12 +219,12 @@ The same object is in the result's `_meta["run.actuate/error"]`, for clients tha
 | `retryAfterSeconds` | With `RATE_LIMITED`: when there is room again |
 | `resetsAt` | With `BUDGET_EXHAUSTED`: when the monthly budget resets, in ISO 8601 |
 | `step` | With `RUN_FAILED`: the step that failed |
-| `issues` | With `INVALID_ARGUMENTS`: each problem, as `{ path, message }`. `path` is a JSON Pointer into the tool's arguments, such as `/amount`; for the built-in tools it is the argument's name, such as `limit` |
+| `issues` | With `INVALID_ARGUMENTS`: each problem, as `{ path, message }`. `path` is a JSON Pointer into the arguments, such as `/amount`, or `/limit` for a built-in tool |
 
 | `code` | When | `retryable` |
 | --- | --- | --- |
 | `INVALID_ARGUMENTS` | The arguments don't match the tool's schema. Fix them and call again | `false` |
-| `RATE_LIMITED` | The plan's run rate, or the agent's own [hourly limit](/docs/concepts/agents/#limits) | `true` |
+| `RATE_LIMITED` | The plan's run rate, the agent's own [hourly limit](/docs/concepts/agents/#limits), or too many [`actuate_list_runs`](#list-runs) calls | `true` |
 | `BUDGET_EXHAUSTED` | A monthly budget of the account is used up | `false` |
 | `STORAGE_FULL` | The actuator's database, or the account's total storage, is over the plan's limit | `false` |
 | `ACTUATOR_PAUSED` | The actuator is paused | `false` |
@@ -272,7 +274,8 @@ The result is a JSON object, as text and as `structuredContent`:
 ```
 
 - An agent token, or a client that signed in, sees only the runs it started. A full token sees every run.
-- Entries have no output, error or steps: call `actuate_get_run` for those. `waitingFor` is as in the [receipt](#the-receipt). An input longer than 500 characters of JSON comes as a string of its first 500 characters, with `inputTruncated: true`.
+- Entries have no output, error or steps: call `actuate_get_run` for those. `waitingFor` is as in the [receipt](#the-receipt), on `WAITING` runs only. An input longer than 500 characters of JSON comes as a string of its first 500 characters, with `inputTruncated: true`. Secret config values in inputs are replaced with `[secret]`.
+- A token may call it 30 times a minute (a full token, 120). Past that, the call is a `RATE_LIMITED` tool error with `retryAfterSeconds`. Each call reads runs against your plan's monthly rows-read budget, so don't poll it in a tight loop.
 - Each page looks through at most the newest 1,000 runs before `before`, so a page can come back with fewer runs than `limit`, even none, and still a `nextBefore`. Keep paging until `nextBefore` is `null`.
 
 ### Cancel a run
@@ -284,12 +287,12 @@ The result is a JSON object, as text and as `structuredContent`:
 ```
 
 ```text
-Run run_01a19b8e... cancelled while waiting in step "manager-ok". Steps it already completed are not undone. {"runId":"run_01a19b8e...","status":"CANCELLED","wakeAt":null,"dashboardUrl":"https://app.actuate.run/actuators/refund_order/runs/run_01a19b8e..."}
+Run run_01a19b8e... cancelled while waiting in step "manager-ok". Steps it already completed are not undone. {"runId":"run_01a19b8e...","status":"CANCELLED","wakeAt":null,"cancelledBy":{"agent":"support-bot"},"dashboardUrl":"https://app.actuate.run/actuators/refund_order/runs/run_01a19b8e..."}
 ```
 
 - **Who has it.** A full token always has the tool. Agent tokens and clients that signed in don't, until you allow it: in **Settings → Agents**, click **Edit** on the agent and tick **Can cancel runs it started**, or set [`canCancelRuns`](/docs/reference/platform-api/#tokens) through the API. Without it the tool isn't listed, and a call to it is refused as an unknown tool. The change reaches the gateway within 30 seconds.
 - **Which runs.** An agent token cancels only runs it started that are `RUNNING` or `WAITING`; a full token, any run that is. Another agent's run, or one that already completed or failed, is a `NOT_CANCELLABLE` tool error. A run that is already cancelled answers "was already cancelled" with the receipt again, so a retried call is safe.
-- **What it does.** The run stops and never wakes. Steps it already completed, such as a message sent or a payment taken, are not undone. The run's log records `Cancelled by agent "<name>"`.
+- **What it does.** The run stops and never wakes. Steps it already completed, such as a message sent or a payment taken, are not undone. The run records who cancelled it as its error, `{ "name": "Cancelled", "message": "Cancelled by agent \"support-bot\"" }`, which the run page shows and `actuate_get_run` returns in its `RUN_CANCELLED` tool error, and the receipt names the agent in `cancelledBy`. The run's log has the same line.
 
 The agent still cannot approve, reject or answer for a person, or post events.
 

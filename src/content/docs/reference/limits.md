@@ -88,7 +88,7 @@ You can hit most of these locally first. With `@actuate/cli` 0.3 or later, `actu
 | Too many SSE sessions | Opening one more than the plan's limit is refused with `429`; use the streamable HTTP endpoint |
 | Agents approving their own gates | Run tokens (the default) can only start and read runs, and cancel the runs they started if you [allow it](/docs/concepts/agents/#cancelling-runs): they cannot approve, answer questions or post events (such as a faked `payment.<ref>`). Approval links never appear in run logs |
 | Broad outbound access | `http.allow` is validated at deploy |
-| Event spam or large payloads | At most 1,000 buffered events per actuator (oldest dropped), 64 KiB per event payload, 256 KiB per request body |
+| Event spam or large payloads | At most 1,000 buffered events per actuator (oldest dropped), 64 KiB per event payload, 256 KiB per request body (larger run starts are refused with `413`, `PAYLOAD_TOO_LARGE`) |
 | Unauthenticated endpoints called too often | Provider webhooks are limited to 120 and approval link `POST`s to 30 per minute |
 | Journals grow without bound | Settled runs, with their steps and logs, are deleted after the plan's retention period. Your tables are never touched |
 | Database growth | Each actuator's SQLite size is checked against the plan before each run and after every statement; the account's total is checked when a run starts |
@@ -96,8 +96,9 @@ You can hit most of these locally first. With `@actuate/cli` 0.3 or later, `actu
 | Deploy churn | Limited to the plan's deploys per day and per month. Every attempt counts, including deploys that fail their checks, so a loop of failing deploys stops at the daily limit. A rollback counts as a deploy |
 | One agent running a tool too often | Optional [per-token limits](/docs/concepts/agents/#limits): runs per hour overall and per tool, 1 to 100,000 each, on agent tokens and MCP connections. Calls over a limit are refused with `429` (a tool error over MCP) and start no run |
 | Bulk retries | At most 100 runs per call, each counted as a run; the batch stops when the run budget runs out |
-| Alert floods | At most one [alert](/docs/guides/alerts/#throttling) per actuator per kind per hour (6 hours for missed schedules and rejected credentials, 15 minutes for expiring waits, 5 minutes for runs that finished after waiting); the rest are counted into the next. Alert emails per day per account (above), of which run completed alerts may use half. Test alerts: one per 30 seconds, ten a day |
-| Agents reading runs | `actuate_list_runs` returns 1 to 20 runs per page (default 10), each page looking through at most the newest 1,000 runs, and inputs cut to 500 characters of JSON. Its reads count against the rows-read budget |
+| Alert floods | At most one [alert](/docs/guides/alerts/#throttling) per actuator per kind per hour (6 hours for missed schedules and rejected credentials, 15 minutes for expiring waits, 5 minutes for runs that finished after waiting); the rest are counted into the next. Alert emails per day per account (above), of which run completed alerts may use half, and `ctx.notifyOwner` messages half. Test alerts: one per 30 seconds, ten a day |
+| Agents reading runs | `actuate_list_runs` returns 1 to 20 runs per page (default 10), each page looking through at most the newest 1,000 runs, and inputs cut to 500 characters of JSON. A token may call it 30 times a minute (a full token, 120). Its reads count against the rows-read budget |
+| Messages to the owner | At most 10 `ctx.notifyOwner` calls per pass; their emails may use half of the day's alert emails. Each message is sent once per idempotency key within 48 hours |
 | MCP sign-ins | OAuth access tokens last 1 hour and refresh tokens 30 days; each refresh returns a new refresh token, and the previous one keeps working until the new one is used. Sign-in, token and revocation endpoints take 60 requests per minute per IP address, registration 20 |
 
 ## SDK and runtime limits
@@ -106,7 +107,7 @@ These are built into the open-source SDK and runtime, so they hold everywhere, i
 
 | What | Limit |
 | --- | --- |
-| Actuator `name` | `^[a-z][a-z0-9_]{0,63}$`: at most 64 characters. The deploy checks also refuse names starting with `actuate_` |
+| Actuator `name` | `^[a-z][a-z0-9_]{0,63}$`: at most 64 characters. The hosted platform also refuses names starting with `actuate_` |
 | `ctx.notifyOwner` text | 1 to 4,000 characters |
 | `ctx.notifyOwner` subject | One line, at most 200 characters |
 | Secret config values | Values shorter than 6 characters, and booleans, are not [redacted](/docs/concepts/capabilities/#keys-and-tokens) |

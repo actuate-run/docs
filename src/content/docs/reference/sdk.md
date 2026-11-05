@@ -115,7 +115,7 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
 
 | Field | Meaning |
 | --- | --- |
-| `name` | Tool name. Must match `^[a-z][a-z0-9_]{0,63}$`. The deploy checks refuse names starting with `actuate_`, which the hosted platform keeps for its own tools |
+| `name` | Tool name. Must match `^[a-z][a-z0-9_]{0,63}$`. The hosted platform refuses names starting with `actuate_`, which it keeps for its own tools, and so do the CLI's deploy checks |
 | `description` | What the actuator does. Becomes the MCP tool description; write it for a model |
 | `config` | Zod schema for operator settings. Defaults are used for anything not configured. Wrap API keys and tokens in [`secret()`](#secret). Optional |
 | `input` | Zod schema for the payload of one run. Validated before any code runs |
@@ -215,12 +215,12 @@ interface BaseContext {
 notifyOwner(text: string, options?: NotifyOwnerOptions): Promise<NotifyOwnerResult>;
 ```
 
-Sends the actuator's owner a short message, for things a person should hear about ("3 refunds have waited more than a day"); to message customers, use `ctx.messaging`. No capability to declare. See [Message the owner](/docs/concepts/actuators/#message-the-owner).
+Sends the actuator's owner a short message, for things a person should hear about ("3 refunds have waited more than a day"); to message customers, use `ctx.messaging`. No capability to declare. On the hosted platform it is emailed to the account's address, and sent to the alert channel on Maker and Agency; under `actuate dev` it is printed. See [Message the owner](/docs/concepts/actuators/#message-the-owner).
 
 - Call it inside `ctx.step.do`. Outside a step it throws `ActuatorError`, and `actuate check` reports it (`no-notify-outside-step`).
 - `text` is 1 to 4,000 characters and not only whitespace. `subject` is one line of at most 200 characters, with no line breaks or other control characters. Anything else throws `ActuatorError`.
-- Each message gets an idempotency key derived from the step's: `<runId>:<stepName>:notifyOwner:<n>`, where `n` counts this attempt's `notifyOwner` calls from 0, as for [provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). A retried step sends its messages with the same keys.
-- A message that can't go out resolves to `{ sent: false, reason }` and adds a warning to the run's log, instead of throwing.
+- Each message gets an idempotency key derived from the step's: `<runId>:<stepName>:notifyOwner:<n>`, where `n` counts this step attempt's `notifyOwner` calls from 0, as for [provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). A retried step sends its messages with the same keys. On the platform, a key is remembered for 48 hours and the message is sent once; see [Message the owner](/docs/concepts/actuators/#on-the-platform).
+- A message the notifier doesn't send, for example past a daily cap, resolves to `{ sent: false, reason }` instead of throwing, and the reason is logged as a `warn` line. With no notifier at all (self-hosted without one), the message itself is logged as an `info` line and the call resolves to `{ sent: false, reason }`.
 - Secret config values in `text` and `subject` become `[secret]` before the message is handed on (not in `@actuate/cli/testing`, which records the real text).
 
 ### NotifyOwnerOptions

@@ -87,11 +87,11 @@ curl -X PATCH https://api.actuate.run/v1/tokens/tok_5mXq2Lr0aBc9Df1G \
 
 `"limits": null` removes them. See [Platform API](/docs/reference/platform-api/#tokens).
 
-Limits count runs started by the agent. They don't limit `actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`, reads of a run, or work a run does once it has started. For limits on the work itself, see [Limits](/docs/reference/limits/).
+Limits count runs started by the agent. They don't limit `actuate_get_run`, `actuate_list_runs` (which has its [own limit](#its-own-runs)), `actuate_cancel_run`, reads of a run, or work a run does once it has started. For limits on the work itself, see [Limits](/docs/reference/limits/).
 
 ## Its own runs
 
-Over MCP, [`actuate_list_runs`](/docs/guides/connect-your-agent/#list-runs) shows an agent token, or a client that signed in, only the runs it started: runs whose `trigger.agent` is that token. Runs started by a webhook, a schedule, the dashboard or another token don't appear. A full token sees every run.
+Over MCP, [`actuate_list_runs`](/docs/guides/connect-your-agent/#list-runs) shows an agent token, or a client that signed in, only the runs it started: runs whose `trigger.agent` is that token. Runs started by a webhook, a schedule, the dashboard or another token don't appear. A full token sees every run. Each token may call it 30 times a minute (a full token, 120), because every call reads runs against your monthly rows-read budget.
 
 ## Cancelling runs
 
@@ -99,7 +99,7 @@ An agent may cancel the runs it started only if you allow it. It is off for ever
 
 - The agent then gets the [`actuate_cancel_run`](/docs/guides/connect-your-agent/#cancel-a-run) tool. Without the permission, the tool isn't in its tool list at all.
 - It can cancel only runs it started that are still running or waiting, never another agent's or anyone else's.
-- Cancelling doesn't undo steps the run already completed. The run's log records `Cancelled by agent "<name>"`.
+- Cancelling doesn't undo steps the run already completed. The run records `Cancelled by agent "<name>"` as its error, shown on its page, and in its log.
 - Full tokens can always cancel any run, so the setting applies to agent tokens and sign-ins only; sending it for a full token is `400`.
 - Changes take up to 30 seconds to reach every region. An MCP connection keeps the setting for as long as it stays connected; if the app signs in again from scratch, the new connection starts without it.
 

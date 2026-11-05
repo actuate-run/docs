@@ -25,6 +25,7 @@ Details:
 - **A spent monthly budget** (runs, passes, rows written or read, HTTP requests, or total storage) is emailed once a month, whatever your settings say, because new runs are refused and waiting runs pause until the month resets. With a messaging channel set and `paused` on, it goes there too. Schedules refused for the budget don't also send `cron_missed`.
 - **Expiring waits** are grouped: waits that time out within 15 minutes of each other come in one alert, listing up to five. When a wait times out, the run carries on as if nobody answered, so this is your last chance to answer in time. See [Human approvals and input](/docs/concepts/approvals/).
 - **Rejected credentials** are recognised conservatively: only errors from the provider's own API, with status `401`, or a `400`, `403` or (for Slack) `200` whose message says the credentials are bad. Errors about one chat or channel, such as "blocked by the user" or "chat not found", don't count.
+- **Secret config values** never appear in an alert: in the errors, step names and output an alert quotes, [secret fields'](/docs/concepts/capabilities/#keys-and-tokens) values are replaced with `[secret]`.
 
 ### Runs that finish after waiting
 
@@ -32,7 +33,7 @@ When an agent starts a run that waits, for a day or for your approval, nobody is
 
 - It is per actuator and off by default, so a busy actuator you don't care about never sends one. **Settings → Alerts** shows which actuators have it on, with links to their Settings tabs.
 - Only runs that end `COMPLETED` after waiting at least once alert: they slept, waited for an event, an approval or an answer, or retried a step. A run that finishes in its first pass already answered whoever started it, so it never alerts. Failed runs are `run_failed` alerts.
-- The alert gives the run, the agent that started it (if one did), how long it ran, and the first 500 characters of its output as JSON, with a link to the run. <!-- TODO(platform-secrets): whether secret config values are redacted from the output preview -->
+- The alert gives the run, the agent that started it (if one did), how long it ran, and the first 500 characters of its output as JSON, with a link to the run. [Secret config values](/docs/concepts/capabilities/#redaction) in the output are replaced with `[secret]` before it is cut.
 - At most one is sent per actuator every 5 minutes. Runs that finish in the meantime are counted into the next alert ("…and 3 more runs finished since …"), or, if none follows, into one alert at the end of those 5 minutes ("3 runs of refund_order that were waiting finished since …"), so a burst of results never sits unreported.
 - They may use only half of your plan's [daily alert emails](#daily-email-cap), counted against every alert email sent that day, so failures and other alerts always have the other half. Past that, they aren't emailed for the rest of the UTC day (the last one says so), but a messaging channel on Maker or Agency still gets every one.
 - Muting the actuator stops these too.
@@ -81,7 +82,7 @@ Windows are per actuator and per kind, so a failing actuator never hides an aler
 
 ### Daily email cap
 
-Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual. [Run completed](#runs-that-finish-after-waiting) alerts may use only half of the day's emails.
+Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual. [Run completed](#runs-that-finish-after-waiting) alerts may use only half of the day's emails. Messages your actuators send with [`ctx.notifyOwner`](/docs/concepts/actuators/#on-the-platform) count as alert emails too, and may also use only half.
 
 ## Where alerts go
 
@@ -108,7 +109,7 @@ The recipient is one ID or address, at most 200 characters, with no spaces. Mess
 ## Turn alerts off
 
 - **A kind, for every actuator:** untick it under **Settings → Alerts → What to alert on**.
-- **One actuator, every kind:** on the actuator's **Settings** tab, click **Mute alerts**. The monthly budget notice is account-wide and is still sent.
+- **One actuator, every kind:** on the actuator's **Settings** tab, click **Mute alerts**. The monthly budget notice is account-wide and is still sent, and so are the actuator's own `ctx.notifyOwner` messages: to stop those, change the code.
 - **Run completed, for one actuator:** untick **Email me when a run that waited finishes** on its **Settings** tab.
 
 Changes apply to the next alert.

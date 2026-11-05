@@ -131,7 +131,7 @@ Runs the actuator locally on `workerd` (through wrangler) with the same step eng
   deploy check  error  Cron "*/5 * * * *" fires more often than every 60 min. The Sandbox plan allows 3 schedules, at least 60 min apart.  (cron)
   ```
 
-  When no plan was chosen, the plan's own rules are [warnings](#which-plan-applies).
+  When no plan was chosen, the plan's own rules are [warnings](#which-plan-applies). The [`config-secret`](#the-deploy-checks) warning is printed the same way, for the committed `actuate.config.json` only.
 - When the actuator declares a capability the plan lacks and you chose the plan, warns at startup instead:
 
   ```text
@@ -317,14 +317,14 @@ actuate.config.json:1:1  warn   actuate.config.json sets the secret field apiKey
 | Rule | Checks | Needs |
 | --- | --- | --- |
 | `bundle-size` | The bundle is at most 5 MB | |
-| `name` | The name is lowercase letters, digits and underscores, at most 64 characters, and doesn't start with `actuate_`, which the hosted platform keeps for its built-in MCP tools (`actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`). Self-hosted actuators may still use the prefix | |
+| `name` | The name is lowercase letters, digits and underscores, at most 64 characters, and doesn't start with `actuate_`, which the hosted platform keeps for its built-in MCP tools (`actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`) and refuses at deploy. Self-hosted actuators may still use the prefix | |
 | `cron` | Cron syntax, the number of schedules, and how often they fire, alone and together | The plan |
 | `cron-input` | The input schema accepts `{}`, the input every cron run gets (a warning) | |
 | `http-allow` | `http.allow`: at most 20 hostnames, no IP addresses, no `actuate.run`, no wildcard over a shared zone such as `*.co.uk` or `*.workers.dev` | |
 | `input-regex` | No regex in the input schema with nested quantifiers, such as `(a+)+` (Zod's built-in formats are fine) | |
 | `plan-capability` | Every capability in `capabilities` is on the plan; optional capabilities that aren't get a warning | The plan |
 | `config` | `actuate.config.json` is valid JSON and matches the config schema. Invalid JSON is reported by line and column, never by quoting the text around the error, which could be part of a secret | |
-| `config-secret` | `actuate.config.json` sets no `secret()` field while git would commit it (a warning; checked locally only, also with `--no-config`) | |
+| `config-secret` | `actuate.config.json` sets no `secret()` field while git would commit it (a warning; checked locally only, also with `--no-config`, and once when `actuate dev` starts) | |
 | `provider-missing` | A provider is set up in the dashboard for every required capability | Login |
 | `actuator-limit` | A new actuator fits the plan's number of actuators | Login |
 | `deploy-budget` | Deploy attempts are left this month (an error when none are, a warning from 90% used) | Login |
@@ -361,7 +361,7 @@ Deploys the actuator to Actuate. It needs [`actuate login`](#actuate-login) or `
 2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it. Whitespace and syntax are minified but names are kept, so stack traces stay readable, and Zod's non-English locales are left out.
 3. Reads the actuator's metadata: name, description, capabilities, `http.allow`, cron schedules, and the input, config and output schemas as JSON Schema.
 4. Runs the [deploy checks](#the-deploy-checks), including the ones that need your account, and stops if any fails. A refused deploy would still count against your deploy budget. `--force` deploys anyway.
-5. If the deployed version already runs exactly this code, it uploads nothing and uses no deploy: it updates the configuration when `actuate.config.json` differs from the deployed one, and otherwise does nothing. Secret fields are left out of that comparison. A file that leaves every secret field out is sent only when something else changed; a file that mentions a secret field at all (a value, or `""`, `[]` or `null` to clear it) is always sent. `--force` deploys anyway. <!-- TODO(platform-secrets): the platform shows secret fields as null in GET config, and keeps a stored secret when the configuration sent leaves it out -->
+5. If the deployed version already runs exactly this code, it uploads nothing and uses no deploy: it updates the configuration when `actuate.config.json` differs from the deployed one, and otherwise does nothing. Secret fields are left out of that comparison, because the platform shows them as `null`. A file that leaves every secret field out is sent only when something else changed, and the platform keeps the stored secrets; a file that mentions a secret field at all (a value, `null`, or `""` or `[]` to clear it) is always sent. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for how the platform merges it. `--force` deploys anyway.
 6. Uploads the bundle with `actuate.config.json` as the configuration, unless you pass `--no-config`.
 7. Prints the version number, the actuator's webhook, MCP, OpenAPI and dashboard URLs, any warnings from the platform, and, when your account reports it, the deploys you have used this month.
 

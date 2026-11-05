@@ -276,7 +276,7 @@ export default defineActuator({
 
 ### Where to set the value
 
-- **On the platform:** set it on the actuator's **Config** tab, and leave it out of `actuate.config.json`. <!-- TODO(platform-secrets): how the Config tab and GET/PUT /v1/actuators/:name/config treat secret fields: masked or write-only on reads, kept when a deploy's config leaves the field out, how to clear one -->
+- **On the platform:** set it on the actuator's **Config** tab, and leave it out of `actuate.config.json`. A secret field there is a password box tagged **Secret**, saying **Set. Leave blank to keep.** or **Not set**. Its value is never shown again, there or in the API: type a new one to replace it, leave it blank to keep it, or click **Clear** to remove an optional one when you save (**Keep** undoes that).
 - **For `actuate dev`:** put it in `.dev.vars`, which the starter's `.gitignore` already excludes, as `ACTUATE_CONFIG`: a JSON object on one line. `actuate dev` merges it over `actuate.config.json` (objects key by key; anything else from `.dev.vars` wins), and its startup banner says the configuration came from both.
 
   ```bash title=".dev.vars"
@@ -285,7 +285,14 @@ export default defineActuator({
 
 - **Self-hosted:** the configuration is the `ACTUATE_CONFIG` variable. Set it with `wrangler secret put ACTUATE_CONFIG` rather than under `vars`, which sit in the wrangler file in plain text (see [Self-hosting](/docs/guides/self-hosting/)).
 
-`actuate.config.json` is committed with your code. If it sets a value for a secret field and git would commit it (the project is a git repository and the file isn't ignored), `actuate check` (with or without `--platform`) and `actuate deploy` (`--dry-run` included) warn, naming the fields:
+On the platform, a stored secret survives whatever configuration you send next, unless you change it on purpose. A configuration saved on the Config tab, with [`PUT /v1/actuators/:name/config`](/docs/reference/platform-api/#configuration), by `actuate deploy` or by a rollback that sends one:
+
+- keeps a stored secret where the field is left out or sent as `null` (what the API shows in its place);
+- replaces it where the field has a new value, and removes it where the field is `""`. Removing a required one fails validation;
+- removes it with its object when the whole object around it is left out;
+- keeps the secrets inside a list only while the list keeps its length. A list that grew or shrank keeps none of them, because they could end up on the wrong entry, and the validation error says which list's secrets to enter again.
+
+`actuate.config.json` is committed with your code. If it sets a value for a secret field and git would commit it (the project is a git repository and the file isn't ignored), `actuate check` (with or without `--platform`), `actuate deploy` (`--dry-run` included) and, once at startup, `actuate dev` warn, naming the fields:
 
 ```text
 actuate.config.json:1:1  warn   actuate.config.json sets the secret field discordWebhookUrl, and git does not ignore the file, so it would be committed. Set it in the dashboard (Config tab) and leave it out of the file: the platform keeps a stored secret when the file omits it. For `actuate dev`, put it in .dev.vars as ACTUATE_CONFIG.  (config-secret)
@@ -295,7 +302,9 @@ It is a warning, never an error. Outside a git repository nothing is said. See [
 
 ### Redaction
 
-The runtime replaces each occurrence of a secret field's value with `[secret]` in what it shows: run logs, step and run errors, step outputs and the run's output, the run records the [runtime's routes](/docs/reference/runtime-http/#secret-values) return, the approval queue and approval pages, approval messages sent to an approver, and `ctx.notifyOwner` messages. Under `actuate dev` and self-hosted, this works from the config schema and `ACTUATE_CONFIG`, with nothing to set up. <!-- TODO(platform-secrets): where the hosted platform applies it (dashboard run pages, the API, MCP results, alerts) -->
+The runtime replaces each occurrence of a secret field's value with `[secret]` in what it shows: run logs, step and run errors, step outputs and the run's output, the run records the [runtime's routes](/docs/reference/runtime-http/#secret-values) return, the approval queue and approval pages, approval messages sent to an approver, and `ctx.notifyOwner` messages. Under `actuate dev` and self-hosted, this works from the config schema and `ACTUATE_CONFIG`, with nothing to set up.
+
+On the platform it applies wherever run data is shown: run pages and the approval queue in the dashboard, the [API](/docs/reference/platform-api/), the gateway's run routes, MCP results (receipts, `actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`), approval messages, [alerts](/docs/guides/alerts/) and `ctx.notifyOwner` messages. The platform redacts the values of every field any version of the actuator marked secret, so a field stays redacted after a later version drops `secret()`, including in runs pinned to the earlier version. A secret field's default value is redacted too.
 
 What is stored for replay keeps the real value, so a step that returned the key still returns it when the run replays. Redaction has limits:
 
@@ -310,5 +319,5 @@ So treat redaction as a safety net. Don't log a secret, return it from a step, w
 
 ### What else protects it
 
-- On the platform, configuration is encrypted at rest. Agent (run-scoped) tokens and MCP connections cannot read it. Anyone signed in to your dashboard, and a full API token, can read the configuration's other fields in plain text. <!-- TODO(platform-secrets): whether the dashboard and a full token can read secret fields back -->
+- On the platform, configuration is encrypted at rest. Agent (run-scoped) tokens and MCP connections cannot read it. Anyone signed in to your dashboard, and a full API token, can read the other fields in plain text, but never a secret field's value: there is no way to show it again, so keep your own copy where you keep keys.
 - `http.allow` limits where any request can go, so a leaked value can only be sent to the hosts you listed.
