@@ -55,9 +55,9 @@ When a run can't start, the error body also has the fields an MCP [tool error](/
 
 | Status | `code` |
 | --- | --- |
-| `400` | `INVALID_ARGUMENTS`: the input doesn't match the schema, or, on the gateway, the body isn't JSON (the message gives the line and column) |
+| `400` | `INVALID_ARGUMENTS`: the input doesn't match the schema, or the body isn't JSON (the message gives the line and column, never the text around the error) |
 | `403` | `ACCOUNT_SUSPENDED` |
-| `404` | `NOT_FOUND`: no such actuator on the gateway, or no such run to retry. On the API, an unknown actuator name, or a rerun of an unknown run, is a plain `404` |
+| `404` | `NOT_FOUND`: no such actuator, or no such run to retry or run again |
 | `413` | `PAYLOAD_TOO_LARGE`: on the gateway, the body is over 256 KiB |
 | `423` | `ACTUATOR_PAUSED`, or `ACCOUNT_SUSPENDED` |
 | `429` | `RATE_LIMITED`, `BUDGET_EXHAUSTED` or `STORAGE_FULL` (the account's total storage) |
@@ -208,13 +208,17 @@ Under `https://api.actuate.run/v1`, with a full token.
 
 `secrets` has an entry for every secret field the config schema declares, written with dots between keys, `[]` for each element of an array and `*` for each value of a record (`webhooks[].secret`, `keys.*`), plus one for each such field that holds a value (`webhooks[0].secret`, `keys.eu`). No route returns a secret's value.
 
-`PUT` returns `{ "ok": true }`. The configuration you send is merged with the stored secrets before it is validated: a secret field you leave out or send as `null` keeps its value, `""` removes it, and a list that changed length keeps none of its secrets. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for the rules. A deploy that sends a configuration, and a [rollback](#roll-back) with `config`, merge the same way.
+`PUT` returns `{ "ok": true }`, plus `warnings` when the save dropped secrets: `["Secrets in a list whose length changed are not kept (webhooks): enter them again."]`. The configuration you send is merged with the stored secrets before it is validated: a secret field you leave out or send as `null` keeps its value, `""` removes it, and a list that changed length keeps none of its secrets. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for the rules. A deploy that sends a configuration, and a [rollback](#roll-back) with `config`, merge the same way and return the same `warnings`.
+
+Which fields are secret is decided over every version the actuator has had: a field any version marked secret stays masked and kept, even after you roll back to a version where it was a plain field. Secret fields' default values are left out of the actuator's metadata that `GET /v1/actuators/:name` returns.
 
 | Status | When |
 | --- | --- |
 | `400` | The merged configuration doesn't match the config schema: `Invalid config: ...`, with `issues`. A list whose secrets were dropped is named, so you can enter them again. Messages never quote a secret value |
 | `400` | The body isn't JSON. The message gives the line and column, not the text around the error |
-| `404` | No such actuator |
+| `400` | The configuration has a `__proto__` key anywhere, holds more than 5,000 values, or its schemas declare more than 500 secret fields |
+| `404` | No such actuator (`NOT_FOUND`) |
+| `409` | Another save, deploy or rollback changed the configuration while this one was saving it: `The config changed while this request was saving it (another save, deploy or rollback). Load it again and retry.` Nothing was written |
 
 ## Alerts
 

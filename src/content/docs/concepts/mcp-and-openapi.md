@@ -122,8 +122,8 @@ Errors follow the protocol:
 | Session-based request with an `MCP-Protocol-Version` header the server doesn't support | `400`, error `-32600`, with `data.supported` |
 | Unknown method | Error `-32601` (`404` for 2026-07-28 requests) |
 | Unknown tool | Error `-32602`, with status `200` |
-| A request body over 256 KiB | `413`, with `{ "error", "code": "PAYLOAD_TOO_LARGE", "retryable": false }` rather than a JSON-RPC error |
-| A request body that isn't JSON | `400`, with `{ "error", "code": "INVALID_ARGUMENTS", "retryable": false }` rather than a JSON-RPC error |
+| A request body that isn't JSON | `400`, JSON-RPC error `-32700` (parse error), giving the line and column |
+| A request body over 256 KiB | `413`, error `-32600` |
 
 Errors in a tool call itself, such as invalid arguments, a refused run or a failed run, are not protocol errors: the result has `isError: true`, a message for the model, and a JSON line with a `code` and whether to retry, also in `_meta["run.actuate/error"]`. See [tool errors](/docs/guides/connect-your-agent/#tool-errors).
 

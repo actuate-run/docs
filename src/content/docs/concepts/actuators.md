@@ -141,8 +141,8 @@ Sent by ctx.notifyOwner in refund_watch. Only the account owner gets these. To c
 - The subject is the one you pass, or `<actuator>: message from your actuator`.
 - These messages are not alerts: they aren't throttled, and turning alerts off or muting the actuator doesn't stop them.
 - Their emails count with alert emails against your plan's [daily cap](/docs/guides/alerts/#daily-email-cap), and may use at most half of it, counted against every alert email sent that day, so failure alerts always have the other half. The last one emailed that day says so. Past that, until 00:00 UTC, messages aren't emailed; your alert channel still gets them. The call resolves to `{ sent: true }` when the email or the channel got the message, and to `{ sent: false, reason }` when neither did.
-- At most 10 calls per pass. Further calls in the same pass resolve to `{ sent: false, reason }`.
-- Each message's key is remembered for 48 hours, so a retried step gets the first call's answer and sends nothing. [Retrying a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) is different: its steps' messages get new keys and are sent again, as provider calls are.
+- At most 10 messages are sent per pass. Further calls in the same pass resolve to `{ sent: false, reason }`. Calls answered from the deduplication below don't count.
+- Each message's key is remembered for 48 hours, so a retried step gets the first call's answer and sends nothing. If the platform restarted while sending, the key can be sent again after 2 minutes. [Retrying a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) is different: its steps' messages get new keys and are sent again, as provider calls are.
 - If the email fails and nothing else got the message, the call throws, so the step's attempt fails; give the step `retries` and the retry sends it.
 
 ## Output
