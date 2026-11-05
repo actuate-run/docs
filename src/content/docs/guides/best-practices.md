@@ -499,7 +499,7 @@ const plan = t.query("EXPLAIN QUERY PLAN SELECT status FROM outgoing WHERE run_i
 assert.ok(!plan.some((row) => String(row.detail).startsWith("SCAN")));
 ```
 
-After you deploy, **Settings → Plan** in the dashboard shows the month's usage for your account: runs, wake-ups, database writes and reads, HTTP requests and storage. The meters cover every actuator and update in batches, so compare them before and after a known number of runs rather than per run.
+After you deploy, **Settings → Plan** in the dashboard shows the month's usage for your account: runs, scheduled runs (on the Sandbox), wake-ups, database writes and reads, HTTP requests and storage. The meters cover every actuator and update in batches, so compare them before and after a known number of runs rather than per run.
 
 ## Instructions for your coding agent
 

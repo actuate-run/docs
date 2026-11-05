@@ -75,7 +75,7 @@ You can hit most of these locally first. With `@actuate/cli` 0.3 or later, `actu
 
 | Situation | What happens |
 | --- | --- |
-| Monthly runs used up | New runs are refused until the monthly reset. On the Sandbox, scheduled runs still start until the month's 750 scheduled runs are used too |
+| Monthly runs used up | New runs are refused and waiting runs pause until the monthly reset. No run is lost. On the Sandbox, runs your schedules start keep starting and running until the month's 750 scheduled runs are used too |
 | Monthly passes, rows written, rows read or HTTP requests used up (sleep loops, event storms, heavy queries, request floods) | Passes wait until the monthly reset. No run is lost |
 | One run loops forever | It fails after the plan's passes per run |
 | One pass does too much host work | A pass may run at most 1,000 database statements (each statement in a `ctx.db.batch` or `commitWithStep` counts as one), write 1,000 steps, write 20,000 rows, read 5,000,000 rows, make 50 HTTP requests, and take 30 seconds of wall time. After a pass ends, its database and provider clients stop working, even if your code is still running |

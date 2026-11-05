@@ -82,7 +82,7 @@ On the platform, schedules are checked when you deploy:
 
 Each firing is a run, counted like this:
 
-- **Sandbox:** scheduled runs have their own 750 a month, enough for one hourly schedule (at most 744 firings in a 31-day month). Past 750, further scheduled runs count against your 1,000 runs. Runs started any other way never use the 750.
+- **Sandbox:** scheduled runs have their own 750 a month, enough for one hourly schedule (at most 744 firings in a 31-day month). Past 750, further scheduled runs count against your 1,000 runs. Runs started any other way never use the 750. Once your 1,000 runs are used up, other waiting runs pause until the reset, but runs your schedules started keep going while scheduled runs remain.
 - **Maker and Agency:** scheduled runs count against runs per month, like every other run.
 
 On every plan, a scheduled run's wake-ups, rows and HTTP requests count against the monthly budgets, and its start against the run rate. When the runs a schedule can use are used up, its firings are skipped until the 1st (UTC). Settings → Plan shows **Scheduled runs** next to **Runs** on the Sandbox. See [plans](/docs/reference/limits/#plans).
