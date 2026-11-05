@@ -98,8 +98,48 @@ What the model can and cannot do with this tool:
 - It can choose the order, the amount and one of four reasons. The schema rejects anything else before the actuator wakes.
 - It cannot refund more than the order's paid amount or `maxRefundRM`, because those checks are in code.
 - It cannot skip the approval. Above the threshold the run waits for a manager, and a timeout counts as a rejection.
-- It cannot refund twice for one retried call. A call retried with the same `_meta` idempotency key gets the first run's receipt, and the `refund` step runs once per run. To stop separate calls for the same order, check for an existing refund row in a step before paying.
+- It cannot refund twice for one retried call. A call retried with the same `_meta` idempotency key gets the first run's receipt, and the `refund` step runs once per run. A retry without a key is a new run, though, so see [one action per order](#one-action-per-order) for stopping separate calls.
 - Every outcome leaves a row in `refunds` that you can browse and export.
+
+## One action per order
+
+An idempotency key only helps when the client sends one. Many chat clients don't, and a stateless (2026-07-28) MCP client then starts a new run for every retry. Each run has its own run ID, so the provider idempotency keys Actuate derives differ too. Two runs for the same order can both refund unless your code stops the second one.
+
+Claim the thing you act on before the first wait, in a step that does only database work:
+
+```ts
+const claim = await ctx.step.do("claim-order", async ({ now }) => {
+  const done = await ctx.db.first("SELECT 1 FROM refunds WHERE order_id = ? AND status = 'REFUNDED'", [orderId]);
+  if (done) return "refunded";
+  const busy = await ctx.db.first(
+    "SELECT 1 FROM refunds WHERE order_id = ? AND status = 'PENDING' AND run_id != ? AND at > ?",
+    [orderId, ctx.runId, now - staleAfter],
+  );
+  if (busy) return "busy";
+  ctx.db.commitWithStep([ctx.db.statement`INSERT INTO refunds (order_id, run_id, status, at) VALUES (${orderId}, ${ctx.runId}, 'PENDING', ${now})`]);
+  return "claimed";
+});
+```
+
+Because the step makes no network calls, no other run can claim the same order between the check and the insert. A second call then returns at once instead of waiting for its own approval. Turn the claim into the outcome when the run ends (refunded, declined, or failed so the order can be tried again), and treat a claim older than your longest wait as stale, so a run cancelled while it waited doesn't block the order forever. The [`refund-order` template](/docs/guides/templates/) does all of this.
+
+A checking step placed before an approval wait is not enough on its own, because both runs pass it before either one pays.
+
+On the hosted platform, a key in `_meta` deduplicates for as long as the platform keeps the run it started: 7 days on Sandbox, 30 on Maker and 90 on Agency. A run still waiting is never deleted.
+
+## Let the caller preview
+
+Actuate can't dry-run a tool for you, because it can't know what your code will do without running it. If a preview helps the model or the person approving, add it to your input:
+
+```ts
+input: z.object({
+  orderId: z.string(),
+  amount: z.number().positive().max(500),
+  preview: z.boolean().default(false).describe("Return what would happen without refunding"),
+}),
+```
+
+In `run`, compute the capped amount and whether approval is needed, and return that plan before the first side effect when `preview` is true. Say in the description that a preview call changes nothing.
 
 ## Designing tools for agents
 
