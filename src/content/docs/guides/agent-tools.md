@@ -5,9 +5,7 @@ description: Let the model decide that something should happen, and let an actua
 
 Language models are good at understanding intent and bad at deterministic, multi-step execution. An agent that runs a refund itself (looks up the order, works out the amount, calls the payment API, records it) can hallucinate a parameter, call the API twice on a retry, or be talked into skipping a check.
 
-The fix is to split the job:
-
-> **The LLM decides *that*. The actuator decides *how*.**
+The fix is to split the job. The model decides *that* something should happen, and an actuator decides *how* it happens.
 
 The model decides that a customer deserves a refund. An actuator, exposed to the model as an [MCP tool](/docs/concepts/mcp-and-openapi/), carries it out with the amount cap, the approval gate and the audit row enforced in code the model cannot change.
 
@@ -15,9 +13,9 @@ The model decides that a customer deserves a refund. An actuator, exposed to the
 
 | Risk with an agent acting directly | What the actuator enforces |
 | --- | --- |
-| Hallucinated or malformed arguments | The InputSchema is the tool's argument schema, and bad arguments are rejected before any code runs |
+| Hallucinated or malformed arguments | The InputSchema is the tool's argument schema, and the gateway rejects bad arguments before any code runs |
 | Acting twice when the agent or network retries | A retried tool call with the same [idempotency key](/docs/concepts/mcp-and-openapi/#idempotent-receipts) returns the first run's receipt; each `ctx.step.do` runs once per run |
-| Exceeding a limit | Caps live in `config` and in code, not in a prompt. On the platform you can also cap how often each agent may run a tool: [agent limits](/docs/concepts/agents/#limits) |
+| Exceeding a limit | Caps live in `config` and in code, not in a prompt. On the platform you can also cap how often each agent may run a tool, with [agent limits](/docs/concepts/agents/#limits) |
 | Acting without sign-off | `ctx.step.waitForApproval` pauses until a person clicks |
 | No record of what happened | Every run has a step journal, and you write audit rows to SQLite |
 | Leaked keys | Credentials stay in providers; the model never sees them |
@@ -99,16 +97,16 @@ What the model can and cannot do with this tool:
 
 - It can choose the order, the amount and one of four reasons. The schema rejects anything else before the actuator wakes.
 - It cannot refund more than the order's paid amount or `maxRefundRM`, because those checks are in code.
-- It cannot skip the approval: above the threshold the run waits for a manager, and a timeout counts as a rejection.
-- It cannot refund twice for one retried call: a call retried with the same `_meta` idempotency key gets the first run's receipt, and the `refund` step runs once per run. To stop separate calls for the same order, check for an existing refund row in a step before paying.
+- It cannot skip the approval. Above the threshold the run waits for a manager, and a timeout counts as a rejection.
+- It cannot refund twice for one retried call. A call retried with the same `_meta` idempotency key gets the first run's receipt, and the `refund` step runs once per run. To stop separate calls for the same order, check for an existing refund row in a step before paying.
 - Every outcome leaves a row in `refunds` that you can browse and export.
 
 ## Designing tools for agents
 
 - **One actuator, one job.** "Refund an order" is a good tool. "Manage orders" is not.
 - **Write `description` for the model.** Say what it does, what it returns, and when not to call it. Use `.describe()` on every input field.
-- **Push rules into the schema.** Enums over free strings, `min`/`max` on numbers, `regex` on phone numbers and IDs. Rules the schema cannot express go in `run` before the first side effect.
+- **Push rules into the schema.** Use enums over free strings, `min`/`max` on numbers, and `regex` on phone numbers and IDs. Rules the schema cannot express go in `run` before the first side effect.
 - **Look up, don't trust.** Take IDs from the model and load amounts, addresses and account details from your database or provider inside a step.
-- **Return a small, typed result.** Set `output`, so the model gets a predictable shape and the run fails loudly if your code returns something else.
-- **Gate what is irreversible.** Money, messages to customers, deletions: put a `waitForApproval` in front, at least above a threshold.
+- **Return a small, typed result.** Set `output`, so the model gets a predictable shape and the run fails if your code returns something else.
+- **Gate what is irreversible.** For money, messages to customers and deletions, put a `waitForApproval` in front, at least above a threshold.
 - **Say when a tool can wait.** If a call may pause for a person or a payment, say so in the description so the model doesn't assume an immediate result.

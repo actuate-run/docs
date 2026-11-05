@@ -32,11 +32,20 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
   <LinkCard title="MCP and OpenAPI" href="/docs/concepts/mcp-and-openapi/" description="Every actuator is a tool with validated arguments." />
 </CardGrid>
 
+## Guides
+
+<CardGrid>
+  <LinkCard title="Connect your agent" href="/docs/guides/connect-your-agent/" description="Add an actuator to Claude, ChatGPT, Cursor or your own agent." />
+  <LinkCard title="Deterministic agent tools" href="/docs/guides/agent-tools/" description="Let the model decide what should happen and the actuator decide how." />
+  <LinkCard title="Alerts" href="/docs/guides/alerts/" description="Get an email when a run fails, or when a run that waited finishes." />
+  <LinkCard title="Fix, retry and roll back" href="/docs/guides/retry-and-rollback/" description="Deploy a fix and retry failed runs from the step that broke." />
+</CardGrid>
+
 ## Reference
 
 <CardGrid>
   <LinkCard title="SDK API" href="/docs/reference/sdk/" description="Every type and function in @actuate/sdk." />
-  <LinkCard title="CLI" href="/docs/reference/cli/" description="init, dev, check, deploy, run, logs, login." />
-  <LinkCard title="Runtime HTTP API" href="/docs/reference/runtime-http/" description="The routes of the open-source runtime." />
+  <LinkCard title="CLI" href="/docs/reference/cli/" description="Every actuate command and its options." />
+  <LinkCard title="Platform API" href="/docs/reference/platform-api/" description="The hosted platform's routes for runs, alerts, agents and tokens." />
   <LinkCard title="Limits" href="/docs/reference/limits/" description="CPU, outbound HTTP, plan limits and guards." />
 </CardGrid>

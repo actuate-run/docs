@@ -3,9 +3,9 @@ title: Runtime HTTP API
 description: Every route of the open-source runtime served by actuate dev and self-hosted workers, with auth rules and environment variables.
 ---
 
-The open-source runtime (`@actuate/runtime/worker`) serves one actuator over HTTP. This is the API you talk to under `actuate dev` at `http://localhost:8787` and when you [self-host](/docs/guides/self-hosting/). The hosted platform puts its own gateway in front, with MCP, OpenAPI and account authentication; its routes are in the [Platform API](/docs/reference/platform-api/) reference.
+The open-source runtime (`@actuate/runtime/worker`) serves one actuator over HTTP. This is the API you talk to under `actuate dev` at `http://localhost:8787` and when you [self-host](/docs/guides/self-hosting/). The hosted platform puts its own gateway in front, with MCP, OpenAPI and account authentication. The [Platform API](/docs/reference/platform-api/) reference covers its routes.
 
-All responses are JSON unless noted. Trailing slashes are ignored.
+All responses are JSON unless this page says otherwise. The runtime ignores trailing slashes.
 
 ## Authentication
 
@@ -13,15 +13,15 @@ Routes are **public**, **run** or **admin**.
 
 - **Admin** routes require `Authorization: Bearer <ACTUATE_TOKEN>`, the owner's token, and return `401 {"error":"unauthorized"}` without it.
 - **Run** routes (describe the actuator, start a run, read one run) also accept `Authorization: Bearer <ACTUATE_RUN_TOKEN>`. That is the token to give your agent. Every other route answers it with `403`, so an agent can't approve its own run, answer an input step, fetch approval links, post events, cancel runs or read tables.
-- **Public** routes never need a token. `/webhook` needs its own secret, and `/approve` is protected by the signed token in the link.
+- **Public** routes never need a token. `/webhook` needs its own secret, and the signed token in the link protects `/approve`.
 
 :::caution[Never give your agent ACTUATE_TOKEN]
 `ACTUATE_TOKEN` can approve any waiting step and post any event, including `payment.*`. An agent holding it can get past every approval and payment wait you wrote. Give the agent `ACTUATE_RUN_TOKEN`, or only the `/webhook` secret if it never needs to read runs.
 :::
 
-The runtime **fails closed**. If neither `ACTUATE_TOKEN` nor `ACTUATE_RUN_TOKEN` is set, every admin and run route answers `503 {"error":"Set ACTUATE_TOKEN to use the admin API."}`. If `ACTUATE_WEBHOOK_SECRET` is not set, `/webhook` answers `503`. Tokens and secrets are compared in constant time.
+The runtime **fails closed**. If neither `ACTUATE_TOKEN` nor `ACTUATE_RUN_TOKEN` is set, every admin and run route answers `503 {"error":"Set ACTUATE_TOKEN to use the admin API."}`. If `ACTUATE_WEBHOOK_SECRET` is not set, `/webhook` answers `503`. The runtime compares tokens and secrets in constant time.
 
-The only exception is `ACTUATE_DEV=1`, which `actuate dev` sets for you: routes whose secret is unset are then open, for local use, but only to requests sent to `localhost` (or `127.0.0.1`, `[::1]`) that a web page didn't make. A request through another host, such as a tunnel or a DNS-rebinding page, or one a browser marks cross-site (`Sec-Fetch-Site`) or cross-origin (`Origin`), gets `403`. That stops a website you have open from starting runs with the real providers in your `.dev.vars`. To use these routes through a tunnel, set `ACTUATE_TOKEN` (or `ACTUATE_WEBHOOK_SECRET`) in `.dev.vars`. Never set `ACTUATE_DEV` in production.
+The only exception is `ACTUATE_DEV=1`, which `actuate dev` sets for you. Routes whose secret is unset are then open for local use, but only to requests sent to `localhost` (or `127.0.0.1`, `[::1]`) that a web page didn't make. A request through another host, such as a tunnel or a DNS-rebinding page, or one a browser marks cross-site (`Sec-Fetch-Site`) or cross-origin (`Origin`), gets `403`. That stops a website you have open from starting runs with the real providers in your `.dev.vars`. To use these routes through a tunnel, set `ACTUATE_TOKEN` (or `ACTUATE_WEBHOOK_SECRET`) in `.dev.vars`. Never set `ACTUATE_DEV` in production.
 
 ## Routes
 
@@ -47,9 +47,9 @@ The only exception is `ACTUATE_DEV=1`, which `actuate dev` sets for you: routes 
 | `GET` | [`/tables`](#tables) | admin | List your tables |
 | `GET` | [`/tables/:name`](#tables) | admin | Read a table as JSON or CSV |
 
-Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500 {"error":"<message>"}`.
+Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500 {"error":"<message>"}`, with secret config values replaced.
 
-There is no `/mcp` route: the MCP endpoint is served by the hosted platform's gateway, not by this runtime. A self-hosted actuator is called over these routes, usually `POST /run` with `ACTUATE_RUN_TOKEN`.
+There is no `/mcp` route, because the hosted platform's gateway serves the MCP endpoint, not this runtime. Callers reach a self-hosted actuator over these routes, usually `POST /run` with `ACTUATE_RUN_TOKEN`.
 
 ## The run record
 
@@ -81,6 +81,10 @@ There is no `/mcp` route: the MCP endpoint is served by the hosted platform's ga
 | `passes` | How many times `run` has executed |
 | `createdAt`, `updatedAt` | Epoch ms |
 
+### Secret values
+
+These routes hide config fields wrapped in [`secret()`](/docs/reference/sdk/#secret) (JSON Schema `"writeOnly": true`) in what they return about runs. Each occurrence of their values becomes `[secret]` in run records (`/run`, `/webhook`, `/runs`, `/runs/:runId`, including `output`, `error`, `steps` and `logs`), the approval queue, the approval and input pages, and the message sent to an approver. The values come from the config schema and `ACTUATE_CONFIG`, and there is nothing to set up. Stored step results keep the real values, so replays see them. The runtime redacts reads with the values configured now, and doesn't redact [`/tables`](#tables) at all. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for what is caught.
+
 On the hosted platform, run records also have `version` and, for runs an API token started, `trigger.agent`. See [Platform API](/docs/reference/platform-api/#run-records).
 
 ## Health
@@ -95,32 +99,32 @@ On the hosted platform, run records also have `version` and, for runs an API tok
 - An **input** link (from [`waitForInput`](/docs/concepts/approvals/#asking-for-input)) shows the prompt and a text box pre-filled with `initial`, limited to `maxLength`.
 - An invalid, expired or already used link shows "Link expired".
 
-Both are sent with `Cache-Control: no-store`, `X-Frame-Options: DENY` and a Content-Security-Policy that forbids framing, so the token in the link isn't cached and the page can't be embedded in another site.
+The runtime sends both with `Cache-Control: no-store`, `X-Frame-Options: DENY` and a Content-Security-Policy that forbids framing, so the token in the link isn't cached and the page can't be embedded in another site.
 
-`POST /approve` takes a form-encoded body (at most 64 KiB) with `token`, plus `note` for an approval or `text` for an input answer. It records the decision or answer and resumes the run. It returns an HTML page and status `200` on success, or `410` when the token is invalid, expired or already used, or the answer is empty or longer than `maxLength`. Links are single use: once a step is decided or answered, its links return `410`. See [Human approvals and input](/docs/concepts/approvals/).
+`POST /approve` takes a form-encoded body (at most 64 KiB) with `token`, plus `note` for an approval or `text` for an input answer. It records the decision or answer and resumes the run. It returns an HTML page and status `200` on success, or `410` when the token is invalid, expired or already used, or the answer is empty or longer than `maxLength`. Links are single use. Once a step is decided or answered, its links return `410`. See [Human approvals and input](/docs/concepts/approvals/).
 
 ## Webhook
 
-`POST /webhook` starts a run with the JSON body as input and `trigger.kind = "webhook"`. Same validation, responses and `Idempotency-Key` handling as [`POST /run`](#run).
+`POST /webhook` starts a run with the JSON body as input and `trigger.kind = "webhook"`. It has the same validation, responses and `Idempotency-Key` handling as [`POST /run`](#run).
 
-The request must prove it knows `ACTUATE_WEBHOOK_SECRET`, or it gets `401`. If the secret is not set at all, the route answers `503` (except under `ACTUATE_DEV=1`). The admin token is not required. Two ways:
+The request must prove it knows `ACTUATE_WEBHOOK_SECRET`, or it gets `401`. If the secret is not set at all, the route answers `503` (except under `ACTUATE_DEV=1`). It doesn't need the admin token. There are two ways to prove the secret:
 
-- **Signature (preferred).** Sign the raw body GitHub-style: `X-Hub-Signature-256: sha256=<hex HMAC-SHA256 of the body, keyed with the secret>`. GitHub does this for you when you set the secret on the repository's webhook. A signed delivery's idempotency key is its signature, because headers aren't signed: a captured request replayed with a new `X-GitHub-Delivery` or `Idempotency-Key` returns the original run instead of starting another.
+- **Signature (preferred).** Sign the raw body GitHub-style: `X-Hub-Signature-256: sha256=<hex HMAC-SHA256 of the body, keyed with the secret>`. GitHub does this for you when you set the secret on the repository's webhook. A signed delivery's idempotency key is its signature, because headers aren't signed. A captured request replayed with a new `X-GitHub-Delivery` or `Idempotency-Key` returns the original run instead of starting another.
 - **Shared secret.** Send it as the `x-actuate-secret` header, or as `?secret=` for senders that can't set headers. Query strings end up in proxy and sender logs, so prefer the header, and rotate the secret if a URL leaks. `Idempotency-Key`, or else `X-GitHub-Delivery`, is the idempotency key.
 
 ## Provider webhooks
 
-`/providers/:kind/webhook` (any method) exists only when you pass a `providerWebhook` function to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#5-providers)). `:kind` is lowercase letters, digits and hyphens, for example `stripe`. Your function verifies the request and returns what to do; `parseProviderWebhookFromEnv` from `@actuate/providers` does this for the built-in providers:
+`/providers/:kind/webhook` (any method) exists only when you pass a `providerWebhook` function to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#5-providers)). `:kind` is lowercase letters, digits and hyphens, for example `stripe`. Your function verifies the request and returns what to do. `parseProviderWebhookFromEnv` from `@actuate/providers` does this for the built-in providers:
 
 | Your function | Response |
 | --- | --- |
-| Returns `{ event, payload }` | The event is delivered as by [`POST /events/:key`](#events): `{ "event", "resumed", "buffered" }` |
-| Returns an array of them | Each is delivered in order: `{ "events": [ ... ] }` |
+| Returns `{ event, payload }` | The runtime delivers the event as [`POST /events/:key`](#events) does, and responds `{ "event", "resumed", "buffered" }` |
+| Returns an array of them | The runtime delivers each in order, and responds `{ "events": [ ... ] }` |
 | Returns `{ reply: "<text>" }` | `200` with that text as `text/plain`, for subscription handshakes such as Meta's `hub.challenge` |
 | Returns `null` | `{ "ignored": true }` |
 | Throws an error named `WebhookVerificationError` | `401 {"error": "<message>"}` |
 
-The route needs no admin token: verification is your function's job.
+The route needs no admin token, because verification is your function's job.
 
 ## Describe
 
@@ -137,7 +141,13 @@ The route needs no admin token: verification is your function's job.
 }
 ```
 
-`input` and `config` are JSON Schema generated from the Zod schemas (input side, so fields with defaults are optional). `configError` is a message when the configuration is invalid; while it is set, every run fails with a `ConfigError`.
+`input` and `config` are JSON Schema generated from the Zod schemas (input side, so fields with defaults are optional). `configError` is a message when the configuration is invalid. While it is set, every run fails with a `ConfigError`. Because `GET /` serves it to run tokens too, it never carries a secret:
+
+| Problem | `configError` |
+| --- | --- |
+| `ACTUATE_CONFIG` isn't JSON | `Invalid ACTUATE_CONFIG: it is not valid JSON (line 1, column 24).` Only the position, never the text around the error |
+| The schema rejects the configuration, or a `transform` or `refine` in it throws | `Invalid configuration: <message>`, with secret values replaced |
+| A custom `config(env)` throws, or the schema throws and can't be described as JSON Schema | `Invalid configuration: config(env) threw TypeError. The error is in the worker's logs.` (or `the config schema threw ...`), with only the error's name. The full error goes to the worker's logs |
 
 ## Run
 
@@ -166,10 +176,10 @@ The request returns once the first pass ends, so a run that does not wait comes 
 
 `GET /runs/:runId` returns the run record plus:
 
-- `steps`: the journal, in order: `{ name, status, output, wakeAt, event, attempts, error, updatedAt }`;
-- `logs`: up to 500 log lines, in pass order: `{ ts, level, message, data }`. Each pass keeps at most 100 lines (then one warning line); messages are cut at 2,000 characters, and `data` larger than about 4 KB is replaced by `{ "truncated": "<first 4,000 characters of its JSON>" }`.
+- `steps`, the journal in order, as `{ name, status, output, wakeAt, event, attempts, error, updatedAt }`;
+- `logs`, up to 500 log lines in pass order, as `{ ts, level, message, data }`. Each pass keeps at most 100 lines (then one warning line). The runtime cuts messages at 2,000 characters, and replaces `data` larger than about 4 KB with `{ "truncated": "<first 4,000 characters of its JSON>" }`.
 
-`404` if the run does not exist.
+It returns `404` if the run does not exist.
 
 ## Cancel and resume
 
@@ -191,25 +201,25 @@ The request returns once the first pass ends, so a run that does not wait comes 
 { "approveUrl": "https://bot.example.com/approve?token=...", "rejectUrl": "https://bot.example.com/approve?token=...", "expiresAt": 1793664000000 }
 ```
 
-For an input step it returns `{ "answerUrl": "...", "expiresAt": ... }`. To answer directly, `POST /runs/:id/inputs/:step` with `{ "text": "..." }` (admin auth); it returns `{"ok": true, "runId", "step", "approved": true}`, or `{"ok": false, "reason": "..."}` if the step isn't waiting for an answer, or the answer is empty or longer than `maxLength`.
+For an input step it returns `{ "answerUrl": "...", "expiresAt": ... }`. To answer directly, send `POST /runs/:id/inputs/:step` with `{ "text": "..." }` (admin auth). It returns `{"ok": true, "runId", "step", "approved": true}`, or `{"ok": false, "reason": "..."}` if the step isn't waiting for an answer, or the answer is empty or longer than `maxLength`.
 
-It returns `404` if that step is not waiting. The links are never written to run logs, so this route (behind `ACTUATE_TOKEN`) and the messaging notification are the only ways to get them.
+It returns `404` if that step is not waiting. The runtime never writes the links to run logs, so this route (behind `ACTUATE_TOKEN`) and the messaging notification are the only ways to get them.
 
-`POST /runs/:runId/approvals/:step/approve` (or `/reject`) decides without the signed link. An optional JSON body `{"note": "..."}` is stored in the result's `note`. Returns `{"ok": true, "runId", "step", "approved"}`, or `{"ok": false, "reason"}` if the step is not waiting for a decision.
+`POST /runs/:runId/approvals/:step/approve` (or `/reject`) decides without the signed link. The runtime stores an optional JSON body `{"note": "..."}` in the result's `note`. It returns `{"ok": true, "runId", "step", "approved"}`, or `{"ok": false, "reason"}` if the step is not waiting for a decision.
 
 ## Events
 
-`POST /events/:key` posts an event with the JSON body as its payload, up to 64 KiB of JSON. Every step waiting on `key` completes with the payload and its run resumes; if none is waiting, the event is buffered for the next wait (for up to 7 days).
+`POST /events/:key` posts an event with the JSON body as its payload, up to 64 KiB of JSON. Every step waiting on `key` completes with the payload and its run resumes. If none is waiting, the runtime buffers the event for the next wait (for up to 7 days).
 
 ```json
 { "resumed": ["run_01a1998e44009c41f2e07b3d5a18"], "buffered": false }
 ```
 
-- A body that is missing, not JSON, or `null` is delivered as `{}`. An event is never delivered as `null`, so `null` from a wait always means a timeout.
-- A larger payload is refused with `500 {"error":"Event payload is too large."}`.
-- If no step is waiting, the event is buffered. At most 1,000 events are buffered per actuator; beyond that the oldest are dropped.
-- Under `actuate dev` only, `GET /events/:key` posts the event too, so the local fake payment provider's bill links can be opened in a browser. Elsewhere `GET` answers `404`. For `payment.<referenceId>` keys the payload is `{"provider":"dev","status":"paid","referenceId":"<referenceId>","via":"GET"}`; for other keys it is `{"via":"GET"}`.
-- Keys starting with `approval:` are reserved; posting one is refused.
+- The runtime delivers a body that is missing, not JSON, or `null` as `{}`. It never delivers an event as `null`, so `null` from a wait always means a timeout.
+- The runtime refuses a larger payload with `500 {"error":"Event payload is too large."}`.
+- If no step is waiting, the runtime buffers the event. It buffers at most 1,000 events per actuator, and beyond that drops the oldest.
+- Under `actuate dev` only, `GET /events/:key` posts the event too, so you can open the local fake payment provider's bill links in a browser. Elsewhere `GET` answers `404`. For `payment.<referenceId>` keys the payload is `{"provider":"dev","status":"paid","referenceId":"<referenceId>","via":"GET"}`; for other keys it is `{"via":"GET"}`.
+- Keys starting with `approval:` are reserved, and the runtime refuses a post to one.
 
 The response returns after the resumed runs' next pass.
 
@@ -223,24 +233,24 @@ The response returns after the resumed runs' next pass.
 | --- | --- | --- |
 | `limit` | `100` | 1 to 10,000 rows |
 | `offset` | `0` | Rows to skip |
-| `format` | JSON | `csv` returns a CSV download named `<name>.csv`. Text cells that start with `=`, `+`, `-`, `@`, a tab or a carriage return are prefixed with `'`, so a spreadsheet never runs them as formulas |
+| `format` | JSON | `csv` returns a CSV download named `<name>.csv`. The runtime prefixes text cells that start with `=`, `+`, `-`, `@`, a tab or a carriage return with `'`, so a spreadsheet never runs them as formulas |
 
-An unknown table returns `404 {"error":"Unknown table"}`.
+An unknown table returns `404 {"error":"Unknown table"}`. Tables are your own data, and the runtime doesn't [redact](#secret-values) them.
 
 ## Environment variables
 
 | Variable | Meaning |
 | --- | --- |
-| `ACTUATE_CONFIG` | JSON object of configuration, validated against the actuator's `config` schema. Default `{}`. Invalid JSON or values set `configError` and fail every run |
-| `ACTUATE_TOKEN` | The owner's bearer token: every admin and run route. Keep it for yourself and your dashboards; never give it to an agent. Unset (and `ACTUATE_RUN_TOKEN` unset too), admin routes answer `503` |
-| `ACTUATE_RUN_TOKEN` | Bearer token for an agent: `GET /`, `POST /run` and `GET /runs/:runId` only. Every other route answers it with `403` |
-| `ACTUATE_WEBHOOK_SECRET` | Secret for `POST /webhook`: signs the body (`X-Hub-Signature-256`), or is sent as `x-actuate-secret` or `?secret=`. Required to accept webhooks: unset, `/webhook` answers `503` |
-| `ACTUATE_APPROVAL_SECRET` | HMAC secret for approval links. If unset, one is generated on first start and kept in the Durable Object's storage |
-| `ACTUATE_PUBLIC_URL` | Public origin used in approval links, provider callback URLs and the self-call check, e.g. `https://bot.example.com`. **Set it in production.** If unset, the origin of the first request made with `ACTUATE_TOKEN` is used and remembered (under `actuate dev`, the first request to localhost); until then approval links are relative and a warning is logged. A request from anyone else never sets it, so a forged `Host` header can't redirect approval links |
-| `ACTUATE_DEV` | `1` only for local development (set by `actuate dev`): routes whose secret is unset are served open, to localhost requests not made by a web page, instead of answering `503` |
+| `ACTUATE_CONFIG` | JSON object of configuration, validated against the actuator's `config` schema. Default `{}`. Invalid JSON or values set `configError` and fail every run. The routes [redact](#secret-values) the values of `secret()` fields from everything they return. Set it with `wrangler secret put` when it holds one |
+| `ACTUATE_TOKEN` | The owner's bearer token, for every admin and run route. Keep it for yourself and your dashboards, and never give it to an agent. When it is unset (and `ACTUATE_RUN_TOKEN` is unset too), admin routes answer `503` |
+| `ACTUATE_RUN_TOKEN` | Bearer token for an agent, for `GET /`, `POST /run` and `GET /runs/:runId` only. Every other route answers it with `403` |
+| `ACTUATE_WEBHOOK_SECRET` | Secret for `POST /webhook`. It signs the body (`X-Hub-Signature-256`), or is sent as `x-actuate-secret` or `?secret=`. It is required to accept webhooks. When it is unset, `/webhook` answers `503` |
+| `ACTUATE_APPROVAL_SECRET` | HMAC secret for approval links. If it is unset, the runtime generates one on first start and keeps it in the Durable Object's storage |
+| `ACTUATE_PUBLIC_URL` | Public origin used in approval links, provider callback URLs and the self-call check, for example `https://bot.example.com`. **Set it in production.** If it is unset, the runtime uses and remembers the origin of the first request made with `ACTUATE_TOKEN` (under `actuate dev`, the first request to localhost). Until then, approval links are relative and the runtime logs a warning. A request from anyone else never sets it, so a forged `Host` header can't redirect approval links |
+| `ACTUATE_DEV` | `1` only for local development (`actuate dev` sets it). Routes whose secret is unset are served open, to localhost requests not made by a web page, instead of answering `503` |
 
 Set the secrets with `wrangler secret put` rather than in a config file.
 
 ## Cron
 
-Cron schedules do not have an HTTP route. The Worker's `scheduled` handler receives each firing and starts a run with input `{}` and `trigger: { kind: "cron", cron: "<expression>" }`. If the input schema rejects `{}`, the firing is skipped and an error is logged.
+Cron schedules do not have an HTTP route. The Worker's `scheduled` handler receives each firing and starts a run with input `{}` and `trigger: { kind: "cron", cron: "<expression>" }`. If the input schema rejects `{}`, the runtime skips the firing and logs an error.
