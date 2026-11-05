@@ -13,7 +13,7 @@ import { defineActuator, secret, z, NonRetryableError } from "@actuate/sdk";
 
 `@actuate/sdk` is ESM-only and has one dependency, Zod 4.6 or later, which it re-exports as `z`. Use that `z` so your schemas and the SDK agree on the Zod version.
 
-Zod's error messages are English-only in deployed actuators: `actuate deploy` and `actuate dev` drop Zod's other locales from the bundle, so `z.locales.en` works and other locales are `undefined`.
+Zod's error messages are English-only in deployed actuators, because `actuate deploy` and `actuate dev` drop Zod's other locales from the bundle. So `z.locales.en` works and other locales are `undefined`.
 
 ## Functions
 
@@ -25,7 +25,7 @@ function defineActuator<C, I, O, K extends Capability = never>(
 ): Actuator<C, I, O, K>;
 ```
 
-Declares an actuator. The default export of an actuator file must be the result of this call. Validates the definition and throws [`ActuatorError`](#actuatorerror) if `name` is invalid, `description` is empty, a capability is unknown, or `"http"` is declared without `http.allow`. Returns a frozen copy of the definition. The capability list is inferred as a literal type, so `ctx` only has the clients you declared.
+Declares an actuator. The default export of an actuator file must be the result of this call. Validates the definition and throws [`ActuatorError`](#actuatorerror) if `name` is invalid, `description` is empty, a capability is unknown, or `"http"` is declared without `http.allow`. Returns a frozen copy of the definition. TypeScript infers the capability list as a literal type, so `ctx` only has the clients you declared.
 
 ### secret
 
@@ -33,7 +33,7 @@ Declares an actuator. The default export of an actuator file must be the result 
 function secret<T extends z.ZodType>(schema: T): T;
 ```
 
-Marks a config field as secret: an API key, a token, a password, a webhook URL. It returns the same schema with `.meta({ writeOnly: true })`, so the field's JSON Schema gets `"writeOnly": true`, which is what the runtime and the platform look for.
+Marks a config field, such as an API key, a token, a password or a webhook URL, as secret. It returns the same schema with `.meta({ writeOnly: true })`, so the field's JSON Schema gets `"writeOnly": true`, which is what the runtime and the platform look for.
 
 ```ts
 config: z.object({
@@ -42,7 +42,7 @@ config: z.object({
 }),
 ```
 
-Wrap the field itself, at any depth, including inside arrays and records. It survives `.optional()`, `.nullable()`, `.default()` and `.describe()`. Each occurrence of a secret field's value becomes `[secret]` in run logs, errors, step outputs and run records; your code still gets the real value. Values shorter than 6 characters and booleans are not redacted. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for what is and isn't covered.
+Wrap the field itself, at any depth, including inside arrays and records. It survives `.optional()`, `.nullable()`, `.default()` and `.describe()`. Each occurrence of a secret field's value becomes `[secret]` in run logs, errors, step outputs and run records. Your code still gets the real value. Redaction skips values shorter than 6 characters, and booleans. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for what is and isn't covered.
 
 ### isActuator
 
@@ -50,7 +50,7 @@ Wrap the field itself, at any depth, including inside arrays and records. It sur
 function isActuator(value: unknown): value is Actuator;
 ```
 
-True for a value returned by `defineActuator`. The CLI and runtime use it to check a file's default export.
+Returns true for a value that `defineActuator` returned. The CLI and runtime use it to check a file's default export.
 
 ### parseDuration
 
@@ -72,11 +72,11 @@ parseDuration(500);       // 500
 function isSuspendSignal(err: unknown): err is SuspendSignal;
 ```
 
-True for the internal signal that ends a pass when a run sleeps or waits. Use it to rethrow in a `catch` around waits. See [The suspend signal](/docs/concepts/steps-and-replay/#the-suspend-signal).
+Returns true for the internal signal that ends a pass when a run sleeps or waits. Use it to rethrow in a `catch` around waits. See [The suspend signal](/docs/concepts/steps-and-replay/#the-suspend-signal).
 
 ### z
 
-The Zod 4 namespace, re-exported from `zod`.
+This is the Zod 4 namespace, re-exported from `zod`.
 
 ### CAPABILITIES
 
@@ -119,7 +119,7 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
 | `description` | What the actuator does. Becomes the MCP tool description; write it for a model |
 | `config` | Zod schema for operator settings. Defaults are used for anything not configured. Wrap API keys and tokens in [`secret()`](#secret). Optional |
 | `input` | Zod schema for the payload of one run. Validated before any code runs |
-| `output` | Zod schema for the return value. The return value is validated against it, and it is published in the MCP tool and OpenAPI document. Optional |
+| `output` | Zod schema for the return value. The runtime validates the return value against it, and the platform publishes it in the MCP tool and OpenAPI document. Optional |
 | `capabilities` | Capabilities this actuator uses. Undeclared ones are absent from `ctx` |
 | `optionalCapabilities` | Capabilities the actuator can do without. They are on `ctx` but `undefined` when no provider is configured, and never block a deploy. `http` cannot be optional. Optional |
 | `http.allow` | Hostnames `ctx.http` may reach: exact (`api.github.com`) or wildcard (`*.example.com`) |
@@ -144,7 +144,7 @@ interface ToolHints {
 }
 ```
 
-Published as the MCP tool's annotations. MCP clients use them to decide how to ask a person before calling the tool.
+The hosted MCP server publishes these as the MCP tool's annotations. MCP clients use them to decide how to ask a person before calling the tool.
 
 | Hint | MCP annotation | Default |
 | --- | --- | --- |
@@ -153,7 +153,7 @@ Published as the MCP tool's annotations. MCP clients use them to decide how to a
 | `destructive` | `destructiveHint` | `true`, or `false` for a read-only tool |
 | `openWorld` | `openWorldHint` | `true` if the actuator declares any capability, `false` otherwise |
 
-These are the values the hosted MCP server sends when a hint is unset. It always sends all four. A tool marked both `readOnly` and `destructive` is sent as not read-only.
+These are the values the hosted MCP server sends when a hint is unset. It always sends all four. It sends a tool marked both `readOnly` and `destructive` as not read-only.
 
 See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/#tool-hints).
 
@@ -181,7 +181,7 @@ type AnySchema = z.ZodType;
 type Context<K extends Capability = never> = BaseContext & Pick<Providers, K>;
 ```
 
-The `ctx` passed to `run`: the base context plus one client per declared capability.
+The `ctx` passed to `run`, which is the base context plus one client per declared capability.
 
 ### BaseContext
 
@@ -215,13 +215,13 @@ interface BaseContext {
 notifyOwner(text: string, options?: NotifyOwnerOptions): Promise<NotifyOwnerResult>;
 ```
 
-Sends the actuator's owner a short message, for things a person should hear about ("3 refunds have waited more than a day"); to message customers, use `ctx.messaging`. No capability to declare. On the hosted platform it is emailed to the account's address, and sent to the alert channel on Maker and Agency; under `actuate dev` it is printed. See [Message the owner](/docs/concepts/actuators/#message-the-owner).
+Sends the actuator's owner a short message, for things a person should hear about ("3 refunds have waited more than a day"). To message customers, use `ctx.messaging`. It needs no capability. On the hosted platform, Actuate emails it to the account's address, and sends it to the alert channel on Maker and Agency. Under `actuate dev`, it appears in the terminal. See [Message the owner](/docs/concepts/actuators/#message-the-owner).
 
 - Call it inside `ctx.step.do`. Outside a step it throws `ActuatorError`, and `actuate check` reports it (`no-notify-outside-step`).
 - `text` is 1 to 4,000 characters and not only whitespace. `subject` is one line of at most 200 characters, with no line breaks or other control characters. Anything else throws `ActuatorError`.
-- Each message gets an idempotency key derived from the step's: `<runId>:<stepName>:notifyOwner:<n>`, where `n` counts this step attempt's `notifyOwner` calls from 0, as for [provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). A retried step sends its messages with the same keys. On the platform, a key is remembered for 48 hours and the message is sent once; see [Message the owner](/docs/concepts/actuators/#on-the-platform).
-- A message the notifier doesn't send, for example past a daily cap, resolves to `{ sent: false, reason }` instead of throwing, and the reason is logged as a `warn` line. With no notifier at all (self-hosted without one), the message itself is logged as an `info` line and the call resolves to `{ sent: false, reason }`.
-- Secret config values in `text` and `subject` become `[secret]` before the message is handed on (not in `@actuate/cli/testing`, which records the real text).
+- Each message gets an idempotency key derived from the step's: `<runId>:<stepName>:notifyOwner:<n>`, where `n` counts this step attempt's `notifyOwner` calls from 0, as for [provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). A retried step sends its messages with the same keys. On the platform, Actuate remembers a key for 48 hours and sends the message once; see [Message the owner](/docs/concepts/actuators/#on-the-platform).
+- A message the notifier doesn't send, for example past a daily cap, resolves to `{ sent: false, reason }` instead of throwing, and the runtime logs the reason as a `warn` line. With no notifier at all (self-hosted without one), the runtime logs the message itself as an `info` line and the call resolves to `{ sent: false, reason }`.
+- Secret config values in `text` and `subject` become `[secret]` before the runtime hands the message on (not in `@actuate/cli/testing`, which records the real text).
 
 ### NotifyOwnerOptions
 
@@ -266,7 +266,7 @@ interface OwnerNotifier {
 }
 ```
 
-Delivers `ctx.notifyOwner` messages. Self-hosted, you write one and pass it to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#messages-to-the-owner)). Deduplicate on `idempotencyKey`, so a retried step never sends a message twice. Return `{ sent: false, reason }` for a limit you chose, such as a daily cap: the runtime logs the reason and the step carries on. Throw only for a failure worth retrying the step for.
+Delivers `ctx.notifyOwner` messages. Self-hosted, you write one and pass it to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#messages-to-the-owner)). Deduplicate on `idempotencyKey`, so a retried step never sends a message twice. Return `{ sent: false, reason }` for a limit you chose, such as a daily cap. The runtime logs the reason and the step continues. Throw only for a failure worth retrying the step for.
 
 ### Trigger
 
@@ -280,13 +280,13 @@ interface Trigger {
 }
 ```
 
-On the hosted platform, runs started with an API token (over MCP or the gateway's `/a/<id>/run`) also carry `agent: { id: string; name: string }`: the ID and name of the token that started the run. The `Trigger` type doesn't declare it yet, so read it with a cast:
+On the hosted platform, runs started with an API token (over MCP or the gateway's `/a/<id>/run`) also carry `agent: { id: string; name: string }`, which is the ID and name of the token that started the run. The `Trigger` type doesn't declare it yet, so read it with a cast:
 
 ```ts
 const agent = (ctx.trigger as { agent?: { id: string; name: string } }).agent;
 ```
 
-It is never set by the open-source runtime, `actuate dev`, webhooks or cron. See [Triggers](/docs/concepts/triggers/) and [Agents](/docs/concepts/agents/).
+The open-source runtime, `actuate dev`, webhooks and cron never set it. See [Triggers](/docs/concepts/triggers/) and [Agents](/docs/concepts/agents/).
 
 ### Logger
 
@@ -298,13 +298,13 @@ interface Logger {
 }
 ```
 
-Writes to the run's log, shown by `actuate logs <runId>` and the dashboard. Lines are stored together at the end of each pass.
+Writes to the run's log, shown by `actuate logs <runId>` and the dashboard. The runtime stores lines together at the end of each pass.
 
-- At most 100 lines per pass. After that, one warning line is added and further lines in that pass are dropped.
-- Messages are truncated at 2,000 characters.
-- `data` larger than about 4 KB of JSON is replaced by `{ truncated: "<the first 4,000 characters>" }`.
+- A pass keeps at most 100 lines. After that, the runtime adds one warning line and drops further lines in that pass.
+- The runtime truncates messages at 2,000 characters.
+- The runtime replaces `data` larger than about 4 KB of JSON with `{ truncated: "<the first 4,000 characters>" }`.
 
-Log calls are not journaled: a call outside a step is written again on every pass.
+The journal doesn't record log calls, so a call outside a step writes its line again on every pass.
 
 ## Steps
 
@@ -326,7 +326,7 @@ interface Step {
 | Method | Behaviour |
 | --- | --- |
 | `do(name, [options,] fn)` | Runs `fn` once per run and stores its JSON result. On replay returns the stored result without calling `fn`. Retries per `options`. [More](/docs/concepts/steps-and-replay/#ctxstepdo) |
-| `sleep([name,] duration)` | Suspends the run for `duration`. Unnamed sleeps are named `sleep#1`, `sleep#2`, … in call order. [More](/docs/concepts/sleeping-and-waiting/#sleep) |
+| `sleep([name,] duration)` | Suspends the run for `duration`. Unnamed sleeps are named `sleep#1`, `sleep#2` and so on, in call order. [More](/docs/concepts/sleeping-and-waiting/#sleep) |
 | `sleepUntil(name, until)` | Suspends until a `Date` or epoch-ms time. Completes immediately if it has passed. [More](/docs/concepts/sleeping-and-waiting/#sleepuntil) |
 | `waitForEvent(name, options)` | Suspends until an event with key `options.event` is posted and resolves to its payload (never `null`; an empty event is `{}`), or resolves to `null` after `options.timeout` or at `options.until`. Consumes a buffered event if one arrived first. [More](/docs/concepts/sleeping-and-waiting/#waitforevent) |
 | `waitForApproval(name, options?)` | Suspends until a person decides through a signed link, or resolves to `null` after the timeout (default 7 days). [More](/docs/concepts/approvals/) |
@@ -335,7 +335,7 @@ interface Step {
 Rules for every method:
 
 - `name` is 1 to 200 characters and **unique within a run**. A repeated name throws `ActuatorError`.
-- Steps cannot be nested: calling any `ctx.step.*` inside a `do` function throws `ActuatorError`.
+- Steps cannot be nested. Calling any `ctx.step.*` inside a `do` function throws `ActuatorError`.
 - Timeouts resolve to `null`; they never throw. But a timeout longer than the plan's longest wait throws `ActuatorError` when the wait starts.
 
 ### StepOptions
@@ -362,9 +362,9 @@ interface StepInfo {
 }
 ```
 
-Passed to every `ctx.step.do` function.
+The runtime passes it to every `ctx.step.do` function.
 
-Provider calls in the step that take an idempotency key (`messaging.send`, `payment.createBill`, `payment.refund`) get one derived from `idempotencyKey` when you pass none: `<idempotencyKey>:<method>:<n>`, where `n` counts that method's calls in this attempt of the step from 0. In a step named `notify`, the second `send` gets `<runId>:notify:send:1`. A key you pass is used as is. See [keys on provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). Requires `@actuate/runtime` 0.3.
+Provider calls in the step that take an idempotency key (`messaging.send`, `payment.createBill`, `payment.refund`) get one derived from `idempotencyKey` when you pass none: `<idempotencyKey>:<method>:<n>`, where `n` counts that method's calls in this attempt of the step from 0. In a step named `notify`, the second `send` gets `<runId>:notify:send:1`. The runtime uses a key you pass as is. See [keys on provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). Requires `@actuate/runtime` 0.3.
 
 ### WaitForEventOptions
 
@@ -475,10 +475,10 @@ interface Db {
 | `` sql`...` `` | Tagged template. Each interpolated value becomes a bound parameter, never SQL. Throws if called as a plain function |
 | `` statement`...` `` | Tagged template. Builds a [`DbStatement`](#dbstatement) for `batch` or `commitWithStep` without running it. Interpolated values become bound parameters, as in `sql` |
 | `batch(statements)` | Runs the statements in order in one transaction, all or nothing, and resolves to each one's rows (`RETURNING` rows, or `[]`). If one fails, none is applied and the error names it. A retried step runs the batch again |
-| `commitWithStep(statements)` | Inside `ctx.step.do` only. Queues the statements to apply in the same transaction that records the step as completed: once, never on a failed attempt or a replay. The step can't read their effects. If one fails, none is applied and the attempt fails |
+| `commitWithStep(statements)` | Inside `ctx.step.do` only. Queues the statements to apply in the same transaction that records the step as completed, so they apply once, never on a failed attempt or a replay. The step can't read their effects. If one fails, none is applied and the attempt fails |
 | `migrate(statements)` | Applies each statement once per actuator, tracked by its index, in a transaction. Append new entries; never edit or reorder shipped ones |
 
-SQL that mentions a table starting with `_actuate_` is refused with `ActuatorError`. In `batch` and `commitWithStep`, so is a statement that controls a transaction (`BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`). `statement`, `batch` and `commitWithStep` require `@actuate/runtime` 0.3; a host on an older runtime rejects them and writes nothing. See [Database](/docs/concepts/database/#atomic-writes).
+The runtime refuses SQL that mentions a table starting with `_actuate_`, with `ActuatorError`. In `batch` and `commitWithStep`, it also refuses a statement that controls a transaction (`BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`). `statement`, `batch` and `commitWithStep` require `@actuate/runtime` 0.3. A host on an older runtime rejects them and writes nothing. See [Database](/docs/concepts/database/#atomic-writes).
 
 ### DbStatement
 
@@ -498,7 +498,7 @@ One parameterised statement for `batch` and `commitWithStep`. Build it with `` c
 type SqlValue = string | number | bigint | boolean | null | Uint8Array | ArrayBuffer;
 ```
 
-Booleans are stored as `1` and `0`.
+SQLite stores booleans as `1` and `0`.
 
 ### Row
 
@@ -514,7 +514,7 @@ type Row = Record<string, SqlValue>;
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json | undefined };
 ```
 
-Step outputs, event payloads and run results are stored as JSON. What you get back is the JSON round-trip of what you returned.
+The runtime stores step outputs, event payloads and run results as JSON. What you get back is the JSON round-trip of what you returned.
 
 ## Errors
 
@@ -536,7 +536,7 @@ class ActuatorError extends Error {
 }
 ```
 
-Thrown when an actuator breaks one of the SDK's rules: an invalid definition, a duplicate or nested step name, a provider call or `ctx.notifyOwner` outside a step, an unconfigured capability, a reserved table, or a return value that does not match the `output` schema.
+It is thrown when an actuator breaks one of the SDK's rules: an invalid definition, a duplicate or nested step name, a provider call or `ctx.notifyOwner` outside a step, an unconfigured capability, a reserved table, or a return value that does not match the `output` schema.
 
 ### SuspendSignal
 
@@ -548,7 +548,7 @@ class SuspendSignal extends Error {
 }
 ```
 
-Thrown by the runtime when a run must pause. **Never catch it** in actuator code; if you catch errors around waits, rethrow it using [`isSuspendSignal`](#issuspendsignal).
+The runtime throws it when a run must pause. **Never catch it** in actuator code. If you catch errors around waits, rethrow it using [`isSuspendSignal`](#issuspendsignal).
 
 ## Providers
 
@@ -565,7 +565,7 @@ interface Providers {
 type Capability = keyof Providers; // "messaging" | "payment" | "llm" | "http"
 ```
 
-Every provider method must be called inside `ctx.step.do`. See [Capabilities and providers](/docs/concepts/capabilities/).
+Call every provider method inside `ctx.step.do`. See [Capabilities and providers](/docs/concepts/capabilities/).
 
 ### MessagingProvider
 
@@ -708,4 +708,4 @@ interface HttpProvider {
 }
 ```
 
-Outbound HTTPS restricted to the hostnames in `http.allow`. Redirects are not followed, and the actuator's own URL is refused.
+It makes outbound HTTPS requests, restricted to the hostnames in `http.allow`. It doesn't follow redirects, and it refuses the actuator's own URL.
