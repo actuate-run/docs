@@ -116,7 +116,7 @@ const claim = await ctx.step.do("claim-order", async ({ now }) => {
     [orderId, ctx.runId, now - staleAfter],
   );
   if (busy) return "busy";
-  ctx.db.commitWithStep([ctx.db.statement`INSERT INTO refunds (order_id, run_id, status, at) VALUES (${orderId}, ${ctx.runId}, 'PENDING', ${now})`]);
+  ctx.db.commitWithStep([ctx.db.statement`INSERT INTO refunds (order_id, run_id, amount, status, at) VALUES (${orderId}, ${ctx.runId}, ${amount}, 'PENDING', ${now})`]);
   return "claimed";
 });
 ```
