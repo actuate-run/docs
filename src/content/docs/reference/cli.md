@@ -67,7 +67,7 @@ The project contains:
 | --- | --- |
 | `actuator.ts` | The actuator |
 | `actuator.test.ts` | Tests written with [`@actuate/cli/testing`](/docs/guides/best-practices/#unit-tests-with-testactuator), run by [`actuate test`](#actuate-test). The `hello` starter has two; a template has one only if the template ships it |
-| `AGENTS.md` | Instructions for coding agents: replay safety, and the commands to run before calling a change done |
+| `AGENTS.md` | Instructions for coding agents: replay safety, keeping API keys in `secret()` fields set in the dashboard, and the commands to run before calling a change done |
 | `actuate.config.json` | The operator configuration, `{}` to start |
 | `package.json` | `@actuate/sdk`, `@actuate/cli` and TypeScript, and the scripts below |
 | `tsconfig.json` | |
@@ -143,10 +143,12 @@ Runs the actuator locally on `workerd` (through wrangler) with the same step eng
 - Serves the [runtime HTTP API](/docs/reference/runtime-http/) at `http://localhost:<port>`.
 - Applies the hosted platform's guards for your plan. See [guards](#guards-in-actuate-dev) below.
 - Adds what each run read and wrote to its run record. See [rows](#rows-in-actuate-dev) below.
-- Configuration: `actuate.config.json`, passed as `ACTUATE_CONFIG`.
-- Environment: variables from `.env` and then `.dev.vars` in the project directory. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally: on `localhost` only, and never for a request a web page makes (those get `403`, so a site you have open can't start runs with your real providers). Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway, or to use those routes through a tunnel.
+- Configuration: `actuate.config.json`, passed as `ACTUATE_CONFIG`. To keep local secrets out of that committed file, set `ACTUATE_CONFIG` in `.dev.vars` to a JSON object on one line, such as `ACTUATE_CONFIG={"apiKey":"sk_test_..."}`: it is merged over `actuate.config.json` (objects key by key; anything else from `.dev.vars` wins), and the banner says so. Invalid JSON there stops `actuate dev` with its line and column (never the text around the error); an empty `ACTUATE_CONFIG=` is ignored. A merged configuration the schema rejects is reported with both sources named. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens).
+- Environment: variables from `.env` and then `.dev.vars` in the project directory. They are handed to wrangler as secrets (in a generated `.actuate/.dev.vars`), so its startup banner shows them as `(hidden)` instead of printing them. `actuate dev` sets `ACTUATE_DEV=1`, so the admin routes and `/webhook` work without secrets locally: on `localhost` only, and never for a request a web page makes (those get `403`, so a site you have open can't start runs with your real providers). Set `ACTUATE_TOKEN` or `ACTUATE_WEBHOOK_SECRET` there to require them anyway, or to use those routes through a tunnel.
 - Providers: pick real ones in `.dev.vars` (see [`actuate providers`](#actuate-providers)). Anything you don't pick stays local: messages (and approval links) print in the terminal, and the payment provider is a fake whose bill URL is `http://localhost:<port>/events/payment.<referenceId>`; open it to "pay". Its refunds always succeed and are printed. Declared `http` uses your `http.allow` list for real. `ctx.llm` needs `ACTUATE_LLM` set; otherwise calls fail with "no llm provider is configured".
 - Payment webhooks: real payment providers call back to `POST /providers/<kind>/webhook`. Expose your local port with a tunnel (e.g. `cloudflared tunnel --url localhost:8787`) and set `ACTUATE_PUBLIC_URL` to the tunnel URL so callback links point there. Provider webhooks and approval links work through the tunnel; the admin API stays local unless you set `ACTUATE_TOKEN`.
+- `ctx.notifyOwner` messages are printed in the terminal, as `📣  [owner notification: <subject>]` followed by the text, and reported sent.
+- Secret config values (fields wrapped in [`secret()`](/docs/reference/sdk/#secret)) become `[secret]` in run records, logs and errors, as self-hosted.
 - Cron schedules are registered. Fire one with `curl 'localhost:8787/__scheduled?cron=<expression>'`.
 - State persists in `.actuate/state` between restarts. Delete the folder to start fresh.
 
@@ -161,6 +163,12 @@ When it is ready it prints what to do next:
   Tables:          curl localhost:8787/tables
   Platform guards: on, for the Sandbox plan (the default: not logged in). --no-guards turns them off. Pass --plan maker or agency, or run `actuate login`, to use your plan.
   Providers not set in .dev.vars print to this console (see `actuate providers`).
+```
+
+When `.dev.vars` sets `ACTUATE_CONFIG`, a line before the last says where the configuration came from:
+
+```text
+  Config:          actuate.config.json, with ACTUATE_CONFIG in .dev.vars merged over it
 ```
 
 Configuration and environment files are read at startup; restart `actuate dev` after changing them.
@@ -282,6 +290,7 @@ A replay-safety linter. `run` is [replayed from the top](/docs/concepts/steps-an
 | `no-provider-outside-step` | error | Calls on `ctx.messaging`, `ctx.payment`, `ctx.llm` or `ctx.http` |
 | `no-nondeterminism-outside-step` | error | `Date.now()`, `new Date()` with no arguments, `Math.random()`, `crypto.randomUUID()`, `performance.now()` |
 | `no-commit-outside-step` | error | `ctx.db.commitWithStep()`: it queues writes for the step that is running |
+| `no-notify-outside-step` | error | `ctx.notifyOwner()`: it sends a message, so outside a step it would send again on every replay |
 | `db-write-outside-step` | warning | `ctx.db.query`, `ctx.db.first` or `` ctx.db.sql`...` `` whose SQL literal starts with `INSERT`, `UPDATE`, `DELETE` or `REPLACE`, and each such statement in a `ctx.db.batch([...])`, written as `` ctx.db.statement`...` `` or `{ sql: "..." }` |
 
 Everything inside the function passed as the last argument of `ctx.step.do` counts as inside a step. A statement built with `` ctx.db.statement`...` `` isn't flagged on its own: building one does nothing until it runs.
@@ -293,6 +302,12 @@ actuator.ts:20:5  warn   This write runs again on every replay. Put it inside ct
 1 error(s), 1 warning(s)
 ```
 
+`check` also warns when `actuate.config.json` sets a value for a [`secret()`](/docs/reference/sdk/#secret) field and git would commit the file: the project is a git repository and the file isn't ignored. The warning is reported on `actuate.config.json` with the rule `config-secret`; set those values in the dashboard instead (see [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens)). It loads the actuator only when the file holds a value and git would commit it. With `--platform`, the same warning is one of the deploy checks.
+
+```text
+actuate.config.json:1:1  warn   actuate.config.json sets the secret field apiKey, and git does not ignore the file, so it would be committed. Set it in the dashboard (Config tab) and leave it out of the file: the platform keeps a stored secret when the file omits it. For `actuate dev`, put it in .dev.vars as ACTUATE_CONFIG.  (config-secret)
+```
+
 `check` exits with status 1 when there are errors, so you can run it in a pre-commit hook. It is a syntactic check of one file: it does not follow calls into helper functions, and it only recognises SQL written as a string literal. The runtime still enforces the provider rule at run time.
 
 ### The deploy checks
@@ -302,13 +317,14 @@ actuator.ts:20:5  warn   This write runs again on every replay. Put it inside ct
 | Rule | Checks | Needs |
 | --- | --- | --- |
 | `bundle-size` | The bundle is at most 5 MB | |
-| `name` | The name is lowercase letters, digits and underscores, at most 64 characters | |
+| `name` | The name is lowercase letters, digits and underscores, at most 64 characters, and doesn't start with `actuate_`, which the hosted platform keeps for its built-in MCP tools (`actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`). Self-hosted actuators may still use the prefix | |
 | `cron` | Cron syntax, the number of schedules, and how often they fire, alone and together | The plan |
 | `cron-input` | The input schema accepts `{}`, the input every cron run gets (a warning) | |
 | `http-allow` | `http.allow`: at most 20 hostnames, no IP addresses, no `actuate.run`, no wildcard over a shared zone such as `*.co.uk` or `*.workers.dev` | |
 | `input-regex` | No regex in the input schema with nested quantifiers, such as `(a+)+` (Zod's built-in formats are fine) | |
 | `plan-capability` | Every capability in `capabilities` is on the plan; optional capabilities that aren't get a warning | The plan |
-| `config` | `actuate.config.json` is valid JSON and matches the config schema | |
+| `config` | `actuate.config.json` is valid JSON and matches the config schema. Invalid JSON is reported by line and column, never by quoting the text around the error, which could be part of a secret | |
+| `config-secret` | `actuate.config.json` sets no `secret()` field while git would commit it (a warning; checked locally only, also with `--no-config`) | |
 | `provider-missing` | A provider is set up in the dashboard for every required capability | Login |
 | `actuator-limit` | A new actuator fits the plan's number of actuators | Login |
 | `deploy-budget` | Deploy attempts are left this month (an error when none are, a warning from 90% used) | Login |
@@ -345,7 +361,7 @@ Deploys the actuator to Actuate. It needs [`actuate login`](#actuate-login) or `
 2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it. Whitespace and syntax are minified but names are kept, so stack traces stay readable, and Zod's non-English locales are left out.
 3. Reads the actuator's metadata: name, description, capabilities, `http.allow`, cron schedules, and the input, config and output schemas as JSON Schema.
 4. Runs the [deploy checks](#the-deploy-checks), including the ones that need your account, and stops if any fails. A refused deploy would still count against your deploy budget. `--force` deploys anyway.
-5. If the deployed version already runs exactly this code, it uploads nothing and uses no deploy: it updates the configuration when `actuate.config.json` differs from the deployed one, and otherwise does nothing. `--force` deploys anyway.
+5. If the deployed version already runs exactly this code, it uploads nothing and uses no deploy: it updates the configuration when `actuate.config.json` differs from the deployed one, and otherwise does nothing. Secret fields are left out of that comparison. A file that leaves every secret field out is sent only when something else changed; a file that mentions a secret field at all (a value, or `""`, `[]` or `null` to clear it) is always sent. `--force` deploys anyway. <!-- TODO(platform-secrets): the platform shows secret fields as null in GET config, and keeps a stored secret when the configuration sent leaves it out -->
 6. Uploads the bundle with `actuate.config.json` as the configuration, unless you pass `--no-config`.
 7. Prints the version number, the actuator's webhook, MCP, OpenAPI and dashboard URLs, any warnings from the platform, and, when your account reports it, the deploys you have used this month.
 
@@ -534,7 +550,7 @@ There are two kinds of token:
 
 | Token | For | Can |
 | --- | --- | --- |
-| **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`. Nothing else: no approving, posting events, deploying, configuration or management |
+| **Agent** (run-scoped; the default for new tokens) | Agents and MCP clients | Start and read runs on `run.actuate.run`, and cancel the runs it started if you [allow it](/docs/concepts/agents/#cancelling-runs). Nothing else: no approving, posting events, deploying, configuration or management |
 | **Full** | The CLI and management | Everything your account can do, including `deploy` and fetching approval links |
 
 `actuate login` needs a **full** token, and checks it before saving it: it refuses a token the API rejects, and an agent token (`That is an agent (run-scoped) token: it can only start and read runs. Create a Full token for the CLI.`). If the API can't be reached, it warns and saves the token anyway. Give agents Agent tokens, or let MCP clients that support it [sign in](/docs/guides/connect-your-agent/#sign-in-from-your-mcp-client) instead: each sign-in becomes an agent token you can revoke. `--api` overrides the API URL (default `https://api.actuate.run`).

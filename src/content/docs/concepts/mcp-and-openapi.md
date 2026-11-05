@@ -12,8 +12,8 @@ When you deploy an actuator, the platform publishes it two ways:
 
 | URL | What it serves |
 | --- | --- |
-| `https://run.actuate.run/a/<actuator-id>/mcp` | MCP: one actuator, plus `actuate_get_run` |
-| `https://run.actuate.run/mcp` | MCP: every active actuator on your account, plus `actuate_get_run` |
+| `https://run.actuate.run/a/<actuator-id>/mcp` | MCP: one actuator, plus the [built-in tools](#built-in-tools) |
+| `https://run.actuate.run/mcp` | MCP: every active actuator on your account, plus the [built-in tools](#built-in-tools) |
 | `https://run.actuate.run/a/<actuator-id>/sse`, `https://run.actuate.run/sse` | The same, over the legacy HTTP+SSE transport |
 | `https://run.actuate.run/a/<actuator-id>/openapi.json` | The OpenAPI document |
 
@@ -31,7 +31,7 @@ Both are generated from the actuator definition:
 | `output` | The tool's `outputSchema`, when you set one and it describes an object |
 | `hints` | The tool's [annotations](#tool-hints) |
 
-This is why `name` is restricted to lowercase letters, digits and underscores (at most 64 characters), and why `description` is required.
+This is why `name` is restricted to lowercase letters, digits and underscores (at most 64 characters), and why `description` is required. Names starting with `actuate_` are kept for the [built-in tools](#built-in-tools): `actuate check --platform` and `actuate deploy` refuse them.
 
 Write the description and field descriptions for a model, because a model reads them to decide when and how to call the tool:
 
@@ -54,7 +54,17 @@ export default defineActuator({
 
 The JSON Schema is generated from the schema's input type, so fields with a `.default()` are optional for the caller.
 
-Every endpoint also has `actuate_get_run`, a read-only tool that returns the status and result of a run another tool started. See [what a tool call returns](/docs/guides/connect-your-agent/#what-a-tool-call-returns).
+## Built-in tools
+
+Besides your actuators, an endpoint has these tools:
+
+| Tool | What it does | Listed for |
+| --- | --- | --- |
+| `actuate_get_run` | The status and result of a run another tool started, as the original call would answer. See [what a tool call returns](/docs/guides/connect-your-agent/#what-a-tool-call-returns) | Every token |
+| `actuate_list_runs` | A tool's recent runs, newest first, with what each waiting run waits for. An agent token sees only the runs it started. See [list runs](/docs/guides/connect-your-agent/#list-runs) | Every token |
+| `actuate_cancel_run` | Cancels a running or waiting run. An agent token cancels only the runs it started. See [cancel a run](/docs/guides/connect-your-agent/#cancel-a-run) | Full tokens, and agent tokens you allowed to cancel |
+
+On an endpoint with more than one actuator, each takes an `actuator` argument naming the tool whose run it is.
 
 ## Tool hints
 
@@ -81,13 +91,13 @@ The hosted server always sends all four annotations, so clients and directories 
 | `destructive` | `destructiveHint` | `true`, or `false` for a read-only tool | It may delete or irreversibly change data. Set `false` for additive tools such as "create a draft" |
 | `openWorld` | `openWorldHint` | `true` if the actuator declares any capability (`messaging`, `payment`, `llm`, `http`, required or optional), `false` otherwise | It talks to the outside world: messages, payments, other APIs. Set `false` when it only touches its own database |
 
-`readOnly: true` together with `destructive: true` is treated as not read-only: the tool is sent as destructive. A read-only tool is always sent as idempotent and not destructive, whatever `idempotent` and `destructive` say. `actuate_get_run` is sent as read-only, idempotent, not destructive and closed-world.
+`readOnly: true` together with `destructive: true` is treated as not read-only: the tool is sent as destructive. A read-only tool is always sent as idempotent and not destructive, whatever `idempotent` and `destructive` say. `actuate_get_run` and `actuate_list_runs` are sent as read-only, idempotent, not destructive and closed-world. `actuate_cancel_run` is sent as not read-only, destructive, idempotent (cancelling twice changes nothing more) and closed-world.
 
 Hints describe the tool to clients; they don't enforce anything. The schema, your code and `waitForApproval` do that.
 
 ## Validation before code runs
 
-Arguments are validated against the InputSchema at the gateway, before the actuator wakes. A call with a missing field, a wrong type or an amount over the `max` is rejected: no run is created and none of your code executes. The model gets a precise error it can correct, instead of a half-executed process.
+Arguments are validated against the InputSchema at the gateway, before the actuator wakes. A call with a missing field, a wrong type or an amount over the `max` is rejected: no run is created and none of your code executes. The model gets a precise error it can correct, instead of a half-executed process, and your agent gets the code `INVALID_ARGUMENTS` with each field and reason in `issues`.
 
 Put every rule you can into the schema: enums instead of free strings, `min` and `max` on amounts, `regex` on phone numbers. The schema is the contract the model cannot step outside.
 
@@ -112,6 +122,8 @@ Errors follow the protocol:
 | Session-based request with an `MCP-Protocol-Version` header the server doesn't support | `400`, error `-32600`, with `data.supported` |
 | Unknown method | Error `-32601` (`404` for 2026-07-28 requests) |
 | Unknown tool | Error `-32602`, with status `200` |
+
+Errors in a tool call itself, such as invalid arguments, a refused run or a failed run, are not protocol errors: the result has `isError: true`, a message for the model, and a JSON line with a `code` and whether to retry, also in `_meta["run.actuate/error"]`. See [tool errors](/docs/guides/connect-your-agent/#tool-errors).
 
 A request without credentials, or with a token that is expired, revoked or for another endpoint, gets `401` with a `WWW-Authenticate` header that points MCP clients at the sign-in server. See [Platform API](/docs/reference/platform-api/#mcp-authorization).
 

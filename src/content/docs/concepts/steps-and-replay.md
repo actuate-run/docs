@@ -120,6 +120,8 @@ You don't need to pass a key yourself. Inside `ctx.step.do`, each call to `ctx.m
 
 `n` counts that method's calls in the current attempt of the step, from 0. In a step named `notify` that sends two messages, the first gets `<runId>:notify:send:0` and the second `<runId>:notify:send:1`. So two calls in one step are never deduplicated against each other, and a retried or replayed step gives each call the same key it had before. Calls are counted per method, so an extra `send` on a retry doesn't change the key of the `refund` after it.
 
+[`ctx.notifyOwner`](/docs/concepts/actuators/#message-the-owner) messages get keys the same way, `<runId>:<stepName>:notifyOwner:<n>`, and take no key of your own.
+
 A key you pass yourself is used as is. Keys longer than 255 characters (a long custom run ID) are shortened to 255, ending in a hash of the whole key, so different keys stay different.
 
 :::note

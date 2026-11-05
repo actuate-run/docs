@@ -240,13 +240,15 @@ On the platform, a pass may make at most 50 `ctx.http` requests, and every reque
 
 There is no raw `fetch` in a hosted actuator; `ctx.http` is the way out.
 
-### Keys and tokens
+## Keys and tokens
 
-Providers keep their own credentials, but a service you call with `ctx.http` (an API key, a bot token, a Discord or Slack webhook URL) has no provider. Put its secret in `config`:
+Providers keep their own credentials, but a service you call with `ctx.http` (an API key, a bot token, a Discord or Slack webhook URL) has no provider. Put its secret in `config`, and wrap the field in `secret()`:
 
 ```ts
+import { defineActuator, secret, z } from "@actuate/sdk";
+
 export const ConfigSchema = z.object({
-  discordWebhookUrl: z.string().url().describe("Discord webhook URL; treat it as a password"),
+  discordWebhookUrl: secret(z.string().url().describe("Discord webhook URL; treat it as a password")),
 });
 
 export default defineActuator({
@@ -258,21 +260,55 @@ export default defineActuator({
   http: { allow: ["discord.com"] },
   cron: ["0 * * * *"],
   async run(ctx, _input, config) {
-    await ctx.step.do("post", () =>
-      ctx.http.fetch(config.discordWebhookUrl, {
+    await ctx.step.do("post", async () => {
+      const res = await ctx.http.fetch(config.discordWebhookUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ content: "Price dropped" }),
-      }),
-    );
+      });
+      return { status: res.status };
+    });
   },
 });
 ```
 
-What protects it, and what doesn't:
+`secret()` marks the field `writeOnly` in the config's JSON Schema. Use it on every field that holds a credential, at any depth: inside nested objects, arrays and records, and with `.optional()`, `.nullable()` or `.default()`. Your code gets the real value; what changes is where the value shows up.
 
-- On the platform, configuration is encrypted at rest. Agent (run-scoped) tokens and MCP connections cannot read it. Anyone signed in to your dashboard can see it on the actuator's **Config** tab, and a full API token can read it, both in plain text.
+### Where to set the value
+
+- **On the platform:** set it on the actuator's **Config** tab, and leave it out of `actuate.config.json`. <!-- TODO(platform-secrets): how the Config tab and GET/PUT /v1/actuators/:name/config treat secret fields: masked or write-only on reads, kept when a deploy's config leaves the field out, how to clear one -->
+- **For `actuate dev`:** put it in `.dev.vars`, which the starter's `.gitignore` already excludes, as `ACTUATE_CONFIG`: a JSON object on one line. `actuate dev` merges it over `actuate.config.json` (objects key by key; anything else from `.dev.vars` wins), and its startup banner says the configuration came from both.
+
+  ```bash title=".dev.vars"
+  ACTUATE_CONFIG={"discordWebhookUrl":"https://discord.com/api/webhooks/123/abc"}
+  ```
+
+- **Self-hosted:** the configuration is the `ACTUATE_CONFIG` variable. Set it with `wrangler secret put ACTUATE_CONFIG` rather than under `vars`, which sit in the wrangler file in plain text (see [Self-hosting](/docs/guides/self-hosting/)).
+
+`actuate.config.json` is committed with your code. If it sets a value for a secret field and git would commit it (the project is a git repository and the file isn't ignored), `actuate check` (with or without `--platform`) and `actuate deploy` (`--dry-run` included) warn, naming the fields:
+
+```text
+actuate.config.json:1:1  warn   actuate.config.json sets the secret field discordWebhookUrl, and git does not ignore the file, so it would be committed. Set it in the dashboard (Config tab) and leave it out of the file: the platform keeps a stored secret when the file omits it. For `actuate dev`, put it in .dev.vars as ACTUATE_CONFIG.  (config-secret)
+```
+
+It is a warning, never an error. Outside a git repository nothing is said. See [the deploy checks](/docs/reference/cli/#the-deploy-checks).
+
+### Redaction
+
+The runtime replaces each occurrence of a secret field's value with `[secret]` in what it shows: run logs, step and run errors, step outputs and the run's output, the run records the [runtime's routes](/docs/reference/runtime-http/#secret-values) return, the approval queue and approval pages, approval messages sent to an approver, and `ctx.notifyOwner` messages. Under `actuate dev` and self-hosted, this works from the config schema and `ACTUATE_CONFIG`, with nothing to set up. <!-- TODO(platform-secrets): where the hosted platform applies it (dashboard run pages, the API, MCP results, alerts) -->
+
+What is stored for replay keeps the real value, so a step that returned the key still returns it when the run replays. Redaction has limits:
+
+- Values shorter than 6 characters are not redacted, and neither are booleans. A number is redacted as its digits, so a 6-digit PIN is caught and a 4-digit one is not.
+- A secret is caught as it is, JSON-escaped (once or twice) and URL- or form-encoded. It is not caught in base64, hashed, cut into pieces or otherwise changed.
+- Log lines and errors are redacted when they are written. Step outputs and the run's output are stored as they are and redacted when read, with the secrets configured now: after you change a key, output stored before the change shows the old key.
+- Your own tables are not redacted: `/tables`, the table browser and exports show what you wrote.
+- Messages and requests you send through providers and `ctx.http` go out with the real value.
+- `testActuator` from `@actuate/cli/testing` doesn't redact, so tests can assert on real values.
+
+So treat redaction as a safety net. Don't log a secret, return it from a step, write it to a table or put it in the output.
+
+### What else protects it
+
+- On the platform, configuration is encrypted at rest. Agent (run-scoped) tokens and MCP connections cannot read it. Anyone signed in to your dashboard, and a full API token, can read the configuration's other fields in plain text. <!-- TODO(platform-secrets): whether the dashboard and a full token can read secret fields back -->
 - `http.allow` limits where any request can go, so a leaked value can only be sent to the hosts you listed.
-- Step results, logs and the run's output are stored and shown on the run page. Don't log a secret, return it from a step or put it in the output. A webhook URL is itself the secret, so this includes error messages that quote the URL.
-- `actuate.config.json` is not in the starter's `.gitignore`, and `actuate deploy` sends it as the configuration. Either add it to `.gitignore`, or leave secrets out of the file, set them on the **Config** tab and deploy with `--no-config` so the file doesn't replace them.
-- Self-hosted, the configuration is the `ACTUATE_CONFIG` variable. When it holds a secret, set it with `wrangler secret put ACTUATE_CONFIG` instead of under `vars`, which sit in the wrangler file in plain text (see [Self-hosting](/docs/guides/self-hosting/)).

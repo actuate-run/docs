@@ -8,7 +8,7 @@ The hosted platform has two HTTP surfaces:
 - **The gateway**, `https://run.actuate.run`: starts and reads runs, serves the MCP endpoints, webhooks, approval pages and OpenAPI documents. Agents talk to it.
 - **The API**, `https://api.actuate.run`: everything an owner does (deploy, configure, retry, roll back, alerts, tokens). The CLI and the dashboard talk to it. It is also the OAuth sign-in server for MCP clients.
 
-None of this exists in the open-source runtime, which serves one actuator on its own [runtime HTTP API](/docs/reference/runtime-http/). Responses are JSON. Errors are `{ "error": "<message>" }` with a status code.
+None of this exists in the open-source runtime, which serves one actuator on its own [runtime HTTP API](/docs/reference/runtime-http/). Responses are JSON. Errors are `{ "error": "<message>" }` with a status code; see [errors](#errors) for the extra fields some carry.
 
 ## Authentication
 
@@ -36,6 +36,24 @@ Send tokens as `Authorization: Bearer <token>`. Create API tokens in the dashboa
 | `GET` | `/.well-known/oauth-authorization-server` | none | The authorization server metadata, for MCP clients on the 2025-03-26 spec. See [MCP authorization](#mcp-authorization) |
 
 `:id` is the actuator's ID (`act_...`), shown in the dashboard and printed by `actuate deploy`. A run started on `/a/:id/run` or over MCP records the token that started it in [`trigger.agent`](/docs/concepts/agents/), and counts against that token's [limits](/docs/concepts/agents/#limits).
+
+## Errors
+
+When a run can't start on `/a/:id/run`, a webhook, or the API's `/run` and `/rerun` routes, the error body also has the fields an MCP [tool error](/docs/guides/connect-your-agent/#tool-errors) has, so a script can branch on them instead of on the message:
+
+```json
+{ "error": "Rate limit: 600 runs per 60s on the Maker plan.", "code": "RATE_LIMITED", "retryable": true, "retryAfterSeconds": 4 }
+```
+
+| Field | Meaning |
+| --- | --- |
+| `code` | `INVALID_ARGUMENTS`, `RATE_LIMITED`, `BUDGET_EXHAUSTED`, `STORAGE_FULL`, `ACTUATOR_PAUSED`, `ACCOUNT_SUSPENDED`, `NOT_FOUND` or `INTERNAL`. See [the codes](/docs/guides/connect-your-agent/#tool-errors) |
+| `retryable` | Whether the same request may succeed later, unchanged, without the owner doing anything |
+| `retryAfterSeconds` | With `RATE_LIMITED`: when there is room again. The gateway also sends it as a `Retry-After` header |
+| `resetsAt` | With `BUDGET_EXHAUSTED`: when the monthly budget resets, in ISO 8601 |
+| `issues` | With `INVALID_ARGUMENTS`: each problem, as `{ path, field, message }`, where `path` is a JSON Pointer such as `/amount` |
+
+The status code is the one each route documents: `400` for invalid input, `423` for a paused actuator, `429` for rates and budgets, and so on. Other errors may carry a `code` too, such as `NOT_FOUND` for an unknown run on the gateway and `INTERNAL` for a `500`.
 
 ## Run records
 
@@ -169,8 +187,8 @@ Under `https://api.actuate.run/v1`, with a full token. See [Alerts](/docs/guides
 | `GET` | `/alerts` | The account's alert settings |
 | `PUT` | `/alerts` | Change which alerts you get and the messaging channel |
 | `POST` | `/alerts/test` | Send a test alert now |
-| `GET` | `/actuators/:name/alerts` | `{ "muted": false }` |
-| `PUT` | `/actuators/:name/alerts` | Mute or unmute one actuator: `{ "muted": true }` |
+| `GET` | `/actuators/:name/alerts` | One actuator's alert settings: `{ "muted": false, "runCompleted": false }` |
+| `PUT` | `/actuators/:name/alerts` | Mute or unmute one actuator, or switch its "run completed" alerts on or off |
 
 `GET /v1/alerts`:
 
@@ -178,13 +196,14 @@ Under `https://api.actuate.run/v1`, with a full token. See [Alerts](/docs/guides
 {
   "email": "aina@kedai.example",
   "kinds": { "run_failed": true, "paused": true, "wait_expiring": true, "cron_missed": true, "provider_auth": true },
+  "runCompleted": ["refund_order"],
   "channel": { "kind": "telegram", "to": "123456789", "configured": true },
   "channelsAllowed": true,
   "availableChannels": ["telegram", "resend"]
 }
 ```
 
-`channel` is `null` for email only. `configured: false` means the provider was removed since, so alerts go by email only. `availableChannels` lists the messaging providers configured under Settings → Providers.
+`runCompleted` lists the actuators with [run completed](/docs/guides/alerts/#runs-that-finish-after-waiting) alerts switched on; that kind is set per actuator, so it isn't in `kinds`. `channel` is `null` for email only. `configured: false` means the provider was removed since, so alerts go by email only. `availableChannels` lists the messaging providers configured under Settings → Providers.
 
 `PUT /v1/alerts` takes either field, or both, and returns the new settings:
 
@@ -192,7 +211,7 @@ Under `https://api.actuate.run/v1`, with a full token. See [Alerts](/docs/guides
 { "kinds": { "wait_expiring": false }, "channel": { "kind": "telegram", "to": "123456789" } }
 ```
 
-- `kinds` sets any subset of the [alert kinds](/docs/guides/alerts/#what-you-are-alerted-about) to `true` or `false`; kinds you leave out keep their setting. An unknown kind or a non-boolean is `400`.
+- `kinds` sets any subset of the [alert kinds](/docs/guides/alerts/#what-you-are-alerted-about) to `true` or `false`; kinds you leave out keep their setting. An unknown kind or a non-boolean is `400`, and so is `run_completed`, which is switched on per actuator (below).
 - `channel` is `{ kind, to }` to also send alerts to a messaging provider, or `null` for email only. `kind` must be a messaging provider you have configured (`409` otherwise); `to` is one recipient ID or address, at most 200 characters, no spaces (`400` otherwise). On the Sandbox plan a channel is `402`.
 
 `POST /v1/alerts/test` sends a test alert to your email and the channel, whatever the toggles and mutes say, and reports each:
@@ -203,6 +222,14 @@ Under `https://api.actuate.run/v1`, with a full token. See [Alerts](/docs/guides
 
 `channel` is `"off"` with no channel set, or `{ "error": "<what the provider said>" }` when sending failed. One test per account every 30 seconds; another is `429`.
 
+`PUT /v1/actuators/:name/alerts` takes `muted`, `runCompleted`, or both, as booleans, and returns the actuator's settings:
+
+```json
+{ "runCompleted": true }
+```
+
+`muted: true` drops every alert for the actuator, "run completed" included. A body with neither field, or a value that isn't a boolean, is `400`; an unknown actuator is `404`.
+
 ## Agents and tokens
 
 Under `https://api.actuate.run/v1`, with a full token. Agent tokens can't read analytics or change limits, their own included. See [Agents](/docs/concepts/agents/).
@@ -211,7 +238,7 @@ Under `https://api.actuate.run/v1`, with a full token. Agent tokens can't read a
 | --- | --- | --- |
 | `GET` | `/tokens` | Every token on the account, including revoked ones and MCP connections |
 | `POST` | `/tokens` | Create an API token |
-| `PATCH` | `/tokens/:id` | Rename a token or change its limits |
+| `PATCH` | `/tokens/:id` | Rename a token, change its limits, or let it cancel its runs |
 | `DELETE` | `/tokens/:id` | Revoke a token or MCP connection |
 | `GET` | `/agents` | Usage per token over a period |
 | `GET` | `/agents/:tokenId/usage` | One token's usage per tool and per day |
@@ -230,9 +257,13 @@ Under `https://api.actuate.run/v1`, with a full token. Agent tokens can't read a
 { "id": "tok_Hn3vQ8sWk2Ze0RbY", "token": "ak_...", "scope": "run", "limits": { "runsPerHour": 200, "tools": { "refund_order": 5 } } }
 ```
 
-`GET /v1/tokens` returns rows with `id`, `name`, `scope`, `kind` (`"api"`, or `"oauth"` for an MCP connection), `oauth_client_id` and `resource` (the client and MCP URL of a connection), `created_at`, `last_used_at` and `revoked_at`.
+`GET /v1/tokens` returns rows with `id`, `name`, `scope`, `kind` (`"api"`, or `"oauth"` for an MCP connection), `oauth_client_id` and `resource` (the client and MCP URL of a connection), `created_at`, `last_used_at`, `revoked_at` and `can_cancel_runs` (`1` when an agent token may cancel its runs; it stays `0` on full tokens, which always can).
 
-`PATCH /v1/tokens/:id` takes `name` (1 to 64 characters) and/or `limits`, and returns the token as an agent (below). `"limits": null` removes them. Limits on a full token are `400`. A revoked or unknown token is `404`. The gateway picks up changes within 30 seconds.
+`PATCH /v1/tokens/:id` takes any of `name` (1 to 64 characters), `limits` and `canCancelRuns`, and returns the token as an agent (below).
+
+- `"limits": null` removes the limits. Limits on a full token are `400`.
+- `"canCancelRuns": true` lets an agent token, or an MCP connection, cancel the runs it started with [`actuate_cancel_run`](/docs/guides/connect-your-agent/#cancel-a-run); `false` takes it away. It must be a boolean, and on a full token it is `400`: full tokens can always cancel.
+- A revoked or unknown token is `404`. The gateway picks up changes within 30 seconds.
 
 ### Usage
 
@@ -251,13 +282,14 @@ Under `https://api.actuate.run/v1`, with a full token. Agent tokens can't read a
       "lastUsedAt": 1793664000000,
       "revokedAt": null,
       "limits": { "tools": { "refund_order": 5 } },
+      "canCancelRuns": false,
       "usage": { "calls": 412, "invalid": 9, "refused": 0, "limited": 3, "completed": 380, "failed": 12, "approved": 14, "rejected": 2, "p50Ms": 250, "p95Ms": 1000 }
     }
   ]
 }
 ```
 
-`usage` is `null` for a token with no calls in the period. The counters are described under [Agents](/docs/concepts/agents/#analytics).
+`canCancelRuns` says whether the token may use `actuate_cancel_run`: always `true` for a full token. `usage` is `null` for a token with no calls in the period. The counters are described under [Agents](/docs/concepts/agents/#analytics).
 
 `GET /v1/agents/:tokenId/usage?days=7` returns `agent` (as above, without `usage`), `days`, `retentionDays`, `tools` (totals per actuator, with `p50Ms` and `p95Ms`) and `daily` (one row per UTC day and actuator, with the counters and `p95Ms`).
 

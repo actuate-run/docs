@@ -196,9 +196,59 @@ export const ActuatorObject = runtime.ActuatorObject;
 
 Point the provider at `https://<your origin>/providers/mybank/webhook`. Payment webhooks should deliver `payment.<referenceId>` with a [`PaymentEvent`](/docs/reference/sdk/#paymentevent) payload, so actuators written for the platform work unchanged.
 
+### Messages to the owner
+
+`ctx.notifyOwner` messages go to the `notifyOwner` you pass to `createRuntime`: a function of the environment that returns an [`OwnerNotifier`](/docs/reference/sdk/#ownernotifier). Send them however you like, for example to a Telegram chat:
+
+```ts title="entry.ts"
+import { createRuntime, type RuntimeEnv } from "@actuate/runtime/worker";
+import type { OwnerNotifier } from "@actuate/sdk";
+import actuator from "./actuator.js";
+
+interface Env extends RuntimeEnv {
+  TELEGRAM_BOT_TOKEN: string;
+  OWNER_CHAT_ID: string;
+}
+
+function ownerChat(env: Env): OwnerNotifier {
+  return {
+    async notify(message) {
+      const text = message.subject ? `${message.subject}\n\n${message.text}` : message.text;
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        // Telegram takes at most 4,096 characters.
+        body: JSON.stringify({ chat_id: env.OWNER_CHAT_ID, text: `[${message.actuator}] ${text}`.slice(0, 4096) }),
+      });
+      if (!res.ok) throw new Error(`Telegram: ${res.status}`);
+      return { sent: true };
+    },
+  };
+}
+
+const runtime = createRuntime<Env>(actuator, { notifyOwner: (env) => ownerChat(env) });
+export default runtime.worker;
+export const ActuatorObject = runtime.ActuatorObject;
+```
+
+- Secret config values in the text and subject are replaced with `[secret]` before your notifier sees them.
+- Each message carries an `idempotencyKey` that is the same on every retry of the step. Telegram doesn't deduplicate, so a step retried after a timeout can send twice; a notifier that stores the keys it has sent can skip repeats.
+- Return `{ sent: false, reason }` for a limit you chose, such as a daily cap: the call resolves to that, the reason is logged as a warning, and the step carries on. A notifier that throws fails the step's attempt, which is then retried if the step has `retries`.
+- Without `notifyOwner`, each message is written to the run's log, and `ctx.notifyOwner` resolves to `{ sent: false, reason: "No owner notifier is configured; the message was logged." }`.
+
+Hosts that call `executePass` themselves pass the notifier as `owner`.
+
 ### Configuration
 
 `createRuntime` also takes `config: (env) => unknown` if you want to build the configuration from something other than `ACTUATE_CONFIG`.
+
+A configuration that isn't valid JSON sets `configError` to its position only, such as `Invalid ACTUATE_CONFIG: it is not valid JSON (line 1, column 24).`, never the text around the error, because `GET /` serves `configError` to run tokens too. One the schema rejects says why, with secret values replaced.
+
+### Secret config fields
+
+Fields wrapped in [`secret()`](/docs/reference/sdk/#secret) (JSON Schema `"writeOnly": true`) are redacted with no setup: the runtime reads their values from the config schema and `ACTUATE_CONFIG`, and replaces each occurrence with `[secret]` in run logs, step and run errors, step outputs, run records, the approval queue and pages, approval messages, owner messages and `500` error messages. Stored step results keep the real values, so replays see them. Your tables are not redacted. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for the limits.
+
+Set `ACTUATE_CONFIG` with `wrangler secret put ACTUATE_CONFIG` when it holds a secret, rather than under `vars` in the wrangler file.
 
 ## Using the engine directly
 
@@ -235,7 +285,9 @@ await manager.alarm();
 console.log(manager.getRun(run.runId)?.status, manager.getSteps(run.runId));
 ```
 
-`consoleMessaging()` prints messages and `fakePayment()` creates bills that are paid by posting `payment.<referenceId>` (and refunds that always succeed), the same stand-ins `actuate dev` uses. `deliverEvent(key, payload)`, `decide(token)`, `pendingApprovals()`, `listTables()` and `readTable(name)` cover the rest of the lifecycle. `manager.start` does not validate input; parse it with `actuator.input` first if you want that check in tests.
+`consoleMessaging()` prints messages and `fakePayment()` creates bills that are paid by posting `payment.<referenceId>` (and refunds that always succeed), the same stand-ins `actuate dev` uses. `deliverEvent(key, payload)`, `decide(token)`, `pendingApprovals()`, `listTables()` and `readTable(name)` cover the rest of the lifecycle. Pass `owner` to `executePass` to receive `ctx.notifyOwner` messages (`consoleOwnerNotifier()` prints them, as `actuate dev` does).
+
+To redact secret config values in your own host, give `RunManager` a `secrets` function, `secrets: () => collectSecrets(configJsonSchema, config)`, where `configJsonSchema` is `z.toJSONSchema(actuator.config, { io: "input" })`; `manager.redact(value)` applies the same redaction to anything else. `@actuate/runtime` also exports `redactSecrets(value, secrets)`, `secretFields(configJsonSchema, config)` (the paths of the secret fields a config sets), `secretPaths(configJsonSchema)` (every secret field the schema declares, such as `apiKey`, `slack.botToken`, `webhooks[].secret` or `keys.*`) and `omitSecrets(configJsonSchema, config)`. They work on plain JSON Schema. `manager.start` does not validate input; parse it with `actuator.input` first if you want that check in tests.
 
 ### Guards
 

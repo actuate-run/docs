@@ -1,15 +1,15 @@
 ---
 title: Alerts
-description: The hosted platform watches your actuators and tells you when a run fails, an actuator is paused, an approval is about to expire, a schedule didn't start or a provider rejects your credentials.
+description: The hosted platform watches your actuators and tells you when a run fails, an actuator is paused, an approval is about to expire, a schedule didn't start or a provider rejects your credentials, and, if you ask, when a run that waited finishes.
 ---
 
 The hosted platform watches every actuator and tells you when something needs you: by email on every plan, and also on one of your messaging channels on Maker and Agency. You don't write any code for it. Alerts are sent in the background, so they never delay or fail a run.
 
-Alerts are hosted only. The [open-source runtime](/docs/guides/self-hosting/) notifies nobody.
+Alerts are hosted only. The [open-source runtime](/docs/guides/self-hosting/) notifies nobody. To send yourself a message of your own from an actuator, use [`ctx.notifyOwner`](/docs/concepts/actuators/#message-the-owner).
 
 ## What you are alerted about
 
-Every kind is on until you turn it off.
+Every kind in this table is on until you turn it off. One more, [run completed](#runs-that-finish-after-waiting), is off until you switch it on for an actuator.
 
 | Kind | Sent when | At most one per actuator every |
 | --- | --- | --- |
@@ -26,9 +26,37 @@ Details:
 - **Expiring waits** are grouped: waits that time out within 15 minutes of each other come in one alert, listing up to five. When a wait times out, the run carries on as if nobody answered, so this is your last chance to answer in time. See [Human approvals and input](/docs/concepts/approvals/).
 - **Rejected credentials** are recognised conservatively: only errors from the provider's own API, with status `401`, or a `400`, `403` or (for Slack) `200` whose message says the credentials are bad. Errors about one chat or channel, such as "blocked by the user" or "chat not found", don't count.
 
+### Runs that finish after waiting
+
+When an agent starts a run that waits, for a day or for your approval, nobody is told when it finishes. Switch on **run completed** alerts for an actuator to hear about it: on the actuator's **Settings** tab, tick **Email me when a run that waited finishes**, or send `{"runCompleted": true}` to [`PUT /v1/actuators/:name/alerts`](/docs/reference/platform-api/#alerts).
+
+- It is per actuator and off by default, so a busy actuator you don't care about never sends one. **Settings → Alerts** shows which actuators have it on, with links to their Settings tabs.
+- Only runs that end `COMPLETED` after waiting at least once alert: they slept, waited for an event, an approval or an answer, or retried a step. A run that finishes in its first pass already answered whoever started it, so it never alerts. Failed runs are `run_failed` alerts.
+- The alert gives the run, the agent that started it (if one did), how long it ran, and the first 500 characters of its output as JSON, with a link to the run. <!-- TODO(platform-secrets): whether secret config values are redacted from the output preview -->
+- At most one is sent per actuator every 5 minutes. Runs that finish in the meantime are counted into the next alert ("…and 3 more runs finished since …"), or, if none follows, into one alert at the end of those 5 minutes ("3 runs of refund_order that were waiting finished since …"), so a burst of results never sits unreported.
+- They may use only half of your plan's [daily alert emails](#daily-email-cap), counted against every alert email sent that day, so failures and other alerts always have the other half. Past that, they aren't emailed for the rest of the UTC day (the last one says so), but a messaging channel on Maker or Agency still gets every one.
+- Muting the actuator stops these too.
+
+```text
+Subject: refund_order: a run finished
+
+A run of refund_order that was waiting has finished.
+
+Run: run_01a19b8e7c2d4f60a1b2c3d4e5f6
+Started by agent: Claude
+Ran for: 3 h 5 min
+Output: {"status":"REFUNDED","amount":120}
+
+Open the run: https://app.actuate.run/actuators/refund_order/runs/run_01a19b8e7c2d4f60a1b2c3d4e5f6
+
+—
+You get at most one alert like this per actuator every 5 minutes, because you switched it on for refund_order.
+Switch it off or mute refund_order: https://app.actuate.run/actuators/refund_order/settings
+```
+
 ### Throttling
 
-Each actuator sends at most one alert of a kind per window (the last column above). The first one goes out at once; the rest in that window are held back and counted, and the next alert of that kind after the window says how many:
+Each actuator sends at most one alert of a kind per window (the last column above, or 5 minutes for run completed). The first one goes out at once; the rest in that window are held back and counted, and the next alert of that kind after the window says how many:
 
 ```text
 Subject: refund_order: a run failed
@@ -53,7 +81,7 @@ Windows are per actuator and per kind, so a failing actuator never hides an aler
 
 ### Daily email cap
 
-Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual.
+Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual. [Run completed](#runs-that-finish-after-waiting) alerts may use only half of the day's emails.
 
 ## Where alerts go
 
@@ -81,6 +109,7 @@ The recipient is one ID or address, at most 200 characters, with no spaces. Mess
 
 - **A kind, for every actuator:** untick it under **Settings → Alerts → What to alert on**.
 - **One actuator, every kind:** on the actuator's **Settings** tab, click **Mute alerts**. The monthly budget notice is account-wide and is still sent.
+- **Run completed, for one actuator:** untick **Email me when a run that waited finishes** on its **Settings** tab.
 
 Changes apply to the next alert.
 
@@ -100,6 +129,12 @@ curl -X PUT https://api.actuate.run/v1/actuators/refund_order/alerts \
   -H "Authorization: Bearer $ACTUATE_API_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"muted": true}'
+
+# Hear when another actuator's runs finish after waiting.
+curl -X PUT https://api.actuate.run/v1/actuators/order_followup/alerts \
+  -H "Authorization: Bearer $ACTUATE_API_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"runCompleted": true}'
 ```
 
 See [Platform API](/docs/reference/platform-api/#alerts) for every field and error.

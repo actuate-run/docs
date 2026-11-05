@@ -447,6 +447,7 @@ What the test actuator gives you:
 | `t.query(sql, params)` | SQL straight against the database, not metered, for assertions |
 | `t.usage(runId)` | The run's passes, statements, and rows read and written. Without a run ID, the totals of every run. See [measuring rows](#measuring-rows) |
 | `t.messages`, `t.bills`, `t.refunds`, `t.prompts`, `t.requests`, `t.approvals` | What the fakes recorded: messages sent, bills created, refunds, LLM requests, HTTP requests, and approval and input requests with their links (each `message` a string, `""` when the step gave none) |
+| `t.ownerNotifications` | Messages sent with [`ctx.notifyOwner`](/docs/concepts/actuators/#message-the-owner), each an [`OwnerNotification`](/docs/reference/sdk/#ownernotification) with `text`, `subject`, `runId`, `actuator` and `idempotencyKey`. Each is reported sent |
 | `t.close()` | Closes the database, and gives `Date` back once the last open test actuator closes |
 
 `testActuator(actuator, options)` takes:
@@ -461,6 +462,8 @@ What the test actuator gives you:
 | `now` | When the clock starts. Default: Monday 5 January 2026, 00:00 UTC |
 | `fakeDate` | Make `Date.now()` and `new Date()` follow the clock (default `true`) |
 | `logs` | Print run logs to the console (default `false`) |
+
+Unlike `actuate dev` and the runtime, `testActuator` doesn't redact [`secret()`](/docs/reference/sdk/#secret) config values from runs, steps, logs or owner messages, so tests can assert on the real ones.
 
 The fakes record every call and succeed: a message gets an ID, a bill gets a URL and stays `pending` until `t.pay`, and a refund succeeds. Like real providers, the payment fake returns the first bill or refund again for a repeated idempotency key, without recording another. The guards are the ones [`actuate dev`](/docs/reference/cli/#guards-in-actuate-dev) applies. They don't check that your plan includes a capability: `actuate check --platform` does, and `actuate test` reports the deploy checks after the tests.
 

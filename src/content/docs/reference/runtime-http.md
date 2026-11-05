@@ -47,7 +47,7 @@ The only exception is `ACTUATE_DEV=1`, which `actuate dev` sets for you: routes 
 | `GET` | [`/tables`](#tables) | admin | List your tables |
 | `GET` | [`/tables/:name`](#tables) | admin | Read a table as JSON or CSV |
 
-Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500 {"error":"<message>"}`.
+Unknown routes return `404 {"error":"not found"}`. Unexpected errors return `500 {"error":"<message>"}`, with secret config values replaced.
 
 There is no `/mcp` route: the MCP endpoint is served by the hosted platform's gateway, not by this runtime. A self-hosted actuator is called over these routes, usually `POST /run` with `ACTUATE_RUN_TOKEN`.
 
@@ -80,6 +80,10 @@ There is no `/mcp` route: the MCP endpoint is served by the hosted platform's ga
 | `wakeAt` | Epoch ms of the next scheduled wake (sleep, timeout, retry), or `null` |
 | `passes` | How many times `run` has executed |
 | `createdAt`, `updatedAt` | Epoch ms |
+
+### Secret values
+
+Config fields wrapped in [`secret()`](/docs/reference/sdk/#secret) (JSON Schema `"writeOnly": true`) are hidden in what these routes return about runs: each occurrence of their values becomes `[secret]` in run records (`/run`, `/webhook`, `/runs`, `/runs/:runId`, including `output`, `error`, `steps` and `logs`), the approval queue, the approval and input pages, and the message sent to an approver. The values come from the config schema and `ACTUATE_CONFIG`; there is nothing to set up. Stored step results keep the real values, so replays see them. Reads are redacted with the values configured now, and [`/tables`](#tables) is not redacted at all. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for what is caught.
 
 On the hosted platform, run records also have `version` and, for runs an API token started, `trigger.agent`. See [Platform API](/docs/reference/platform-api/#run-records).
 
@@ -137,7 +141,7 @@ The route needs no admin token: verification is your function's job.
 }
 ```
 
-`input` and `config` are JSON Schema generated from the Zod schemas (input side, so fields with defaults are optional). `configError` is a message when the configuration is invalid; while it is set, every run fails with a `ConfigError`.
+`input` and `config` are JSON Schema generated from the Zod schemas (input side, so fields with defaults are optional). `configError` is a message when the configuration is invalid; while it is set, every run fails with a `ConfigError`. Invalid JSON is reported by position only, never quoting the text: `Invalid ACTUATE_CONFIG: it is not valid JSON (line 1, column 24).` A configuration the schema rejects gives `Invalid configuration: ...` with the reasons, secret values replaced.
 
 ## Run
 
@@ -225,13 +229,13 @@ The response returns after the resumed runs' next pass.
 | `offset` | `0` | Rows to skip |
 | `format` | JSON | `csv` returns a CSV download named `<name>.csv`. Text cells that start with `=`, `+`, `-`, `@`, a tab or a carriage return are prefixed with `'`, so a spreadsheet never runs them as formulas |
 
-An unknown table returns `404 {"error":"Unknown table"}`.
+An unknown table returns `404 {"error":"Unknown table"}`. Tables are your own data and are not [redacted](#secret-values).
 
 ## Environment variables
 
 | Variable | Meaning |
 | --- | --- |
-| `ACTUATE_CONFIG` | JSON object of configuration, validated against the actuator's `config` schema. Default `{}`. Invalid JSON or values set `configError` and fail every run |
+| `ACTUATE_CONFIG` | JSON object of configuration, validated against the actuator's `config` schema. Default `{}`. Invalid JSON or values set `configError` and fail every run. The values of `secret()` fields are [redacted](#secret-values) from everything the routes return. Set it with `wrangler secret put` when it holds one |
 | `ACTUATE_TOKEN` | The owner's bearer token: every admin and run route. Keep it for yourself and your dashboards; never give it to an agent. Unset (and `ACTUATE_RUN_TOKEN` unset too), admin routes answer `503` |
 | `ACTUATE_RUN_TOKEN` | Bearer token for an agent: `GET /`, `POST /run` and `GET /runs/:runId` only. Every other route answers it with `403` |
 | `ACTUATE_WEBHOOK_SECRET` | Secret for `POST /webhook`: signs the body (`X-Hub-Signature-256`), or is sent as `x-actuate-secret` or `?secret=`. Required to accept webhooks: unset, `/webhook` answers `503` |

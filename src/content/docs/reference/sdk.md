@@ -8,7 +8,7 @@ npm install @actuate/sdk
 ```
 
 ```ts
-import { defineActuator, z, NonRetryableError } from "@actuate/sdk";
+import { defineActuator, secret, z, NonRetryableError } from "@actuate/sdk";
 ```
 
 `@actuate/sdk` is ESM-only and has one dependency, Zod 4.6 or later, which it re-exports as `z`. Use that `z` so your schemas and the SDK agree on the Zod version.
@@ -26,6 +26,23 @@ function defineActuator<C, I, O, K extends Capability = never>(
 ```
 
 Declares an actuator. The default export of an actuator file must be the result of this call. Validates the definition and throws [`ActuatorError`](#actuatorerror) if `name` is invalid, `description` is empty, a capability is unknown, or `"http"` is declared without `http.allow`. Returns a frozen copy of the definition. The capability list is inferred as a literal type, so `ctx` only has the clients you declared.
+
+### secret
+
+```ts
+function secret<T extends z.ZodType>(schema: T): T;
+```
+
+Marks a config field as secret: an API key, a token, a password, a webhook URL. It returns the same schema with `.meta({ writeOnly: true })`, so the field's JSON Schema gets `"writeOnly": true`, which is what the runtime and the platform look for.
+
+```ts
+config: z.object({
+  apiKey: secret(z.string()),
+  slack: z.object({ botToken: secret(z.string()).optional() }),
+}),
+```
+
+Wrap the field itself, at any depth, including inside arrays and records. It survives `.optional()`, `.nullable()`, `.default()` and `.describe()`. Each occurrence of a secret field's value becomes `[secret]` in run logs, errors, step outputs and run records; your code still gets the real value. Values shorter than 6 characters and booleans are not redacted. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for what is and isn't covered.
 
 ### isActuator
 
@@ -67,6 +84,15 @@ The Zod 4 namespace, re-exported from `zod`.
 const CAPABILITIES: readonly Capability[]; // ["messaging", "payment", "llm", "http"]
 ```
 
+### NOTIFY_OWNER_MAX_TEXT, NOTIFY_OWNER_MAX_SUBJECT
+
+```ts
+const NOTIFY_OWNER_MAX_TEXT = 4_000;
+const NOTIFY_OWNER_MAX_SUBJECT = 200;
+```
+
+The longest text and subject [`ctx.notifyOwner`](#notifyowner) accepts, in characters.
+
 ## Definition types
 
 ### ActuatorDefinition
@@ -89,9 +115,9 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
 
 | Field | Meaning |
 | --- | --- |
-| `name` | Tool name. Must match `^[a-z][a-z0-9_]{0,63}$` |
+| `name` | Tool name. Must match `^[a-z][a-z0-9_]{0,63}$`. The deploy checks refuse names starting with `actuate_`, which the hosted platform keeps for its own tools |
 | `description` | What the actuator does. Becomes the MCP tool description; write it for a model |
-| `config` | Zod schema for operator settings. Defaults are used for anything not configured. Optional |
+| `config` | Zod schema for operator settings. Defaults are used for anything not configured. Wrap API keys and tokens in [`secret()`](#secret). Optional |
 | `input` | Zod schema for the payload of one run. Validated before any code runs |
 | `output` | Zod schema for the return value. The return value is validated against it, and it is published in the MCP tool and OpenAPI document. Optional |
 | `capabilities` | Capabilities this actuator uses. Undeclared ones are absent from `ctx` |
@@ -167,6 +193,7 @@ interface BaseContext {
   step: Step;
   db: Db;
   log: Logger;
+  notifyOwner(text: string, options?: NotifyOwnerOptions): Promise<NotifyOwnerResult>;
 }
 ```
 
@@ -178,6 +205,68 @@ interface BaseContext {
 | `step` | Durable steps: [`Step`](#step) |
 | `db` | The actuator's SQLite database: [`Db`](#db) |
 | `log` | The run's log: [`Logger`](#logger) |
+| `notifyOwner` | Send the actuator's owner a short message: [`notifyOwner`](#notifyowner) |
+
+`notifyOwner` is new in `@actuate/sdk` 0.4. If you build a `BaseContext` yourself, for example in a hand-written test context, add it.
+
+### notifyOwner
+
+```ts
+notifyOwner(text: string, options?: NotifyOwnerOptions): Promise<NotifyOwnerResult>;
+```
+
+Sends the actuator's owner a short message, for things a person should hear about ("3 refunds have waited more than a day"); to message customers, use `ctx.messaging`. No capability to declare. See [Message the owner](/docs/concepts/actuators/#message-the-owner).
+
+- Call it inside `ctx.step.do`. Outside a step it throws `ActuatorError`, and `actuate check` reports it (`no-notify-outside-step`).
+- `text` is 1 to 4,000 characters and not only whitespace. `subject` is one line of at most 200 characters, with no line breaks or other control characters. Anything else throws `ActuatorError`.
+- Each message gets an idempotency key derived from the step's: `<runId>:<stepName>:notifyOwner:<n>`, where `n` counts this attempt's `notifyOwner` calls from 0, as for [provider calls](/docs/concepts/steps-and-replay/#keys-on-provider-calls). A retried step sends its messages with the same keys.
+- A message that can't go out resolves to `{ sent: false, reason }` and adds a warning to the run's log, instead of throwing.
+- Secret config values in `text` and `subject` become `[secret]` before the message is handed on (not in `@actuate/cli/testing`, which records the real text).
+
+### NotifyOwnerOptions
+
+```ts
+interface NotifyOwnerOptions {
+  /** One line, at most 200 characters. */
+  subject?: string;
+}
+```
+
+### NotifyOwnerResult
+
+```ts
+interface NotifyOwnerResult {
+  /** Whether the message went out. */
+  sent: boolean;
+  /** Why not, when it didn't: no notifier configured, a daily cap reached, ... */
+  reason?: string;
+}
+```
+
+### OwnerNotification
+
+```ts
+interface OwnerNotification {
+  text: string;
+  subject?: string;
+  runId: string;
+  actuator: string;
+  /** `<runId>:<stepName>:notifyOwner:<n>`: the same on every retry of the step. */
+  idempotencyKey: string;
+}
+```
+
+One `ctx.notifyOwner` message, as the runtime hands it to an [`OwnerNotifier`](#ownernotifier).
+
+### OwnerNotifier
+
+```ts
+interface OwnerNotifier {
+  notify(message: OwnerNotification): Promise<NotifyOwnerResult>;
+}
+```
+
+Delivers `ctx.notifyOwner` messages. Self-hosted, you write one and pass it to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#messages-to-the-owner)). Deduplicate on `idempotencyKey`, so a retried step never sends a message twice. Return `{ sent: false, reason }` for a limit you chose, such as a daily cap: the runtime logs the reason and the step carries on. Throw only for a failure worth retrying the step for.
 
 ### Trigger
 
@@ -447,7 +536,7 @@ class ActuatorError extends Error {
 }
 ```
 
-Thrown when an actuator breaks one of the SDK's rules: an invalid definition, a duplicate or nested step name, a provider call outside a step, an unconfigured capability, a reserved table, or a return value that does not match the `output` schema.
+Thrown when an actuator breaks one of the SDK's rules: an invalid definition, a duplicate or nested step name, a provider call or `ctx.notifyOwner` outside a step, an unconfigured capability, a reserved table, or a return value that does not match the `output` schema.
 
 ### SuspendSignal
 
