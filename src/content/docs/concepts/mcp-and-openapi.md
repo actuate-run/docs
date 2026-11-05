@@ -8,7 +8,16 @@ When you deploy an actuator, the platform publishes it two ways:
 - a **hosted MCP server**, over Streamable HTTP (and the legacy HTTP+SSE transport), where the actuator is a tool an AI agent can call;
 - an **OpenAPI document**, for any HTTP client or agent framework that speaks OpenAPI.
 
-`actuate deploy` prints both URLs. MCP clients either [sign in with OAuth](/docs/guides/connect-your-agent/#sign-in-from-your-mcp-client) or send an API token as `Authorization: Bearer <token>`; an Agent (run-scoped) token is enough. The OpenAPI document and the HTTP routes it describes take an API token only. See [Connect your agent](/docs/guides/connect-your-agent/).
+`actuate deploy` prints both URLs:
+
+| URL | What it serves |
+| --- | --- |
+| `https://run.actuate.run/a/<actuator-id>/mcp` | MCP: one actuator, plus `actuate_get_run` |
+| `https://run.actuate.run/mcp` | MCP: every active actuator on your account, plus `actuate_get_run` |
+| `https://run.actuate.run/a/<actuator-id>/sse`, `https://run.actuate.run/sse` | The same, over the legacy HTTP+SSE transport |
+| `https://run.actuate.run/a/<actuator-id>/openapi.json` | The OpenAPI document |
+
+MCP clients either [sign in with OAuth](/docs/guides/connect-your-agent/#sign-in-from-your-mcp-client) or send an API token as `Authorization: Bearer <token>`; an Agent (run-scoped) token is enough. The OpenAPI document and the HTTP routes it describes take an API token only. See [Connect your agent](/docs/guides/connect-your-agent/).
 
 ## From actuator to tool
 

@@ -27,7 +27,9 @@ Add the URL as a remote MCP server, with no token or header. When the client fir
 
 ### Claude
 
-In Claude (on the web or in the desktop app), add a custom connector with the URL `https://run.actuate.run/mcp`, or one actuator's URL, and connect. Claude opens the Actuate sign-in page.
+In Claude (on the web or in the desktop app), add a custom connector with the URL `https://run.actuate.run/mcp`, or one actuator's URL, and connect. Claude opens the Actuate sign-in page. Then turn the connector on in the chats where you want its tools. On plans that allow only one custom connector, use `https://run.actuate.run/mcp`: it carries every active actuator on your account.
+
+When a tool's run waits, Claude gets a [receipt](#the-receipt) and the chat moves on. Claude is not told when the run finishes. Ask it to check on the run later and it calls `actuate_get_run` with the `runId` from the receipt, which stays in the conversation. Claude cannot approve or answer a run's question for you: decide in the dashboard's approvals queue, or through the links your actuator sends (see [Approvals](/docs/concepts/approvals/)). To hear about runs that fail without asking, turn on [alerts](/docs/guides/alerts/).
 
 ### ChatGPT
 
@@ -154,8 +156,10 @@ If you are building an MCP client that signs users in, see the [OAuth endpoints]
 
 ## What a tool call returns
 
+A tool call answers after the run's first pass: your code runs from the top until it returns, throws, or reaches its first wait. A wait is a `sleep` or `sleepUntil`, a `waitForEvent`, `waitForApproval` or `waitForInput`, or a failed step's retry backoff. There is no time threshold: a run that never waits answers with its output, and a run that waits, even for a second, answers with a receipt.
+
 - **The run finished:** the result is the run's output, as text and, when the actuator declares an `output` schema and the output is an object, as `structuredContent`.
-- **The run is waiting** (sleeping, waiting for a webhook, or waiting for a person to approve): the result is a receipt with the `runId`. Your agent can tell the user it's in progress and check later with `actuate_get_run`:
+- **The run is waiting** (sleeping, waiting for a webhook, waiting for a person, or about to retry a step): the result is a receipt. Your agent can tell the user it's in progress and check later with `actuate_get_run`:
 
   ```json
   { "name": "actuate_get_run", "arguments": { "runId": "run_01a19b8e...", "actuator": "refund_order" } }
@@ -163,6 +167,22 @@ If you are building an MCP client that signs users in, see the [OAuth endpoints]
 
   `actuator` is needed only when the endpoint has more than one actuator, as the account-wide `/mcp` usually does.
 - **The run failed, or the arguments were invalid:** the result has `isError: true` and a message the model can read and correct. A call refused by your plan's limits or the agent's own [limits](/docs/concepts/agents/#limits) is a tool error too, with the reason.
+
+### The receipt
+
+A receipt is text content only, with no `structuredContent`. It is a sentence for the model followed by a JSON object:
+
+```text
+Run run_01a19b8e... started and is waiting (sleeping, or waiting for an event or approval). Call actuate_get_run with this runId to get the result later. {"runId":"run_01a19b8e...","status":"WAITING","wakeAt":"2026-11-05T11:00:00.000Z"}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `runId` | The run to pass to `actuate_get_run` |
+| `status` | `WAITING`: the run is suspended. `RUNNING`: a pass is still in progress, which is rare |
+| `wakeAt` | When the run next wakes by itself, in ISO 8601: the end of a sleep, the timeout of a wait, or the next retry of a failed step. `null` when it waits for an event, approval or input with no timeout |
+
+`actuate_get_run` answers the same way as the original call: the output once the run is `COMPLETED`; `isError: true` with the error once it is `FAILED` or `CANCELLED`; otherwise the same receipt, worded "is still waiting".
 
 ## Retries never act twice
 
