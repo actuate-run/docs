@@ -23,7 +23,7 @@ There are four capabilities:
 
 | Capability | Client | Launch providers | Credentials held by |
 | --- | --- | --- | --- |
-| `messaging` | `ctx.messaging` | Telegram Bot API (the default, free and live in two minutes), WhatsApp Cloud API (your own Meta app and WABA), Slack, Discord, email via Resend | You |
+| `messaging` | `ctx.messaging` | Telegram Bot API (the default, free and live in two minutes), WhatsApp Cloud API (your own Meta app and WABA), Slack, Discord, email through Resend | You |
 | `payment` | `ctx.payment` | Stripe, Chip, ToyyibPay, Billplz | You |
 | `llm` | `ctx.llm` | Anthropic, OpenAI, Google, or any OpenAI-compatible API (OpenRouter, Groq, Together, DeepSeek, Mistral, Workers AI, a local Ollama), with your API key | You |
 | `http` | `ctx.http` | Outbound `fetch` to domains you allow-list | You, per domain |

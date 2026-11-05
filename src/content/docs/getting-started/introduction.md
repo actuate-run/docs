@@ -45,7 +45,7 @@ Three patterns come up often:
 - **Things that wait.** A run waits hours or days between two steps. [`sleep` and `waitForEvent`](/docs/concepts/sleeping-and-waiting/) cost nothing while waiting, so a 14-day drip is as cheap as a one-shot webhook.
 - **Things that need a person.** Examples are money above a threshold and a message to a customer. [`waitForApproval`](/docs/concepts/approvals/) pauses the run until someone clicks a signed link.
 
-For agent builders, this combination is why Actuate exists. The model decides *that* a refund is warranted, and an actuator decides *how* it happens. See [Deterministic agent tools](/docs/guides/agent-tools/).
+For agent builders, this combination is what matters. The model decides *that* a refund is warranted, and an actuator decides *how* it happens. See [Deterministic agent tools](/docs/guides/agent-tools/).
 
 ## Hosted and open source
 

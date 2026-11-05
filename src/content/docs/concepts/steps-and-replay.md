@@ -141,7 +141,7 @@ Only some providers can use the key:
 Two things follow at Stripe and Resend:
 
 - The provider doesn't deduplicate a retry after the key has expired (a backoff longer than 24 hours).
-- The provider rejects, with an error, a retry that sends different parameters with the same key. Build a step's provider requests from its input and earlier step results, not from `Date.now()` or values that change between attempts.
+- The provider rejects a retry that sends different parameters with the same key, and returns an error. Build a step's provider requests from its input and earlier step results, not from `Date.now()` or values that change between attempts.
 
 For providers that can't deduplicate, keep the call in a step of its own and give it no `retries`, or check whether it already happened before you repeat it.
 

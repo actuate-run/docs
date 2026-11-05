@@ -89,7 +89,7 @@ await ctx.step.do("audit", () =>
 
 ## Getting the links
 
-The runtime **never writes the links to run logs**. Anything that can read a run, such as an agent holding a run token, could otherwise approve its own gate. As the owner you get them from:
+Actuate **never writes the links to run logs**. Anything that can read a run, such as an agent holding a run token, could otherwise approve its own gate. As the owner you get them from:
 
 - the messaging notification sent to `notify`;
 - the dashboard's approval queue;
