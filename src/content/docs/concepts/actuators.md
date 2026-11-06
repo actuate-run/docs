@@ -142,7 +142,7 @@ Sent by ctx.notifyOwner in refund_watch. Only the account owner gets these. To c
 
 - The subject is the one you pass, or `<actuator>: message from your actuator`.
 - These messages are not alerts. Actuate doesn't throttle them, and turning alerts off or muting the actuator doesn't stop them.
-- Their emails count with alert emails against your plan's [daily cap](/docs/guides/alerts/#daily-email-cap). They may use at most half of it, shared with the approval and input links below, counted against every alert email sent that day, so failure alerts always have the other half. The last one emailed that day says so. After that, until 00:00 UTC, Actuate doesn't email these messages, but your alert channel still gets them. The call resolves to `{ sent: true }` when the email or the channel got the message, and to `{ sent: false, reason }` when neither did.
+- Their emails count with alert emails against your plan's [daily cap](/docs/guides/alerts/#daily-email-cap). They may use at most half of it, counted against every alert email sent that day, so failure alerts always have the other half. The approval and input links below share that half. The last one emailed that day says so. After that, until 00:00 UTC, Actuate doesn't email these messages, but your alert channel still gets them. The call resolves to `{ sent: true }` when the email or the channel got the message, and to `{ sent: false, reason }` when neither did.
 - Actuate sends at most 10 messages per pass, approval and input links included. Further calls in the same pass resolve to `{ sent: false, reason }`. Calls answered from the deduplication below don't count.
 - Actuate remembers each message's key for 48 hours, so a retried step gets the first call's answer and sends nothing. If the platform restarted while sending, the key can be sent again after 2 minutes. [Retrying a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) is different: its steps' messages get new keys and are sent again, as provider calls are.
 - If the email fails and nothing else got the message, the call throws, so the step's attempt fails; give the step `retries` and the retry sends it.
@@ -151,11 +151,11 @@ Sent by ctx.notifyOwner in refund_watch. Only the account owner gets these. To c
 
 A wait with `notify: "owner"` sends its signed links through the same path, with these differences:
 
-- The email goes to your account's address as usual, but the alert channel gets the links only when it is Telegram, Slack, Discord or email (Resend). A custom webhook may lead to another agent, and signed links must never reach an agent, so it never gets them. WhatsApp doesn't either.
+- The email goes to your account's address as usual, but the alert channel gets the links only when it is Telegram, Slack, Discord or email (Resend). A custom webhook never gets them, because it may lead to another agent, and signed links must never reach an agent. WhatsApp doesn't get them either.
 - They share the same half of the day's alert emails, and the same 10 sends per pass. When neither the email nor the channel got the links, nothing throws. The run's log gets a `warn` line, and the step keeps waiting for you to decide in the dashboard.
 - Actuate sends each wait's links once, keyed on the run and the step, so a replayed pass sends nothing.
 
-Approval links go to whoever reads your account's email and that channel, so keep those human.
+Approval links go to whoever reads your account's email and that channel, so make sure no agent reads either.
 
 ## Output
 

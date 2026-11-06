@@ -16,7 +16,7 @@ How to update this page at release time:
    platform change is merged, and change the intro once actuate.run is live. Never claim a deploy date.
 -->
 
-The five packages, `@actuate/sdk`, `@actuate/runtime`, `@actuate/cli`, `@actuate/providers` and `create-actuate`, always share one version. Their changes are listed together below, from the packages' own changelogs on npm, and each entry names the package it is about. The hosted platform has its own notes [further down](#hosted-platform).
+The five packages, `@actuate/sdk`, `@actuate/runtime`, `@actuate/cli`, `@actuate/providers` and `create-actuate`, always share one version. This page lists their changes together, from the packages' own changelogs on npm, and each entry names the package it is about. The hosted platform has its own notes [further down](#hosted-platform).
 
 To see which version you have, run `npx actuate --version`. To upgrade a project, run `npm install @actuate/sdk@latest @actuate/cli@latest`.
 
@@ -86,7 +86,7 @@ Committed secrets.
 
 ## Hosted platform
 
-These notes cover the hosted platform itself, which means the gateway, the MCP server, the dashboard and the plans. actuate.run hasn't launched yet, so none of these changes is live there. They are listed by when they were merged into the platform. The platform runs the package version it was last updated to, so a new SDK feature works on the platform once the platform has it.
+These notes cover the hosted platform itself: the gateway, the MCP server, the dashboard and the plans. actuate.run hasn't launched yet, so none of these changes is live there. The sections follow when the changes were merged into the platform. The platform runs the package version it was last updated to, so a new SDK feature works there only once the platform updates to that version.
 
 ### With 0.5.0 (not merged yet)
 
@@ -96,13 +96,13 @@ These notes cover the hosted platform itself, which means the gateway, the MCP s
 
 ### Merged 6 November 2026
 
-- Actuators can be deleted for good from the dashboard and the API.
+- You can delete an actuator permanently from the dashboard and the API.
 
 ### Merged 5 November 2026, with 0.4.0
 
-- [Secret config fields](/docs/concepts/capabilities/#keys-and-tokens) are masked in the dashboard, kept when you save, and redacted wherever run data is shown.
+- The dashboard masks [secret config fields](/docs/concepts/capabilities/#keys-and-tokens) and keeps them when you save, and Actuate redacts them wherever it shows run data.
 - [`ctx.notifyOwner`](/docs/concepts/actuators/#on-the-platform) emails you, and messages your alert channel on Maker and Agency.
-- New MCP tools [`actuate_list_runs`](/docs/guides/connect-your-agent/#list-runs) and [`actuate_cancel_run`](/docs/guides/connect-your-agent/#cancel-a-run), which agent tokens get only when you allow it. Waiting receipts say what the run waits for and link its page in the dashboard, and [tool errors](/docs/guides/connect-your-agent/#tool-errors) carry a code and whether to retry.
+- New MCP tools [`actuate_list_runs`](/docs/guides/connect-your-agent/#list-runs) and [`actuate_cancel_run`](/docs/guides/connect-your-agent/#cancel-a-run), which agent tokens get only when you allow it. Waiting receipts say what the run waits for and link its page in the dashboard. [Tool errors](/docs/guides/connect-your-agent/#tool-errors) carry a code and say whether to retry.
 - An opt-in [run completed](/docs/guides/alerts/#runs-that-finish-after-waiting) alert, per actuator.
 - On the Sandbox, scheduled runs have [their own 750 a month](/docs/reference/limits/).
 - Deploys refuse actuator names starting with `actuate_`, which the built-in MCP tools use.

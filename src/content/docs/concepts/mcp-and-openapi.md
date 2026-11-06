@@ -143,7 +143,7 @@ The gateway itself picks up a deploy within about 30 seconds.
 
 Agents retry, and networks drop responses. An MCP tool call to an actuator returns an **execution receipt**, and a retried tool call can return the first run's receipt instead of running again. Combined with [steps](/docs/concepts/steps-and-replay/), a refund tool called twice refunds once.
 
-There are two ways to get this. Declare the input fields that say which request a call is, so the server catches a retry even when the agent sends no key. Or have the caller send a key.
+There are two ways to get this. Declare the input fields that identify a request, so the server catches a retry even when the agent sends no key. Or have the caller send a key.
 
 ### Key fields
 
@@ -165,7 +165,7 @@ export default defineActuator({
 });
 ```
 
-A call that sends no key of its own gets one derived from those fields' values. A later call with the same values returns the run that is still running or waiting, or that completed in the last 24 hours, instead of starting another. A failed or cancelled run never matches, so the caller can try the same call again. More than 24 hours after a run completed, the same values start a new run.
+A call that sends no key of its own gets one derived from those fields' values. A later call with the same values returns the earlier run instead of starting another, if that run is still running or waiting, or completed in the last 24 hours. A failed or cancelled run never matches, so the caller can try the same call again. More than 24 hours after a run completed, the same values start a new run.
 
 - Each field is a top-level, required field of the input schema whose type is a string, number, integer or boolean, or an enum or literal of those. `defineActuator` throws for a name that isn't a top-level field or has another type, and for an empty or repeated list. The [deploy checks](/docs/reference/cli/#the-deploy-checks) also refuse a field that is optional or has a default (rule `idempotency-key`). Schemas named with `.meta({ id })` pass.
 - Actuate computes the key from the arguments as the caller sent them, once they pass the input schema. Zod's defaults, coercion and transforms don't apply, so `"A-1"` and `"a-1"` are two orders even if your schema lowercases the field. Only the listed fields count. Other fields, and the order of the keys in the call, make no difference.
@@ -185,7 +185,7 @@ The caller can also put an idempotency key in the call's `_meta`:
 }
 ```
 
-- A key the caller sends is used alone, in place of the key fields. The same key on the same tool returns the same run, whatever its status, across sessions and processes, for as long as the platform keeps that run, which is 7 days on Sandbox, 30 on Maker and 90 on Agency after it settles. A run still waiting is never deleted. The server also reads `actuate/idempotencyKey` and `idempotencyKey`, in that order, after `run.actuate/idempotencyKey`.
+- When the caller sends a key, Actuate uses it alone, in place of the key fields. The same key on the same tool returns the same run, whatever its status, across sessions and processes, for as long as the platform keeps that run, which is 7 days on Sandbox, 30 on Maker and 90 on Agency after it settles. A run still waiting is never deleted. The server also reads `actuate/idempotencyKey` and `idempotencyKey`, in that order, after `run.actuate/idempotencyKey`.
 - To run the same arguments again on purpose, send a new key. That works for an actuator with key fields too.
 - Keys are per actuator, so the same key on two tools starts two runs. The server also keeps MCP keys apart from HTTP `Idempotency-Key` values, so a key sent over MCP never matches one sent to `/run`.
 - Without a key, a session-based client (2025-11-25 and earlier) that repeats a call with the same JSON-RPC `id` in the same session gets the first call's receipt. The server checks that first, then the key fields. A 2026-07-28 client has no session, and JSON-RPC IDs are reused across processes, so without a key only the key fields catch a retry. A tool without them starts a new run for every call.

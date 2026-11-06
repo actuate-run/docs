@@ -238,7 +238,7 @@ ANTHROPIC_API_KEY=...
 | `payment` | `ACTUATE_PAYMENT` | `stripe`, `toyyibpay`, `billplz`, `chip` |
 | `llm` | `ACTUATE_LLM` | `anthropic`, `openai`, `google`, `openai-compatible` |
 
-Credential variable names are `<KIND>_<FIELD>`, with hyphens in the kind as underscores, for example `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`, `CUSTOM_WEBHOOK_URL`. The custom webhook reads `CUSTOM_WEBHOOK_URL`, and optionally `CUSTOM_WEBHOOK_SECRET`, `CUSTOM_WEBHOOK_HEADERS`, `CUSTOM_WEBHOOK_FORMAT` and `CUSTOM_WEBHOOK_TEMPLATE`; see [Send messages to any URL](/docs/guides/custom-webhook/#locally-and-self-hosted). `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (under Providers in Settings).
+Credential variable names are `<KIND>_<FIELD>`, with any hyphen in the kind written as an underscore, for example `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`, `CUSTOM_WEBHOOK_URL`. The custom webhook reads `CUSTOM_WEBHOOK_URL`, and optionally `CUSTOM_WEBHOOK_SECRET`, `CUSTOM_WEBHOOK_HEADERS`, `CUSTOM_WEBHOOK_FORMAT` and `CUSTOM_WEBHOOK_TEMPLATE`; see [Send messages to any URL](/docs/guides/custom-webhook/#locally-and-self-hosted). `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (under Providers in Settings).
 
 ## actuate test
 
@@ -319,7 +319,7 @@ actuate.config.json:1:1  warn   actuate.config.json sets the secret field apiKey
 | `bundle-size` | The bundle is at most 5 MB | |
 | `name` | The name is lowercase letters, digits and underscores, at most 64 characters, and doesn't start with `actuate_`, which the hosted platform keeps for its built-in MCP tools (`actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`) and refuses at deploy. Self-hosted actuators may still use the prefix | |
 | `cron` | Cron syntax, the number of schedules, and how often they fire, alone and together | The plan |
-| `cron-input` | The input schema accepts `{}`, the input every cron run gets (a warning). An actuator with [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields can't accept it, because those fields are required, and cron runs never use the key, so the warning says to move the schedule to an actuator of its own | |
+| `cron-input` | The input schema accepts `{}`, the input every cron run gets (a warning). An actuator with [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields can't accept it, because those fields are required. Cron runs never use the key either. So the warning says to move the schedule to an actuator of its own | |
 | `idempotency-key` | Every [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) field is a top-level, required field of the input schema (no `.optional()`, no `.default()`), and a string, number, integer or boolean (`@actuate/cli` 0.5 or later) | |
 | `http-allow` | `http.allow` has at most 20 hostnames, no IP addresses, no `actuate.run`, no wildcard over a shared zone such as `*.co.uk` or `*.workers.dev` | |
 | `input-regex` | No regex in the input schema with nested quantifiers, such as `(a+)+` (Zod's built-in formats are fine) | |

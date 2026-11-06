@@ -21,14 +21,14 @@ pnpm preview    # serves the built site
 
 ## Changelog
 
-[`reference/changelog.md`](src/content/docs/reference/changelog.md) lists every package release from 0.4.0 on, and hand-written notes about the hosted platform. The package part comes from [actuate-run/actuate](https://github.com/actuate-run/actuate). At release time, once the release PR there (`pnpm changeset version`) is merged, run from this repository:
+[`reference/changelog.md`](src/content/docs/reference/changelog.md) lists every package release from 0.4.0 on, and hand-written notes about the hosted platform. The package part comes from [actuate-run/actuate](https://github.com/actuate-run/actuate). At release time, once you merge the release PR there (`pnpm changeset version`), run from this repository:
 
 ```bash
 pnpm changelog --actuate ../actuate   # or set ACTUATE_REPO
 pnpm changelog --actuate ../actuate --check   # exits 1 when the page is out of date
 ```
 
-[`scripts/changelog.mjs`](scripts/changelog.mjs) reads each package's `CHANGELOG.md` and the pending `.changeset/*.md` files (as "Unreleased"), lists each changeset once (the packages share one version, so the same entry repeats in every package's changelog), and rewrites only the block between the `changelog:packages` markers. Write the hosted-platform notes below it by hand.
+[`scripts/changelog.mjs`](scripts/changelog.mjs) reads each package's `CHANGELOG.md` and the pending `.changeset/*.md` files, which it lists as "Unreleased". It lists each changeset once, because the packages share one version and the same entry repeats in every package's changelog. It rewrites only the block between the `changelog:packages` markers. Write the hosted-platform notes below it by hand.
 
 ## Look and feel
 

@@ -39,7 +39,7 @@ Send an `Idempotency-Key` header to make retries safe. The first request with a 
 
 Use a key that names the thing you are doing (an order ID, a webhook delivery ID), not a random value per attempt.
 
-When the actuator declares [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields, a `/run` request without the header gets a key derived from those fields' values. A repeat returns the run that is still running or waiting, or that completed in the last 24 hours, with `200 OK`. A header you send replaces it. `/webhook` and cron never derive a key, and on the hosted platform neither do runs you start yourself from the dashboard or with `actuate run`. See [key fields](/docs/concepts/mcp-and-openapi/#key-fields).
+When the actuator declares [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields, a `/run` request without the header gets a key derived from those fields' values. A repeat returns the run that is still running or waiting, or that completed in the last 24 hours, with `200 OK`. An `Idempotency-Key` header you send replaces the derived key. `/webhook` and cron never derive a key, and on the hosted platform neither do runs you start yourself from the dashboard or with `actuate run`. See [key fields](/docs/concepts/mcp-and-openapi/#key-fields).
 
 `actuate run '<json>'` starts a run through the API from the command line.
 
@@ -95,7 +95,7 @@ Locally, `actuate dev` registers the schedules. To fire one without waiting, cal
 
 ## MCP tool calls
 
-On the platform every actuator is also an MCP tool. The platform validates an agent's tool call against the input schema, and the call starts a run with `trigger.kind = "mcp"` and `trigger.agent` set to the calling token. A retried tool call with the same `_meta` idempotency key (or, for session-based clients, the same JSON-RPC `id` in the same session, or the same values in the actuator's [key fields](/docs/concepts/mcp-and-openapi/#key-fields)) returns the first call's receipt instead of running twice. See [idempotent receipts](/docs/concepts/mcp-and-openapi/#idempotent-receipts). Use the streamable HTTP endpoint. The platform caps legacy SSE sessions per account (Sandbox 2, Maker 5, Agency 20 open at once), and refuses a session over the cap with `429`. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
+On the platform every actuator is also an MCP tool. The platform validates an agent's tool call against the input schema, and the call starts a run with `trigger.kind = "mcp"` and `trigger.agent` set to the calling token. A retried tool call returns the first call's receipt instead of running twice when it has the same `_meta` idempotency key, the same values in the actuator's [key fields](/docs/concepts/mcp-and-openapi/#key-fields), or, for session-based clients, the same JSON-RPC `id` in the same session. See [idempotent receipts](/docs/concepts/mcp-and-openapi/#idempotent-receipts). Use the streamable HTTP endpoint. The platform caps legacy SSE sessions per account (Sandbox 2, Maker 5, Agency 20 open at once), and refuses a session over the cap with `429`. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
 
 ## Events are not triggers
 

@@ -434,7 +434,7 @@ What the test actuator gives you:
 
 | | |
 | --- | --- |
-| `t.start(input, { trigger, idempotencyKey })` | Starts a run and returns its record after the first pass. It validates the input with your schema first, as the platform does, and rejects a bad one. Without `idempotencyKey`, an `"api"` (the default) or `"mcp"` run gets the key derived from the actuator's [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields, as on the platform, so starting the same order twice returns the first run (`@actuate/cli` 0.5 or later) |
+| `t.start(input, { trigger, idempotencyKey })` | Starts a run and returns its record after the first pass. It validates the input with your schema first, as the platform does, and rejects a bad one. Without `idempotencyKey`, an `"api"` (the default) or `"mcp"` run gets the key derived from the actuator's [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields, as on the platform. So starting the same order twice returns the first run (`@actuate/cli` 0.5 or later) |
 | `t.cron(expression)` | Fires a schedule (by default the first one), which starts a run with the input `{}` |
 | `t.advance(duration)`, `t.advanceTo(time)` | Move the clock, firing every sleep, retry and timeout due on the way, in order. `t.now()` reads it |
 | `t.approve(step, opts)`, `t.reject(step, opts)` | Decide a `waitForApproval` through its signed link. Without a step, it decides the latest one waiting. `opts`: `runId`, `note`, `by`. Throws, saying what is waiting, when nothing matches |

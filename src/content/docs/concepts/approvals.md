@@ -134,9 +134,9 @@ It works like an approval:
 
 ## Delivering the links
 
-On the platform, when `notify` is a recipient, links are sent through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. With `notify: "owner"`, Actuate [sends them to you](#send-the-links-to-yourself) instead, by email and to your alert channel when it is Telegram, Slack, Discord or email, with no messaging provider needed. This is how you get them on the Sandbox plan, which has no messaging providers. Without `notify`, take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is a recipient, to your owner notifier with `"owner"`, and to the console otherwise.
+On the platform, when `notify` is a recipient, Actuate sends the links through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. With `notify: "owner"`, Actuate [sends them to you](#send-the-links-to-yourself) instead, by email and to your alert channel when it is Telegram, Slack, Discord or email, with no messaging provider needed. This is how you get them on the Sandbox plan, which has no messaging providers. Without `notify`, take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is a recipient, to your owner notifier with `"owner"`, and to the console otherwise.
 
-Through a custom webhook, the request also arrives as data. The standard body carries an `approval` object with the step and its links, and an **Approval JSON template** can turn an approval into a Microsoft Teams or Google Chat card with **Approve** and **Reject** buttons, which open the confirm page. See [approval requests](/docs/guides/custom-webhook/#approval-requests).
+Through a custom webhook, the request also arrives as data. The standard body carries an `approval` object with the step and its links. An **Approval JSON template** can turn an approval into a Microsoft Teams or Google Chat card with **Approve** and **Reject** buttons, which open the confirm page. See [approval requests](/docs/guides/custom-webhook/#approval-requests).
 
 If delivery fails, the runtime writes the error to the run's log and the run keeps waiting; fetch the links from the dashboard or the links route instead.
 
@@ -165,7 +165,7 @@ Where the links go:
 
 A custom webhook alert channel never gets the links, because it may lead to another agent, and signed links must never reach an agent. Anyone who holds a link can decide, so an agent that received one could approve its own gate. WhatsApp isn't on the list either. Ordinary alerts and `ctx.notifyOwner` messages still go to every kind of channel.
 
-The links go to whoever reads your account's email and that alert channel. Keep those human. If you forward the account's email somewhere, or the Telegram group, Slack channel or Discord channel is one that an agent reads, the agent gets the links too.
+The links go to whoever reads your account's email and that alert channel. Make sure no agent reads either. If you forward the account's email somewhere, or the Telegram group, Slack channel or Discord channel is one that an agent reads, the agent gets the links too.
 
 On the platform, the email puts the links first:
 
@@ -181,7 +181,7 @@ Run: run_01a19b8e7c2d4f60a1b2c3d4e5f6, step "manager-ok", waits until 2026-11-07
 Or decide in the dashboard: https://app.actuate.run/actuators/refund_order/approvals
 ```
 
-A footer follows, saying why you got it and not to forward the links. A question's subject is `Question from <actuator>`, and it has one **Answer** link. Actuate cuts the channel's copy at 1,900 characters, so it shortens your message to fit and never the links. Your message and the step name have [secret config values](/docs/reference/sdk/#secret) replaced by `[secret]`.
+A footer follows, saying why you got it and not to forward the links. A question's subject is `Question from <actuator>`, and it has one **Answer** link. Actuate cuts the channel's copy at 1,900 characters, so it shortens your message to fit and never the links. Actuate replaces [secret config values](/docs/reference/sdk/#secret) in your message and the step name with `[secret]`.
 
 Limits on the platform:
 
