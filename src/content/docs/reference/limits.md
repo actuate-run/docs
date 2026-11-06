@@ -68,7 +68,7 @@ The isolate's environment contains only your declared capability clients. There 
 - A run finishes on the version it started on (see [version pinning](/docs/guides/retry-and-rollback/#runs-stay-on-their-version)). Each day an earlier version has runs waking next to the current one counts once against the monthly allowance above (a rollback to the same code doesn't count). After that, those runs fail with a message saying so, and a retry moves them to the current version. Runs on the current version are never affected.
 - Agency also adds client portals, the approval queue, a white-label domain (portals, webhook URLs, provider callbacks and approval links on your own domain), and Excel and SQLite exports. It arrives with Stage 2.
 
-Billing is through Stripe. See [actuate.run](https://actuate.run) for prices.
+Billing is through Stripe. Paid plans are billed on the 1st of each month (UTC), the day monthly limits reset; your first charge covers the rest of the month you upgrade in, pro rata. See [actuate.run](https://actuate.run) for prices.
 
 ## Guards on the hosted platform
 
