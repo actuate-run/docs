@@ -19,6 +19,17 @@ pnpm preview    # serves the built site
 
 `pnpm build` fails if any internal link or `#anchor` is broken (see [`scripts/check-links.mjs`](scripts/check-links.mjs)).
 
+## Changelog
+
+[`reference/changelog.md`](src/content/docs/reference/changelog.md) lists every package release from 0.4.0 on, and hand-written notes about the hosted platform. The package part comes from [actuate-run/actuate](https://github.com/actuate-run/actuate). At release time, once the release PR there (`pnpm changeset version`) is merged, run from this repository:
+
+```bash
+pnpm changelog --actuate ../actuate   # or set ACTUATE_REPO
+pnpm changelog --actuate ../actuate --check   # exits 1 when the page is out of date
+```
+
+[`scripts/changelog.mjs`](scripts/changelog.mjs) reads each package's `CHANGELOG.md` and the pending `.changeset/*.md` files (as "Unreleased"), lists each changeset once (the packages share one version, so the same entry repeats in every package's changelog), and rewrites only the block between the `changelog:packages` markers. Write the hosted-platform notes below it by hand.
+
 ## Look and feel
 
 The site uses the same palette, fonts (Geist and Geist Mono), radii and logo as actuate.run and the dashboard:
