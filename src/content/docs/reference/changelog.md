@@ -12,8 +12,8 @@ How to update this page at release time:
    block between the changelog:packages markers: an "Unreleased" section from any pending changesets,
    then every version from 0.4.0 on, each entry once (the fixed group repeats a changeset in every
    package's CHANGELOG). `--check` reports whether the page is out of date without writing it.
-3. Write the notes under "Hosted platform" by hand: a short dated section when a platform change
-   ships, and drop "(not deployed yet)" from a heading once that version is live.
+3. Write the notes under "Hosted platform" by hand. Add a short "Merged <date>" section when a
+   platform change is merged, and change the intro once actuate.run is live. Never claim a deploy date.
 -->
 
 The five packages, `@actuate/sdk`, `@actuate/runtime`, `@actuate/cli`, `@actuate/providers` and `create-actuate`, always share one version. Their changes are listed together below, from the packages' own changelogs on npm, and each entry names the package it is about. The hosted platform has its own notes [further down](#hosted-platform).
@@ -86,19 +86,19 @@ Committed secrets.
 
 ## Hosted platform
 
-These notes cover what changed on actuate.run itself: the gateway, MCP server, dashboard and plans. The platform runs the package version it was last updated to, so a new SDK feature works on the platform once the platform has it.
+These notes cover the hosted platform itself, which means the gateway, the MCP server, the dashboard and the plans. actuate.run hasn't launched yet, so none of these changes is live there. They are listed by when they were merged into the platform. The platform runs the package version it was last updated to, so a new SDK feature works on the platform once the platform has it.
 
-### With 0.5.0 (not deployed yet)
+### With 0.5.0 (not merged yet)
 
 - Calls over MCP and the run API that send no key of their own get one from the actuator's [key fields](/docs/concepts/mcp-and-openapi/#key-fields). **Start run**, `actuate run` and **Run again** never use them. Deploys and rollbacks refuse key fields that aren't required, top-level scalar input fields.
 - `notify: "owner"` [sends approval and input links to you](/docs/concepts/approvals/#send-the-links-to-yourself) by email, and to your alert channel when it is Telegram, Slack, Discord or email. This works on the Sandbox plan too.
 - A new messaging channel, the [custom webhook](/docs/guides/custom-webhook/), on Maker and Agency, with approval cards for Microsoft Teams and Google Chat.
 
-### 6 November 2026
+### Merged 6 November 2026
 
 - Actuators can be deleted for good from the dashboard and the API.
 
-### 5 November 2026 (with 0.4.0)
+### Merged 5 November 2026, with 0.4.0
 
 - [Secret config fields](/docs/concepts/capabilities/#keys-and-tokens) are masked in the dashboard, kept when you save, and redacted wherever run data is shown.
 - [`ctx.notifyOwner`](/docs/concepts/actuators/#on-the-platform) emails you, and messages your alert channel on Maker and Agency.

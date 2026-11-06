@@ -135,7 +135,7 @@ Because the step makes no network calls, no other run can claim the same order b
 
 A checking step placed before an approval wait is not enough on its own, because both runs pass it before either one pays.
 
-To refund an order again on purpose, send a new key, as `_meta["run.actuate/idempotencyKey"]` over MCP or the `Idempotency-Key` header over HTTP. The call then starts a new run, and the claim decides whether it may act.
+To try an order again while its earlier run still matches, send a new key, as `_meta["run.actuate/idempotencyKey"]` over MCP or the `Idempotency-Key` header over HTTP. The call then starts a new run, and the claim decides whether it may act, so an order that was already refunded stays refunded.
 
 On the hosted platform, a key in `_meta` deduplicates for as long as the platform keeps the run it started, which is 7 days on Sandbox, 30 on Maker and 90 on Agency. A run still waiting is never deleted.
 

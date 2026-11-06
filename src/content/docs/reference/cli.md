@@ -410,10 +410,19 @@ MCP tool entry (tools/list), as agents will see it:
   "inputSchema": {
     "type": "object",
     "properties": {
-      "orderId": { "type": "string", "description": "The order to refund" },
-      "amount": { "type": "number", "exclusiveMinimum": 0 }
+      "orderId": {
+        "type": "string",
+        "description": "The order to refund"
+      },
+      "amount": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      }
     },
-    "required": ["orderId", "amount"]
+    "required": [
+      "orderId",
+      "amount"
+    ]
   },
   "annotations": {
     "title": "refund order",

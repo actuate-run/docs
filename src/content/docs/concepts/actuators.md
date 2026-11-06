@@ -153,7 +153,7 @@ A wait with `notify: "owner"` sends its signed links through the same path, with
 
 - The email goes to your account's address as usual, but the alert channel gets the links only when it is Telegram, Slack, Discord or email (Resend). A custom webhook may lead to another agent, and signed links must never reach an agent, so it never gets them. WhatsApp doesn't either.
 - They share the same half of the day's alert emails, and the same 10 sends per pass. When neither the email nor the channel got the links, nothing throws. The run's log gets a `warn` line, and the step keeps waiting for you to decide in the dashboard.
-- Each wait is sent once, keyed on the run and the step, so a replayed pass sends nothing.
+- Actuate sends each wait's links once, keyed on the run and the step, so a replayed pass sends nothing.
 
 Approval links go to whoever reads your account's email and that channel, so keep those human.
 

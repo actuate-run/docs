@@ -30,7 +30,7 @@ The platform generates both from the actuator definition:
 | `input` (InputSchema) | The tool's argument schema, as JSON Schema |
 | `output` | The tool's `outputSchema`, when you set one and it describes an object |
 | `hints` | The tool's [annotations](#tool-hints) |
-| `idempotencyKey` | The [key fields](#key-fields) that catch retried calls, and `idempotentHint: true` |
+| `idempotencyKey` | The [key fields](#key-fields) that catch retried calls, and `idempotentHint: true` unless `hints.idempotent` is `false` |
 
 This is why `name` is restricted to lowercase letters, digits and underscores (at most 64 characters), and why `description` is required. Names starting with `actuate_` are reserved for the [built-in tools](#built-in-tools). The platform refuses to deploy them, and `actuate check --platform` and `actuate deploy` say so before you upload.
 

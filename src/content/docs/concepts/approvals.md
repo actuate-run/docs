@@ -134,7 +134,7 @@ It works like an approval:
 
 ## Delivering the links
 
-On the platform, when `notify` is a recipient, links are sent through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. With `notify: "owner"`, Actuate [sends them to you](#send-the-links-to-yourself) by email instead, with no messaging provider needed, so this is how you get them on the Sandbox plan, which has no messaging providers. Without `notify`, take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is a recipient, to your owner notifier with `"owner"`, and to the console otherwise.
+On the platform, when `notify` is a recipient, links are sent through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. With `notify: "owner"`, Actuate [sends them to you](#send-the-links-to-yourself) instead, by email and to your alert channel when it is Telegram, Slack, Discord or email, with no messaging provider needed. This is how you get them on the Sandbox plan, which has no messaging providers. Without `notify`, take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is a recipient, to your owner notifier with `"owner"`, and to the console otherwise.
 
 Through a custom webhook, the request also arrives as data. The standard body carries an `approval` object with the step and its links, and an **Approval JSON template** can turn an approval into a Microsoft Teams or Google Chat card with **Approve** and **Reject** buttons, which open the confirm page. See [approval requests](/docs/guides/custom-webhook/#approval-requests).
 
@@ -181,11 +181,11 @@ Run: run_01a19b8e7c2d4f60a1b2c3d4e5f6, step "manager-ok", waits until 2026-11-07
 Or decide in the dashboard: https://app.actuate.run/actuators/refund_order/approvals
 ```
 
-A footer follows, saying why you got it and not to forward the links. A question's subject is `Question from <actuator>`, and it has one **Answer** link. The channel's copy is cut at 1,900 characters, so Actuate shortens your message to fit and never the links. Your message and the step name have [secret config values](/docs/reference/sdk/#secret) replaced by `[secret]`.
+A footer follows, saying why you got it and not to forward the links. A question's subject is `Question from <actuator>`, and it has one **Answer** link. Actuate cuts the channel's copy at 1,900 characters, so it shortens your message to fit and never the links. Your message and the step name have [secret config values](/docs/reference/sdk/#secret) replaced by `[secret]`.
 
 Limits on the platform:
 
 - These emails share half of your plan's [daily alert emails](/docs/guides/alerts/#daily-email-cap) with `ctx.notifyOwner` messages, so failure alerts always keep the other half.
 - Once that half is used up, until 00:00 UTC, the links aren't emailed. Your alert channel still gets them, if it is one of the kinds above. When nothing went out, the run's log gets a `warn` line, such as `Approval links for "manager-ok" not sent: today's emails for owner notices are used up: … Find it in the dashboard under Approvals.` The step keeps waiting, and you decide it in the dashboard.
-- Each wait is sent once. A replayed pass sends nothing new. When a [retry of a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) reaches a wait again, that wait sends its new links.
+- Actuate sends each wait's links once. A replayed pass sends nothing new. When a [retry of a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) reaches a wait again, that wait sends its new links.
 - Each send counts toward the 10 messages to the owner a pass may send, shared with `ctx.notifyOwner`.

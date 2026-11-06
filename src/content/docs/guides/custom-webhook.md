@@ -5,7 +5,7 @@ description: The custom webhook channel posts each message to a URL you choose, 
 
 **Actuate POSTs each message to your URL. To reply, POST to the reply URL it gave you.**
 
-The custom webhook is a messaging channel like Telegram or Slack, but the other end is any URL you choose. That can be your own server, Zapier, n8n, ntfy or Google Chat, among others. `ctx.messaging.send`, [alerts](/docs/guides/alerts/) and `ctx.notifyOwner` can all use it. Everything except the URL is optional.
+The custom webhook is a messaging channel like Telegram or Slack, but the other end is any URL you choose. That can be your own server, Zapier, n8n, ntfy or Google Chat, among others. `ctx.messaging.send`, [alerts](/docs/guides/alerts/) and `ctx.notifyOwner` can all use it. Everything except the URL is optional. The channel is new in `@actuate/providers` 0.5, and locally and self-hosted it needs that version or later.
 
 :::note[Not the Webhook trigger]
 `POST /webhook` starts runs. This channel sends messages out, and replies come back to a separate reply URL with a separate secret. See [Triggers](/docs/concepts/triggers/#webhook).
@@ -176,7 +176,7 @@ Slack and Discord have their own providers, which also send to a channel webhook
 
 ## Approval requests
 
-`waitForApproval` and `waitForInput` with a `notify` recipient send their signed links through the channel like any message, and `text` holds your message followed by the links. With `@actuate/providers` 0.5 or later, the request also arrives as data, so your endpoint can show buttons instead of raw links. The links open Actuate's confirm page, where the person decides. Opening a link decides nothing, so link previews and scanners that fetch URLs are harmless.
+`waitForApproval` and `waitForInput` with a `notify` recipient send their signed links through the channel like any message, and `text` holds your message followed by the links. The request also arrives as data, so your endpoint can show buttons instead of raw links. The links open Actuate's confirm page, where the person decides. Opening a link decides nothing, so link previews and scanners that fetch URLs are harmless.
 
 In the `standard` format, the body carries an `approval` object:
 
