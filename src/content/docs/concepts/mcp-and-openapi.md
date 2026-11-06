@@ -152,7 +152,7 @@ To get this, put an idempotency key in the call's `_meta`:
 }
 ```
 
-- The same key on the same tool always returns the same run, across sessions, processes and days. The server also reads `actuate/idempotencyKey` and `idempotencyKey`, in that order, after `run.actuate/idempotencyKey`.
+- The same key on the same tool returns the same run, across sessions and processes, for as long as the platform keeps that run: 7 days on Sandbox, 30 on Maker and 90 on Agency after it settles. A run still waiting is never deleted. The server also reads `actuate/idempotencyKey` and `idempotencyKey`, in that order, after `run.actuate/idempotencyKey`.
 - Keys are per actuator, so the same key on two tools starts two runs. The server also keeps MCP keys apart from HTTP `Idempotency-Key` values, so a key sent over MCP never matches one sent to `/run`.
 - Without a key, a session-based client (2025-11-25 and earlier) that repeats a call with the same JSON-RPC `id` in the same session gets the first call's receipt. A 2026-07-28 client has no session, and JSON-RPC IDs are reused across processes, so without a key every call starts a new run.
 

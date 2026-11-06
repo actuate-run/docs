@@ -39,7 +39,7 @@ These are operator settings, such as business names, prices, delays and feature 
 
 - Give every field a `.default()` so the actuator runs with an empty configuration.
 - Wrap API keys, tokens and passwords in `secret()`: `apiKey: secret(z.string())`. Their values become `[secret]` in logs, errors and run records. Set them in the dashboard rather than in `actuate.config.json`; see [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens).
-- On the platform, the dashboard renders the schema as a form.
+- On the platform, the dashboard renders the schema as a form, and Actuate encrypts the configuration at rest. See [what protects it](/docs/concepts/capabilities/#what-else-protects-it).
 - Locally, the values come from `actuate.config.json`, with `ACTUATE_CONFIG` from `.dev.vars` merged over it when you set one. `actuate deploy` sends `actuate.config.json` unless you pass `--no-config`.
 - If the configuration does not match the schema, every run fails with a `ConfigError` until you fix it.
 

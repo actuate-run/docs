@@ -325,6 +325,7 @@ actuate.config.json:1:1  warn   actuate.config.json sets the secret field apiKey
 | `plan-capability` | Every capability in `capabilities` is on the plan; optional capabilities that aren't get a warning | The plan |
 | `config` | `actuate.config.json` is valid JSON and matches the config schema. It reports invalid JSON by line and column, never by quoting the text around the error, which could be part of a secret | |
 | `config-secret` | `actuate.config.json` sets no `secret()` field while git would commit it (a warning; checked locally only, also with `--no-config`, and once when `actuate dev` starts) | |
+| `secret-default-not-redacted` | No `secret()` field has a default that redaction can't hide: a boolean, or a value shorter than 6 characters. A default on a parent object counts for the secret fields it sets (a warning; `@actuate/cli` 0.4.1 or later) | |
 | `provider-missing` | A provider is set up in the dashboard for every required capability | Login |
 | `actuator-limit` | A new actuator fits the plan's number of actuators | Login |
 | `deploy-budget` | Deploy attempts are left this month (an error when none are, a warning from 90% used) | Login |
