@@ -136,6 +136,8 @@ It works like an approval:
 
 On the platform, when `notify` is a recipient, links are sent through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. With `notify: "owner"`, Actuate [sends them to you](#send-the-links-to-yourself) by email instead, with no messaging provider needed, so this is how you get them on the Sandbox plan, which has no messaging providers. Without `notify`, take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is a recipient, to your owner notifier with `"owner"`, and to the console otherwise.
 
+Through a custom webhook, the request also arrives as data. The standard body carries an `approval` object with the step and its links, and an **Approval JSON template** can turn an approval into a Microsoft Teams or Google Chat card with **Approve** and **Reject** buttons, which open the confirm page. See [approval requests](/docs/guides/custom-webhook/#approval-requests).
+
 If delivery fails, the runtime writes the error to the run's log and the run keeps waiting; fetch the links from the dashboard or the links route instead.
 
 On the platform, the owner also gets an [alert](/docs/guides/alerts/) one hour before an approval or question times out, for waits of two hours or more.

@@ -615,6 +615,24 @@ interface MessagingSendOptions {
   template?: { name: string; language: string; variables?: string[] };
   /** Passed to providers that deduplicate (Resend; Discord with a bot token, for a few minutes; the custom webhook's message ID). Defaults to a key for this call, derived from the step's key. */
   idempotencyKey?: string;
+  /** Set only by Actuate's own approval and input notifications; removed from sends your code makes. */
+  approval?: ApprovalPrompt;
+}
+
+/** A step waiting for a person, as an approval notification describes it to the messaging provider. */
+interface ApprovalPrompt {
+  /** "approval" carries approveUrl and rejectUrl; "input" carries answerUrl. */
+  kind: "approval" | "input";
+  actuator: string;
+  step: string;
+  /** The approval message, or the question for input (secret config values redacted). */
+  message?: string;
+  /** Signed links to the confirm page: opening one shows the page (GET), and only its button decides (POST). */
+  approveUrl?: string;
+  rejectUrl?: string;
+  answerUrl?: string;
+  /** When the links stop working, epoch ms. */
+  expiresAt: number;
 }
 
 interface MessageReceipt {
@@ -624,6 +642,8 @@ interface MessageReceipt {
 ```
 
 `to` is a phone number, chat ID or email address, depending on the provider. The [custom webhook](/docs/guides/custom-webhook/) passes it to your endpoint unchanged.
+
+`approval` lets a provider render a request as a card with link buttons, as the custom webhook's [approval requests](/docs/guides/custom-webhook/#approval-requests) do. The runtime sets it on the messages it sends for `waitForApproval` and `waitForInput` with a `notify` recipient, and removes it from sends made through `ctx.messaging`, so actuator code can't fake an approval card. Providers that don't know it ignore it, and the text always carries the same links. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
 
 ### PaymentProvider
 

@@ -78,6 +78,9 @@ CUSTOM_WEBHOOK_SECRET=whsec_...
 # CUSTOM_WEBHOOK_FORMAT=text
 # Optional: your own JSON body, for example for Google Chat:
 # CUSTOM_WEBHOOK_TEMPLATE={"text":"{{text}}"}
+# Optional: a JSON body for approval requests only, on one line, such as
+# one of the cards under "Approval requests"
+# CUSTOM_WEBHOOK_APPROVAL_TEMPLATE={"type":"message","attachments":[...]}
 # Optional: one extra header, for example for an API gateway in front of your server:
 # CUSTOM_WEBHOOK_HEADERS="X-Api-Key: AbCdEf123"
 ```
@@ -101,6 +104,7 @@ Self-hosted, set `ACTUATE_PUBLIC_URL` to the actuator's origin, as in [step 3 of
 | Extra headers | `CUSTOM_WEBHOOK_HEADERS` | No | Headers to send with every message, one `Name: value` per line. Stored as a secret and masked. See [Extra headers](#extra-headers) |
 | Body format | `CUSTOM_WEBHOOK_FORMAT` | No | `standard`, `text` or `template`. Empty (**Automatic** in the dashboard) means `template` when a JSON template is set, and `standard` otherwise. See [Body formats](#body-formats) |
 | JSON template | `CUSTOM_WEBHOOK_TEMPLATE` | With `template` | The JSON body to send, with placeholders. The dashboard offers starting points for common services |
+| Approval JSON template | `CUSTOM_WEBHOOK_APPROVAL_TEMPLATE` | No | A JSON body used for approval requests only, whatever the body format, such as a card with **Approve** and **Reject** buttons. Questions use the body format. Empty means approvals use the body format too. See [Approval requests](#approval-requests) |
 
 ## Body formats
 
@@ -116,6 +120,7 @@ The `standard` format sends a JSON body (`content-type: application/json`), and 
 | `html` | The original HTML, only when you sent with `format: "html"`. `text` then has the tags removed |
 | `subject` | Only when you passed `subject` |
 | `replyUrl` | Only when a signing secret is set. Where to POST [replies](#replies) |
+| `approval` | Only on [approval and input requests](#approval-requests). The step that waits, and its signed links |
 
 Zapier, n8n, Make, Pipedream, Node-RED and your own server all take this format as it is. In a Home Assistant automation with a webhook trigger, the message is `{{ trigger.json.text }}`.
 
@@ -145,6 +150,9 @@ The `template` format sends your own JSON body, for services that expect particu
 | `{{to}}` | What you passed as `to` |
 | `{{id}}` | The message ID |
 | `{{replyUrl}}` | The reply URL, when a signing secret is set |
+| `{{approveUrl}}`, `{{rejectUrl}}` | An [approval request](#approval-requests)'s signed links. Empty on other messages |
+| `{{answerUrl}}` | A question's signed answer link. Empty on other messages |
+| `{{expiresAt}}` | When an approval request's or question's links expire, in ISO 8601 (`2026-11-07T09:00:00.000Z`). Empty on other messages |
 
 Actuate escapes each value for JSON, without adding quotes, so put each placeholder inside a JSON string, as in `"{{text}}"` or `"Order update: {{text}}"`. A value that is missing becomes an empty string. Actuate checks the template when you save it. An unknown placeholder, or a template that isn't valid JSON once filled in, is refused with the reason.
 
@@ -158,13 +166,68 @@ Templates for common services, which the dashboard also offers under **Start fro
 | Gotify | `https://<your server>/message`, with the extra header `X-Gotify-Key: <app token>` | `{"title":"{{subject}}","message":"{{text}}"}` |
 | Apprise API | `https://<your server>/notify/<key>` | `{"title":"{{subject}}","body":"{{text}}"}` |
 
-Microsoft Teams takes messages through a Workflows flow (the **Post to a channel when a webhook request is received** template). Use the flow's URL with this template:
+Microsoft Teams takes messages through a Workflows flow (the **Post to a channel when a webhook request is received** template). Use the flow's URL with this template. The flow's schema requires `"contentUrl": null` on the attachment.
 
 ```json
-{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{"type":"AdaptiveCard","$schema":"http://adaptivecards.io/schemas/adaptive-card.json","version":"1.4","body":[{"type":"TextBlock","text":"{{text}}","wrap":true}]}}]}
+{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","contentUrl":null,"content":{"type":"AdaptiveCard","$schema":"http://adaptivecards.io/schemas/adaptive-card.json","version":"1.4","body":[{"type":"TextBlock","text":"{{text}}","wrap":true}]}}]}
 ```
 
 Slack and Discord have their own providers, which also send to a channel webhook. Use those instead.
+
+## Approval requests
+
+`waitForApproval` and `waitForInput` with a `notify` recipient send their signed links through the channel like any message, and `text` holds your message followed by the links. With `@actuate/providers` 0.5 or later, the request also arrives as data, so your endpoint can show buttons instead of raw links. The links open Actuate's confirm page, where the person decides. Opening a link decides nothing, so link previews and scanners that fetch URLs are harmless.
+
+In the `standard` format, the body carries an `approval` object:
+
+```json
+{
+  "id": "msg_4b1f0c9e8d7a6b5c4d3e2f1a0b9c8d7e",
+  "to": "me",
+  "text": "Refund RM480 on ORD-1042?\n\nApprove: https://...\nReject: https://...",
+  "subject": "Approval needed: refund_order",
+  "approval": {
+    "kind": "approval",
+    "actuator": "refund_order",
+    "step": "manager-ok",
+    "message": "Refund RM480 on ORD-1042?",
+    "approveUrl": "https://...",
+    "rejectUrl": "https://...",
+    "expiresAt": "2026-11-07T09:00:00.000Z"
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `kind` | `"approval"` for `waitForApproval`, `"input"` for `waitForInput` |
+| `actuator`, `step` | The actuator and the step that waits |
+| `message` | Your `message`, or the question for input, when there is one. Secret config values become `[secret]` |
+| `approveUrl`, `rejectUrl` | The signed links, for an approval |
+| `answerUrl` | The signed answer link, for a question |
+| `expiresAt` | When the links stop working, in ISO 8601 |
+
+Only Actuate's own approval and input requests set `approval`. The runtime drops it from messages your code sends with `ctx.messaging.send`, so an actuator can't fake an approval card. The other messaging providers ignore it, and the text carries the same links either way.
+
+### Approval JSON template
+
+A [template](#your-own-json-template) can place the links with `{{approveUrl}}`, `{{rejectUrl}}`, `{{answerUrl}}` and `{{expiresAt}}`, but a card with **Approve** and **Reject** buttons would show empty buttons on every other message. So put the card in **Approval JSON template** instead. Actuate uses it for approval requests only, whatever the body format. It checks it like the JSON template when you save it, and also refuses one that uses none of `{{approveUrl}}`, `{{rejectUrl}}` and `{{text}}` (which holds the links), so the links always reach your endpoint. Questions (`waitForInput`) go out in the body format, with the answer link in `text`, in `approval.answerUrl` (`standard`) and in `{{answerUrl}}` (`template`). Ordinary messages and alerts use the body format too.
+
+For Microsoft Teams, use the Workflows URL from [above](#your-own-json-template) and an Adaptive Card with `Action.OpenUrl` buttons. As above, the attachment needs `"contentUrl": null`.
+
+```json
+{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","contentUrl":null,"content":{"$schema":"http://adaptivecards.io/schemas/adaptive-card.json","type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"{{subject}}","weight":"Bolder","wrap":true},{"type":"TextBlock","text":"{{text}}","wrap":true},{"type":"TextBlock","text":"Links expire {{expiresAt}}","isSubtle":true,"size":"Small","wrap":true}],"actions":[{"type":"Action.OpenUrl","title":"Approve","url":"{{approveUrl}}"},{"type":"Action.OpenUrl","title":"Reject","url":"{{rejectUrl}}"}]}}]}
+```
+
+For Google Chat, use the space's incoming webhook URL and a `cardsV2` card with link buttons. Test it in your space first. Google's documentation doesn't say that incoming webhooks accept `cardsV2`. They are known to work, and other tools send them, but it isn't promised. If the space shows nothing, use `{"text":"{{text}}"}`, which carries the same links.
+
+```json
+{"text":"{{subject}}","cardsV2":[{"cardId":"approval","card":{"header":{"title":"{{subject}}","subtitle":"Links expire {{expiresAt}}"},"sections":[{"widgets":[{"textParagraph":{"text":"{{text}}"}},{"buttonList":{"buttons":[{"text":"Approve","onClick":{"openLink":{"url":"{{approveUrl}}"}}},{"text":"Reject","onClick":{"openLink":{"url":"{{rejectUrl}}"}}}]}}]}]}}]}
+```
+
+The dashboard offers both under **Start from**, next to the field.
+
+Send approvals only to an endpoint that shows them to a person. Anyone who holds a link can decide, so an agent behind the URL, like the one in the [example below](#example-an-agent-on-your-own-machine), could approve its own request. For approvals meant for you, [`notify: "owner"`](/docs/concepts/approvals/#send-the-links-to-yourself) emails them and never sends them to a custom webhook.
 
 ## Extra headers
 
@@ -343,7 +406,7 @@ Reply with the `to` you were sent as `from`, so the reply lands on the event the
 | Error message quoted from your answer | About 500 characters |
 | URL | 2,048 characters |
 | Extra headers | 20 |
-| JSON template | 16,384 characters |
+| JSON template, approval JSON template | 16,384 characters each |
 | `Title` header (`text` format) | 1,024 characters |
 | `from` in a reply | 256 characters |
 | Replies to the platform's reply URL | About 120 requests a minute per actuator, then `429`. At most 256 KB per body, then `413` |
