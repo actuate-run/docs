@@ -575,15 +575,15 @@ interface MessagingProvider {
 }
 
 interface MessagingSendOptions {
-  /** Provider-specific channel override, e.g. "telegram" | "whatsapp" | "email". */
-  /** "html" sends <b>, <i>, <a href>, <code>, <pre> where supported (Telegram, email); other channels get plain text. Default "text". */
+  /** Provider-specific channel override, e.g. "telegram" | "whatsapp" | "email" | "custom-webhook". */
+  /** "html" sends <b>, <i>, <a href>, <code>, <pre> where supported (Telegram, email; the custom webhook adds it as `html`); other channels get plain text. Default "text". */
   format?: "text" | "html";
   channel?: string;
-  /** Email subject, when the channel is email. */
+  /** Email subject, when the channel is email. The custom webhook sends it as `subject`. */
   subject?: string;
   /** WhatsApp template for messages outside the 24-hour service window. */
   template?: { name: string; language: string; variables?: string[] };
-  /** Passed to providers that deduplicate (Resend; Discord with a bot token, for a few minutes). Defaults to a key for this call, derived from the step's key. */
+  /** Passed to providers that deduplicate (Resend; Discord with a bot token, for a few minutes; the custom webhook's message ID). Defaults to a key for this call, derived from the step's key. */
   idempotencyKey?: string;
 }
 
@@ -593,7 +593,7 @@ interface MessageReceipt {
 }
 ```
 
-`to` is a phone number, chat ID or email address, depending on the provider.
+`to` is a phone number, chat ID or email address, depending on the provider. The [custom webhook](/docs/guides/custom-webhook/) passes it to your endpoint unchanged.
 
 ### PaymentProvider
 
@@ -665,8 +665,8 @@ Before acting on it, check `status`, and that `billId`, `amount` and `currency` 
 
 ```ts
 interface InboundMessage {
-  channel: string;  // "whatsapp" | "telegram"
-  from: string;     // phone number (digits) or Telegram chat ID: pass it to messaging.send to reply
+  channel: string;  // "whatsapp" | "telegram" | "custom-webhook"
+  from: string;     // phone number (digits), Telegram chat ID, or the custom webhook reply's `from`: pass it to messaging.send to reply
   text: string;     // the text, a button's title, or a media caption ("" for media without one)
   type: string;     // "text", "button", "interactive", "image", ... as the provider reports it
   id: string;       // the provider's message ID

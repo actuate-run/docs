@@ -56,6 +56,8 @@ If the secret leaks, rotate it with **Rotate secret** in the Connect tab, or wit
 
 Provider webhooks are different. They do not start runs. They become [events](/docs/concepts/sleeping-and-waiting/#posting-events) that waiting runs resume on, such as `payment.<referenceId>` for payments and `message.whatsapp.<phone>` for [inbound messages](/docs/concepts/capabilities/#receiving-messages).
 
+The [custom webhook](/docs/guides/custom-webhook/) messaging channel is one of these provider webhooks, not this trigger. It sends messages out to a URL you choose, and replies to its reply URL become `message.custom-webhook.<from>` events. It has its own signing secret, separate from the webhook secret and `ACTUATE_WEBHOOK_SECRET`.
+
 ## Cron
 
 ```ts

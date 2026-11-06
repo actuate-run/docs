@@ -134,7 +134,7 @@ It works like an approval:
 
 ## Delivering the links
 
-On the platform, when `notify` is set, links are sent through your actuator's messaging provider: Telegram, WhatsApp, or email through Resend, depending on which one you configured. Actuate does not send them itself. Without `notify`, or on the Sandbox plan (which has no messaging providers), take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is set, and to the console otherwise.
+On the platform, when `notify` is set, links are sent through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. Actuate does not send them itself. Without `notify`, or on the Sandbox plan (which has no messaging providers), take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is set, and to the console otherwise.
 
 If delivery fails, the runtime writes the error to the run's log and the run keeps waiting; fetch the links from the dashboard or the links route instead.
 

@@ -101,6 +101,7 @@ On Maker and Agency you can also send them to one messaging channel. Alerts use 
 | Discord | A channel ID. Turn on Developer Mode, right-click the channel and choose **Copy Channel ID** |
 | WhatsApp | A phone number in international format, such as `60123456789` |
 | Email (Resend) | An email address, such as `ops@yourcompany.com` |
+| Custom webhook | Whatever your endpoint expects in `to`, such as `me`. Most services ignore it. Use it to get alerts in ntfy, Google Chat, Teams, Zapier or your own server; see [Send messages to any URL](/docs/guides/custom-webhook/) |
 
 The recipient is one ID or address, at most 200 characters, with no spaces. Messages to a channel are cut at about 1,900 characters (Discord's limit). If you later remove that provider, alerts go to email only until you pick another channel. If sending to the channel fails, the email still goes out.
 
