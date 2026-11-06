@@ -82,7 +82,7 @@ Windows are per actuator and per kind, so a failing actuator never hides an aler
 
 ### Daily email cap
 
-Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual. [Run completed](#runs-that-finish-after-waiting) alerts may use only half of the day's emails. Messages your actuators send with [`ctx.notifyOwner`](/docs/concepts/actuators/#on-the-platform) count as alert emails too, and may also use only half.
+Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual. [Run completed](#runs-that-finish-after-waiting) alerts may use only half of the day's emails. Messages your actuators send with [`ctx.notifyOwner`](/docs/concepts/actuators/#on-the-platform) count as alert emails too, and so do approval and input links sent with [`notify: "owner"`](/docs/concepts/approvals/#send-the-links-to-yourself). Together they may also use only half.
 
 ## Where alerts go
 

@@ -122,6 +122,8 @@ Where the message goes:
 - In tests, [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) records it in `t.ownerNotifications`.
 - On a self-hosted runtime, it goes to the `notifyOwner` you pass to `createRuntime`. Without one, the runtime writes the message to the run's log as an `info` line and the call resolves to `{ sent: false, reason }`. See [Self-hosting](/docs/guides/self-hosting/#messages-to-the-owner).
 
+[`waitForApproval` and `waitForInput`](/docs/concepts/approvals/) can send you their signed links the same way, with `notify: "owner"` (`@actuate/sdk` 0.5 or later). They go to the same places, with one exception on the platform, described [below](#approval-and-input-links). See [send the links to yourself](/docs/concepts/approvals/#send-the-links-to-yourself).
+
 ### On the platform
 
 Actuate emails the message to your account's address, like an [alert](/docs/guides/alerts/), and on Maker and Agency also sends it to your [alert channel](/docs/guides/alerts/#where-alerts-go), if you set one. Only the account owner gets it. Your code chooses the text and the subject, never the recipient.
@@ -140,10 +142,20 @@ Sent by ctx.notifyOwner in refund_watch. Only the account owner gets these. To c
 
 - The subject is the one you pass, or `<actuator>: message from your actuator`.
 - These messages are not alerts. Actuate doesn't throttle them, and turning alerts off or muting the actuator doesn't stop them.
-- Their emails count with alert emails against your plan's [daily cap](/docs/guides/alerts/#daily-email-cap). They may use at most half of it, counted against every alert email sent that day, so failure alerts always have the other half. The last one emailed that day says so. After that, until 00:00 UTC, Actuate doesn't email these messages, but your alert channel still gets them. The call resolves to `{ sent: true }` when the email or the channel got the message, and to `{ sent: false, reason }` when neither did.
-- Actuate sends at most 10 messages per pass. Further calls in the same pass resolve to `{ sent: false, reason }`. Calls answered from the deduplication below don't count.
+- Their emails count with alert emails against your plan's [daily cap](/docs/guides/alerts/#daily-email-cap). They may use at most half of it, shared with the approval and input links below, counted against every alert email sent that day, so failure alerts always have the other half. The last one emailed that day says so. After that, until 00:00 UTC, Actuate doesn't email these messages, but your alert channel still gets them. The call resolves to `{ sent: true }` when the email or the channel got the message, and to `{ sent: false, reason }` when neither did.
+- Actuate sends at most 10 messages per pass, approval and input links included. Further calls in the same pass resolve to `{ sent: false, reason }`. Calls answered from the deduplication below don't count.
 - Actuate remembers each message's key for 48 hours, so a retried step gets the first call's answer and sends nothing. If the platform restarted while sending, the key can be sent again after 2 minutes. [Retrying a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) is different: its steps' messages get new keys and are sent again, as provider calls are.
 - If the email fails and nothing else got the message, the call throws, so the step's attempt fails; give the step `retries` and the retry sends it.
+
+#### Approval and input links
+
+A wait with `notify: "owner"` sends its signed links through the same path, with these differences:
+
+- The email goes to your account's address as usual, but the alert channel gets the links only when it is Telegram, Slack, Discord or email (Resend). A custom webhook may lead to another agent, and signed links must never reach an agent, so it never gets them. WhatsApp doesn't either.
+- They share the same half of the day's alert emails, and the same 10 sends per pass. When neither the email nor the channel got the links, nothing throws. The run's log gets a `warn` line, and the step keeps waiting for you to decide in the dashboard.
+- Each wait is sent once, keyed on the run and the step, so a replayed pass sends nothing.
+
+Approval links go to whoever reads your account's email and that channel, so keep those human.
 
 ## Output
 

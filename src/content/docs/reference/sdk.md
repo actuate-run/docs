@@ -93,6 +93,14 @@ const NOTIFY_OWNER_MAX_SUBJECT = 200;
 
 The longest text and subject [`ctx.notifyOwner`](#notifyowner) accepts, in characters.
 
+### NOTIFY_OWNER
+
+```ts
+const NOTIFY_OWNER = "owner";
+```
+
+The reserved `notify` value of [`waitForApproval`](#waitforapprovaloptions) and [`waitForInput`](#waitforinputoptions) that sends the signed links to the actuator's owner instead of through `ctx.messaging`. See [send the links to yourself](/docs/concepts/approvals/#send-the-links-to-yourself). Requires `@actuate/sdk` 0.5 or later.
+
 ## Definition types
 
 ### ActuatorDefinition
@@ -407,12 +415,14 @@ Passing both `timeout` and `until` throws `ActuatorError`.
 interface WaitForApprovalOptions {
   /** Shown to the approver. */
   message?: string;
-  /** Who gets the signed links: a chat ID, phone or email understood by the messaging provider. */
+  /** Who gets the signed links: a chat ID, phone or email understood by the messaging provider, or "owner". */
   notify?: string;
   /** Give up after this long and resolve to `null`. Default "7 days". */
   timeout?: Duration;
 }
 ```
+
+`notify: "owner"` (reserved, never a default) sends the links to the actuator's owner the way [`ctx.notifyOwner`](#notifyowner) does, with no messaging provider needed. On the hosted platform that is an email to the account, and the account's alert channel when it is Telegram, Slack, Discord or email (never a custom webhook, so the links never reach another agent). Self-hosted, it is the `notifyOwner` notifier given to `createRuntime`, else the worker's console, and under `actuate dev`, the terminal. When the links can't go out (a daily cap reached), the step still waits, the request is in the approval queue, and the run's log gets a `warn` line. Any other value is a messaging recipient, as before. See [send the links to yourself](/docs/concepts/approvals/#send-the-links-to-yourself).
 
 ### ApprovalResult
 
@@ -436,7 +446,7 @@ interface ApprovalResult {
 interface WaitForInputOptions {
   /** The question shown on the form. */
   prompt: string;
-  /** Who gets the signed link: a chat ID, phone or email understood by the messaging provider. */
+  /** Who gets the signed link: a chat ID, phone or email understood by the messaging provider, or "owner". */
   notify?: string;
   /** Pre-filled text, e.g. a draft to edit. */
   initial?: string;
@@ -447,7 +457,7 @@ interface WaitForInputOptions {
 }
 ```
 
-`prompt` is required; without it `waitForInput` throws `ActuatorError`.
+`prompt` is required; without it `waitForInput` throws `ActuatorError`. `notify: "owner"` works as for [`waitForApproval`](#waitforapprovaloptions).
 
 ### InputResult
 

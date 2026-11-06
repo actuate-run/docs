@@ -28,7 +28,7 @@ return { status: "REFUNDED" };
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `message` | `Approval needed: <actuator> / <step>` | The text the approver sees |
-| `notify` | none | Who gets the links, as a chat ID, phone number or email address that your messaging provider understands |
+| `notify` | none | Who gets the links, as a chat ID, phone number or email address that your messaging provider understands, or `"owner"` to [send them to yourself](#send-the-links-to-yourself) |
 | `timeout` | `"7 days"` | Give up after this long and resolve to `null`. The links expire at the same time |
 
 ## Result
@@ -47,7 +47,7 @@ The first time a run reaches `waitForApproval`:
 
 1. The runtime writes a `WAITING_APPROVAL` row to the journal and suspends the run.
 2. It signs two tokens, approve and reject, with HMAC-SHA256. Each token names the run, the step and the decision, and expires with the timeout.
-3. It sends both links to `notify` through the actuator's messaging provider, and logs `Approval requested for "<step>"` with the step and expiry, but not the links.
+3. It sends both links to `notify` through the actuator's messaging provider, or to you with `notify: "owner"`, and logs `Approval requested for "<step>"` with the step and expiry, but not the links.
 
 Replays do not send the links again.
 
@@ -91,7 +91,7 @@ await ctx.step.do("audit", () =>
 
 Actuate **never writes the links to run logs**. Anything that can read a run, such as an agent holding a run token, could otherwise approve its own gate. As the owner you get them from:
 
-- the messaging notification sent to `notify`;
+- the messaging notification sent to `notify`, or the email sent to you with `notify: "owner"`;
 - the dashboard's approval queue;
 - the API, with a full token: `GET /v1/actuators/<name>/runs/<runId>/approvals/<step>/links`. In the open-source runtime it is [`GET /runs/<runId>/approvals/<step>/links`](/docs/reference/runtime-http/#approvals), behind `ACTUATE_TOKEN`.
 
@@ -117,7 +117,7 @@ await ctx.step.do("send-reply", () => ctx.messaging.send(input.phone, reply.text
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `prompt` | required | The question shown on the form |
-| `notify` | none | Who gets the link, as for approvals |
+| `notify` | none | Who gets the link, as for approvals, including `"owner"` |
 | `initial` | empty | Text the form starts with, for example a draft to edit |
 | `maxLength` | `4000` | Longest answer, in characters. At most 20,000 |
 | `timeout` | `"7 days"` | Give up after this long and resolve to `null`. The link expires at the same time |
@@ -134,8 +134,56 @@ It works like an approval:
 
 ## Delivering the links
 
-On the platform, when `notify` is set, links are sent through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. Actuate does not send them itself. Without `notify`, or on the Sandbox plan (which has no messaging providers), take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is set, and to the console otherwise.
+On the platform, when `notify` is a recipient, links are sent through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. With `notify: "owner"`, Actuate [sends them to you](#send-the-links-to-yourself) by email instead, with no messaging provider needed, so this is how you get them on the Sandbox plan, which has no messaging providers. Without `notify`, take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is a recipient, to your owner notifier with `"owner"`, and to the console otherwise.
 
 If delivery fails, the runtime writes the error to the run's log and the run keeps waiting; fetch the links from the dashboard or the links route instead.
 
 On the platform, the owner also gets an [alert](/docs/guides/alerts/) one hour before an approval or question times out, for waits of two hours or more.
+
+### Send the links to yourself
+
+`notify: "owner"` sends the signed links to you, the actuator's owner, the way [`ctx.notifyOwner`](/docs/concepts/actuators/#message-the-owner) reaches you. It works for `waitForApproval` and `waitForInput`, and needs `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
+
+```ts
+const decision = await ctx.step.waitForApproval("manager-ok", {
+  message: `Refund RM${input.amount} on ${input.orderId}?`,
+  notify: "owner",
+  timeout: "1 day",
+});
+```
+
+`"owner"` is reserved. Actuate never passes it to a messaging provider as a recipient, so a recipient that is literally named `owner` (a custom webhook's `to`, say) can't receive approvals any more. It is never a default, so a wait without `notify` still sends nothing. The SDK exports it as `NOTIFY_OWNER`.
+
+Where the links go:
+
+- **On the platform**, Actuate emails them to your account's address. It also sends them to your [alert channel](/docs/guides/alerts/#where-alerts-go) when that channel is Telegram, Slack, Discord or email (Resend). Both come from your account's settings, never from the actuator's code.
+- **Under `actuate dev`**, they appear in the terminal as `📣  [owner notification: Approval needed: <actuator>]` (or `Input needed: <actuator>`), followed by the message and the links.
+- **Self-hosted**, they go to the `notifyOwner` notifier you pass to `createRuntime`, with the idempotency key `approval:<runId>:<step>` and the subject `Approval needed: <actuator>` or `Input needed: <actuator>`. The runtime shortens the message when it has to, so the links always fit in the 4,000 characters. Without a notifier, it prints the links to the worker's console and writes a `warn` line on the run. See [Self-hosting](/docs/guides/self-hosting/#messages-to-the-owner).
+- **In tests**, [`testActuator`](/docs/guides/best-practices/#unit-tests-with-testactuator) records the request in `t.approvals`, with `notify: "owner"`, like any other.
+
+A custom webhook alert channel never gets the links, because it may lead to another agent, and signed links must never reach an agent. Anyone who holds a link can decide, so an agent that received one could approve its own gate. WhatsApp isn't on the list either. Ordinary alerts and `ctx.notifyOwner` messages still go to every kind of channel.
+
+The links go to whoever reads your account's email and that alert channel. Keep those human. If you forward the account's email somewhere, or the Telegram group, Slack channel or Discord channel is one that an agent reads, the agent gets the links too.
+
+On the platform, the email puts the links first:
+
+```text
+Subject: Approval needed: refund_order
+
+Approve: https://run.actuate.run/a/act_.../approve?token=...
+Reject: https://run.actuate.run/a/act_.../approve?token=...
+
+Refund RM480 on ORD-1042?
+
+Run: run_01a19b8e7c2d4f60a1b2c3d4e5f6, step "manager-ok", waits until 2026-11-07 09:00 UTC
+Or decide in the dashboard: https://app.actuate.run/actuators/refund_order/approvals
+```
+
+A footer follows, saying why you got it and not to forward the links. A question's subject is `Question from <actuator>`, and it has one **Answer** link. The channel's copy is cut at 1,900 characters, so Actuate shortens your message to fit and never the links. Your message and the step name have [secret config values](/docs/reference/sdk/#secret) replaced by `[secret]`.
+
+Limits on the platform:
+
+- These emails share half of your plan's [daily alert emails](/docs/guides/alerts/#daily-email-cap) with `ctx.notifyOwner` messages, so failure alerts always keep the other half.
+- Once that half is used up, until 00:00 UTC, the links aren't emailed. Your alert channel still gets them, if it is one of the kinds above. When nothing went out, the run's log gets a `warn` line, such as `Approval links for "manager-ok" not sent: today's emails for owner notices are used up: … Find it in the dashboard under Approvals.` The step keeps waiting, and you decide it in the dashboard.
+- Each wait is sent once. A replayed pass sends nothing new. When a [retry of a failed run](/docs/guides/retry-and-rollback/#retry-a-failed-run) reaches a wait again, that wait sends its new links.
+- Each send counts toward the 10 messages to the owner a pass may send, shared with `ctx.notifyOwner`.
