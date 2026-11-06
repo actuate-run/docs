@@ -71,7 +71,7 @@ Slack and Discord suit messages to you or your team, such as approval requests, 
 | `channel` | Which channel sends, when several are configured: `"telegram"`, `"whatsapp"`, `"slack"`, `"discord"`, `"email"` or `"custom-webhook"`. Without it, the default channel sends. See [Several channels](#several-channels) |
 | `subject` | Email subject, when the channel is email. The custom webhook sends it too |
 | `template` | A WhatsApp template, `{ name, language, variables? }`, required for messages outside the 24-hour service window |
-| `format` | `"text"` (default) or `"html"`. HTML means a small subset (`<b>`, `<i>`, `<a href>`, `<code>`, `<pre>`), used where the channel supports it (Telegram, email). Other channels get the text with tags removed. The custom webhook sends both |
+| `format` | `"text"` (default) or `"html"`. HTML means a small subset (`<b>`, `<i>`, `<a href>`, `<code>`, `<pre>`), used where the channel supports it (Telegram, email). Other channels get the text with tags removed. The custom webhook's standard format sends both, as `text` and `html` |
 | `idempotencyKey` | Actuate passes it to providers that deduplicate (Resend, and Discord with a bot token). The custom webhook turns it into a message ID that stays the same on retries. It defaults to a key for this call, `<runId>:<step>:send:<n>`, where `n` counts the step's sends from 0. See [Deduplication by provider](#deduplication-by-provider) |
 
 ### Several channels

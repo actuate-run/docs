@@ -5,17 +5,19 @@ description: The custom webhook channel posts each message to a URL you choose, 
 
 **Actuate POSTs each message to your URL. To reply, POST to the reply URL it gave you.**
 
-The custom webhook is a messaging channel like Telegram or Slack, but the other end is any URL you choose. That can be your own server, Zapier, n8n, Make, Pipedream, Home Assistant, Node-RED, ntfy, Gotify, Apprise, Google Chat, Mattermost, Rocket.Chat or Microsoft Teams. `ctx.messaging.send`, [alerts](/docs/guides/alerts/) and `ctx.notifyOwner` can all use it. Everything except the URL is optional.
+The custom webhook is a messaging channel like Telegram or Slack, but the other end is any URL you choose. That can be your own server, Zapier, n8n, ntfy or Google Chat, among others. `ctx.messaging.send`, [alerts](/docs/guides/alerts/) and `ctx.notifyOwner` can all use it. Everything except the URL is optional.
 
 :::note[Not the Webhook trigger]
-The actuator's **Webhook** (`POST /webhook`, with the webhook secret from the Connect tab or `ACTUATE_WEBHOOK_SECRET`) receives requests that **start runs**. See [Triggers](/docs/concepts/triggers/#webhook). The **custom webhook** channel is the other direction. Actuate **sends messages out** to your URL, and replies come back as [inbound messages](/docs/concepts/capabilities/#receiving-messages) that waiting runs resume on. The two have separate URLs and separate secrets.
+`POST /webhook` starts runs. This channel sends messages out, and replies come back to a separate reply URL with a separate secret. See [Triggers](/docs/concepts/triggers/#webhook).
 :::
 
 ## Send your first message
 
+On the hosted platform, messaging channels need the Maker or Agency plan. The Sandbox plan has none.
+
 1. Get a URL that accepts a `POST` with a JSON body. For example, a Zapier **Catch Hook**, an n8n **Webhook** node, or a route on your own server.
 2. In the dashboard, open **Settings**, then **Providers**. In the **messaging** group, open **Custom webhook**, paste the address into **URL**, and click **Connect Custom webhook**. Leave the other fields as they are.
-3. Send from a step:
+3. Declare the capability in your actuator with `capabilities: ["messaging"]`. Then send from a step:
 
    ```ts
    await ctx.step.do("notify", () =>
@@ -33,11 +35,11 @@ The actuator's **Webhook** (`POST /webhook`, with the webhook secret from the Co
 
    Read `to` and `text`, and answer with any `2xx` status. `to` is whatever you passed to `send`. Actuate doesn't check it, and most services ignore it.
 
-That is all a one-way channel needs. On the hosted platform, messaging channels need the Maker or Agency plan.
+That is all a one-way channel needs.
 
 ### Reply (optional)
 
-To let your endpoint answer, give the channel a **Signing secret**. Click **Generate** next to the field, or make one yourself with `echo "whsec_$(openssl rand -base64 32)"`. From then on, every message you send with `ctx.messaging.send` also carries `replyUrl`:
+To let your endpoint answer, give the channel a **Signing secret**. Click **Generate** next to the field, or make one yourself with `echo "whsec_$(openssl rand -base64 32)"`. From then on, messages you send with `ctx.messaging.send` in the `standard` format carry `replyUrl` in their body. A [template](#your-own-json-template) carries it only where you put `{{replyUrl}}`, and the [`text` format](#plain-text) never does:
 
 ```json
 {
@@ -70,11 +72,14 @@ ACTUATE_MESSAGING=custom-webhook
 CUSTOM_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/123456/abcdef/
 # Optional: signs messages and turns on replies
 CUSTOM_WEBHOOK_SECRET=whsec_...
-# Optional: standard, text or template. Leave it out to pick automatically
-CUSTOM_WEBHOOK_FORMAT=template
-CUSTOM_WEBHOOK_TEMPLATE={"text":"{{text}}"}
-# Optional: an extra header
-CUSTOM_WEBHOOK_HEADERS="X-Gotify-Key: AbCdEf123"
+
+# Optional. Leave the format out to pick it automatically, or set it,
+# for example for ntfy:
+# CUSTOM_WEBHOOK_FORMAT=text
+# Optional: your own JSON body, for example for Google Chat:
+# CUSTOM_WEBHOOK_TEMPLATE={"text":"{{text}}"}
+# Optional: one extra header, for example for an API gateway in front of your server:
+# CUSTOM_WEBHOOK_HEADERS="X-Api-Key: AbCdEf123"
 ```
 
 `actuate dev` reads `.dev.vars` one line at a time, so there `CUSTOM_WEBHOOK_HEADERS` holds a single header. A self-hosted runtime takes several, one per line, when you set the variable with real line breaks:
@@ -84,6 +89,8 @@ printf 'X-Gotify-Key: AbCdEf123\nX-Team: ops\n' | npx wrangler secret put CUSTOM
 ```
 
 Locally the reply URL is `http://localhost:8787/providers/custom-webhook/webhook`. If your endpoint runs on another machine, expose the port with a tunnel and set `ACTUATE_PUBLIC_URL` to the tunnel's address, so `replyUrl` points there (see [`actuate dev`](/docs/reference/cli/#actuate-dev)). The URL may be plain `http://` only for `localhost`, `127.0.0.1` and `[::1]`, so a receiver on `http://localhost:3000` works.
+
+Self-hosted, set `ACTUATE_PUBLIC_URL` to the actuator's origin, as in [step 3 of Self-hosting](/docs/guides/self-hosting/#3-configure-wrangler). Until the runtime knows its origin, from that variable or from your first request made with `ACTUATE_TOKEN`, `replyUrl` is a path with no host.
 
 ## Settings
 
@@ -202,8 +209,10 @@ import { Webhook } from "standardwebhooks";
 const wh = new Webhook(process.env.CUSTOM_WEBHOOK_SECRET); // "whsec_..."
 
 createServer(async (req, res) => {
-  let body = "";
-  for await (const chunk of req) body += chunk;
+  const parts = [];
+  for await (const chunk of req) parts.push(chunk);
+  // Join the bytes before decoding, so a character split across chunks stays whole.
+  const body = Buffer.concat(parts).toString("utf8");
 
   let message;
   try {
@@ -267,7 +276,7 @@ Replies need a signing secret. POST JSON to the `replyUrl` from the message (or 
   });
   ```
 
-There is no `?secret=` option, because secrets in URLs end up in logs. Anything else gets `401`, with an `error` that says why. The body of a reply:
+Anything else gets `401`, with an `error` that says why. The body of a reply:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -320,7 +329,7 @@ Reply with the `to` you were sent as `from`, so the reply lands on the event the
 - **The URL is a secret.** Actuate stores it encrypted, masks it in the dashboard, and never puts it in errors or logs. Anyone with a Google Chat, Mattermost or Zapier hook URL can post to it.
 - **HTTPS only.** `http://` works only for `localhost`, `127.0.0.1` and `[::1]`. The URL must use a hostname, not an IP address, and can't contain a username or password.
 - **No redirects.** Actuate never follows one, because it could carry the signed message somewhere else. A `3xx` answer fails the send with "redirects are not followed; use the final URL", so give the URL the redirect points to.
-- **No loops.** The URL can't point at the actuator itself. Actuate refuses a URL with the same host and port as the actuator's reply URL. On the platform, Actuate also refuses any URL on `actuate.run` or the platform's own hosts, when you save the provider and again when it sends. The platform checks every provider URL you choose this way, and for providers that follow redirects, it checks each one too.
+- **No loops.** The URL can't point at the actuator itself. Actuate refuses a URL with the same host and port as the actuator's reply URL. On the platform, Actuate also refuses any URL on `actuate.run` or the platform's own hosts, when you save the provider and again when it sends. The platform checks every provider URL you choose this way, and for providers that follow redirects, it also checks every redirect.
 - **Check the signature** on your server, and reject anything unsigned, so a leaked URL alone can't feed you fake messages.
 - **A replayed reply counts again.** Actuate doesn't deduplicate replies, so the same signed request sent twice within the 5 minutes its timestamp is valid delivers two events. If a second answer would do harm, have your actuator ignore it, for example by stopping after the first `waitForEvent`.
 - **The services you use see the messages.** Zapier, n8n and the like keep a history of what they receive. Don't put secrets in messages.
@@ -337,6 +346,7 @@ Reply with the `to` you were sent as `from`, so the reply lands on the event the
 | JSON template | 16,384 characters |
 | `Title` header (`text` format) | 1,024 characters |
 | `from` in a reply | 256 characters |
+| Replies to the platform's reply URL | About 120 requests a minute per actuator, then `429`. At most 256 KB per body, then `413` |
 | Alerts sent to the channel | The subject, a blank line and the text, cut at 1,900 characters, as on every [alert channel](/docs/guides/alerts/#where-alerts-go). The subject also comes as `subject` |
 | Microsoft Teams (Workflows) | 28 KB per message, and 4 requests a second |
 
