@@ -463,7 +463,7 @@ What the test actuator gives you:
 | `fakeDate` | Make `Date.now()` and `new Date()` follow the clock (default `true`) |
 | `logs` | Print run logs to the console (default `false`) |
 
-Unlike `actuate dev` and the runtime, `testActuator` doesn't redact [`secret()`](/docs/reference/sdk/#secret) config values from runs, steps, logs or owner messages, so tests can assert on the real ones.
+Unlike `actuate dev` and the runtime, `testActuator` doesn't redact [`secret()`](/docs/reference/sdk/#secret) config values from runs, steps, logs or owner messages, so tests can assert on the real ones. To check that a secret never shows, pass `redactSecrets: true` (`@actuate/cli` 0.4.1 or later). Runs, step results, logs, errors and `t.ownerNotifications` then show `[secret]`, and replays still see the real value.
 
 The fakes record every call and succeed. A message gets an ID, a bill gets a URL and stays `pending` until `t.pay`, and a refund succeeds. Like real providers, the payment fake returns the first bill or refund again for a repeated idempotency key, without recording another. The guards are the ones [`actuate dev`](/docs/reference/cli/#guards-in-actuate-dev) applies. They don't check that your plan includes a capability. `actuate check --platform` does, and `actuate test` reports the deploy checks after the tests.
 

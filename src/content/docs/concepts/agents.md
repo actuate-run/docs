@@ -21,8 +21,7 @@ Your code sees the same value as `ctx.trigger.agent`:
 
 ```ts
 async run(ctx, input) {
-  // The SDK's Trigger type does not declare `agent` yet.
-  const agent = (ctx.trigger as { agent?: { id: string; name: string } }).agent;
+  const agent = ctx.trigger.agent; // { id, name }, or undefined for webhooks, cron and self-hosted runs
   await ctx.step.do("audit", () =>
     ctx.db.sql`INSERT INTO audit (run_id, agent_id, agent_name) VALUES (${ctx.runId}, ${agent?.id ?? null}, ${agent?.name ?? null})`,
   );
@@ -31,6 +30,8 @@ async run(ctx, input) {
 ```
 
 `agent` is absent for runs started by a webhook, a cron schedule, the dashboard, `actuate run` (the `/v1` API) or **Run again**. Treat it as a record of which credential was used, not as proof of who a person is, because anyone holding the token is that agent.
+
+`Trigger` declares `agent` from `@actuate/sdk` 0.4.1. On 0.4.0, read it with a cast: `(ctx.trigger as { agent?: { id: string; name: string } }).agent`.
 
 ## Analytics
 
@@ -69,7 +70,10 @@ A call over a limit starts no run. Over MCP the client gets a tool error, and ov
 
 ```text
 Agent "support-bot" reached its limit of 5 runs per hour of refund_order. Try again in 12 minutes, or raise the limit in Settings → Agents.
+{"code":"RATE_LIMITED","retryable":true,"retryAfterSeconds":720}
 ```
+
+The second line is the [tool error's](/docs/guides/connect-your-agent/#tool-errors) JSON, so an agent can wait `retryAfterSeconds` instead of retrying blindly. Over HTTP the same fields are in the body, and `retryAfterSeconds` is also sent as a `Retry-After` header.
 
 - The window slides. A call counts for the next 60 to 61 minutes, so a limit never lets through more than its value in any 60 minutes.
 - The platform checks agent limits after the plan's run rate and monthly budget, and only calls that pass all of them count toward the agent's limits.
