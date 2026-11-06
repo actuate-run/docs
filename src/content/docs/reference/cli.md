@@ -238,7 +238,7 @@ ANTHROPIC_API_KEY=...
 | `payment` | `ACTUATE_PAYMENT` | `stripe`, `toyyibpay`, `billplz`, `chip` |
 | `llm` | `ACTUATE_LLM` | `anthropic`, `openai`, `google`, `openai-compatible` |
 
-Credential variable names are `<KIND>_<FIELD>`, with any hyphen in the kind written as an underscore, for example `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`, `CUSTOM_WEBHOOK_URL`. The custom webhook reads `CUSTOM_WEBHOOK_URL`, and optionally `CUSTOM_WEBHOOK_SECRET`, `CUSTOM_WEBHOOK_HEADERS`, `CUSTOM_WEBHOOK_FORMAT` and `CUSTOM_WEBHOOK_TEMPLATE`; see [Send messages to any URL](/docs/guides/custom-webhook/#locally-and-self-hosted). `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (under Providers in Settings).
+Credential variable names are `<KIND>_<FIELD>`, with any hyphen in the kind written as an underscore, for example `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`, `CUSTOM_WEBHOOK_URL`. The custom webhook reads `CUSTOM_WEBHOOK_URL`, and optionally `CUSTOM_WEBHOOK_SECRET`, `CUSTOM_WEBHOOK_HEADERS`, `CUSTOM_WEBHOOK_FORMAT`, `CUSTOM_WEBHOOK_TEMPLATE` and `CUSTOM_WEBHOOK_APPROVAL_TEMPLATE`; see [Send messages to any URL](/docs/guides/custom-webhook/#locally-and-self-hosted). `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (under Providers in Settings).
 
 ## actuate test
 

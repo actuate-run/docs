@@ -181,7 +181,7 @@ Run: run_01a19b8e7c2d4f60a1b2c3d4e5f6, step "manager-ok", waits until 2026-11-07
 Or decide in the dashboard: https://app.actuate.run/actuators/refund_order/approvals
 ```
 
-A footer follows, saying why you got it and not to forward the links. A question's subject is `Question from <actuator>`, and it has one **Answer** link. Actuate cuts the channel's copy at 1,900 characters, so it shortens your message to fit and never the links. Actuate replaces [secret config values](/docs/reference/sdk/#secret) in your message and the step name with `[secret]`.
+A footer follows, saying why you got it and not to forward the links. A question's subject is `Input needed: <actuator>`, and it has one **Answer** link. Actuate cuts the channel's copy at 1,900 characters, so it shortens your message to fit and never the links. Actuate replaces [secret config values](/docs/reference/sdk/#secret) in your message and the step name with `[secret]`.
 
 Limits on the platform:
 
