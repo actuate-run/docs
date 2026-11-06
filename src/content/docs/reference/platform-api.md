@@ -1,12 +1,12 @@
 ---
 title: Platform API
-description: The hosted platform's HTTP routes for runs, retries, versions and rollbacks, alerts, agents and tokens, plus the gateway's run and MCP routes and the OAuth endpoints for MCP clients.
+description: The hosted platform's HTTP routes for runs, retries, versions and rollbacks, deleting actuators, alerts, agents and tokens, plus the gateway's run and MCP routes and the OAuth endpoints for MCP clients.
 ---
 
 The hosted platform has two HTTP services:
 
 - **The gateway**, at `https://run.actuate.run`, starts and reads runs, and serves the MCP endpoints, webhooks, approval pages and OpenAPI documents. Agents talk to it.
-- **The API**, at `https://api.actuate.run`, handles everything an owner does (deploy, configure, retry, roll back, alerts, tokens). The CLI and the dashboard talk to it. It is also the OAuth sign-in server for MCP clients.
+- **The API**, at `https://api.actuate.run`, handles everything an owner does (deploy, configure, retry, roll back, delete, alerts, tokens). The CLI and the dashboard talk to it. It is also the OAuth sign-in server for MCP clients.
 
 None of this exists in the open-source runtime, which serves one actuator on its own [runtime HTTP API](/docs/reference/runtime-http/). Responses are JSON. Errors are `{ "error": "<message>" }` with a status code. See [errors](#errors) for the extra fields some carry.
 
@@ -187,6 +187,25 @@ This makes version 6's code, metadata and cron schedules current again as a **ne
 | `409` | The version is already current; a provider that version needs isn't configured; the current config doesn't fit (the response has `issues`); or another deploy landed at the same moment |
 | `422` | The version no longer passes the deploy checks (cron schedules, `http.allow`, input patterns) |
 | `429` | The plan's deploy attempts per day (UTC) or per month are used up. Failed deploys count; a rollback counts once it passes its checks |
+
+## Deleting an actuator
+
+`DELETE /v1/actuators/:name` deletes an actuator at once and for good. It needs a full token and takes no body:
+
+```json
+{ "deleted": true, "name": "invoice_sync" }
+```
+
+Deleting removes:
+
+- its database: every table and row your code stored, and the run journal. [Export](/docs/concepts/database/#browsing-and-exporting) what you want to keep first.
+- every run, including runs in progress or waiting for an event, an approval or an answer, with their history and logs.
+- every version, its code and its cron schedules.
+- its alert settings, and MCP connections made for its endpoint.
+
+Its webhook, MCP, OpenAPI and run URLs stop working. For up to 30 seconds after the delete, a call to one of them can still count as a run before it gets `404`. Usage the actuator already used this month still counts. The name and the actuator's place in your plan's [limit](/docs/reference/limits/#plans) are free at once, so deploying the same name again starts at v1 with an empty database.
+
+An unknown actuator returns `404`. To stop an actuator without losing anything, pause it instead (the dashboard's Settings tab for the actuator). The dashboard also has **Delete actuator** on that tab: it lists what will be lost and asks for the actuator's name before it deletes.
 
 ## Configuration
 
