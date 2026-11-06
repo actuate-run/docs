@@ -14,7 +14,7 @@ The model decides that a customer deserves a refund. An actuator, exposed to the
 | Risk with an agent acting directly | What the actuator enforces |
 | --- | --- |
 | Hallucinated or malformed arguments | The InputSchema is the tool's argument schema, and the gateway rejects bad arguments before any code runs |
-| Acting twice when the agent or network retries | A retried tool call with the same [idempotency key](/docs/concepts/mcp-and-openapi/#idempotent-receipts) returns the first run's receipt; each `ctx.step.do` runs once per run |
+| Acting twice when the agent or network retries | A retried tool call with the same [idempotency key](/docs/concepts/mcp-and-openapi/#idempotent-receipts), or with the same values in the actuator's [key fields](/docs/concepts/mcp-and-openapi/#key-fields), returns the first run's receipt; each `ctx.step.do` runs once per run |
 | Exceeding a limit | Caps live in `config` and in code, not in a prompt. On the platform you can also cap how often each agent may run a tool, with [agent limits](/docs/concepts/agents/#limits) |
 | Acting without sign-off | `ctx.step.waitForApproval` pauses until a person clicks |
 | No record of what happened | Every run has a step journal, and you write audit rows to SQLite |
@@ -44,6 +44,8 @@ export default defineActuator({
     "Returns the outcome. Safe to retry.",
   config: ConfigSchema,
   input: InputSchema,
+  // A retried call for the same order returns the first call's run, even without a key.
+  idempotencyKey: ["orderId"],
   output: z.object({
     status: z.enum(["REFUNDED", "REJECTED", "NOT_FOUND", "OVER_LIMIT", "UNSUPPORTED"]),
     refundId: z.string().optional(),
@@ -98,14 +100,22 @@ What the model can and cannot do with this tool:
 - It can choose the order, the amount and one of four reasons. The schema rejects anything else before the actuator wakes.
 - It cannot refund more than the order's paid amount or `maxRefundRM`, because those checks are in code.
 - It cannot skip the approval. Above the threshold the run waits for a manager, and a timeout counts as a rejection.
-- It cannot refund twice for one retried call. A call retried with the same `_meta` idempotency key gets the first run's receipt, and the `refund` step runs once per run. A retry without a key is a new run, though, so see [one action per order](#one-action-per-order) for stopping separate calls.
+- It cannot refund twice for one retried call. A retry for the same order gets the first run's receipt, with or without a `_meta` idempotency key, and the `refund` step runs once per run. Some calls still start a second run for the same order, so see [one action per order](#one-action-per-order).
 - Every outcome leaves a row in `refunds` that you can browse and export.
 
 ## One action per order
 
-An idempotency key only helps when the client sends one. Many chat clients don't, and a stateless (2026-07-28) MCP client then starts a new run for every retry. Each run has its own run ID, so the provider idempotency keys Actuate derives differ too. Two runs for the same order can both refund unless your code stops the second one.
+An idempotency key only helps when the client sends one. Many chat clients don't, and a stateless (2026-07-28) MCP client then starts a new run for every retry. Each run has its own run ID, so the provider idempotency keys Actuate derives differ too. Two runs for the same order can both refund unless something stops the second one.
 
-Claim the thing you act on before the first wait, in a step that does only database work:
+Key fields fix the common case. With `idempotencyKey: ["orderId"]`, as in the example above, a call without a key for an order that already has a run returns that run, while it is running or waiting and for 24 hours after it completed. A run that failed or was cancelled doesn't count, so the order can be tried again. See [key fields](/docs/concepts/mcp-and-openapi/#key-fields) for the rules.
+
+Some runs for the same order still overlap, and the key can't stop them:
+
+- calls that send their own keys, because a key the caller sends replaces the key fields (two different keys for one order start two runs);
+- runs you start yourself from the dashboard or with `actuate run`, and webhooks, which never use the key fields;
+- a call for an order whose run completed more than 24 hours ago.
+
+So keep a guard in your code too. Claim the thing you act on before the first wait, in a step that does only database work:
 
 ```ts
 const claim = await ctx.step.do("claim-order", async ({ now }) => {
@@ -125,7 +135,9 @@ Because the step makes no network calls, no other run can claim the same order b
 
 A checking step placed before an approval wait is not enough on its own, because both runs pass it before either one pays.
 
-On the hosted platform, a key in `_meta` deduplicates for as long as the platform keeps the run it started: 7 days on Sandbox, 30 on Maker and 90 on Agency. A run still waiting is never deleted.
+To refund an order again on purpose, send a new key, as `_meta["run.actuate/idempotencyKey"]` over MCP or the `Idempotency-Key` header over HTTP. The call then starts a new run, and the claim decides whether it may act.
+
+On the hosted platform, a key in `_meta` deduplicates for as long as the platform keeps the run it started, which is 7 days on Sandbox, 30 on Maker and 90 on Agency. A run still waiting is never deleted.
 
 ## Let the caller preview
 

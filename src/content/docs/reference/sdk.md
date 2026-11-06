@@ -25,7 +25,7 @@ function defineActuator<C, I, O, K extends Capability = never>(
 ): Actuator<C, I, O, K>;
 ```
 
-Declares an actuator. The default export of an actuator file must be the result of this call. Validates the definition and throws [`ActuatorError`](#actuatorerror) if `name` is invalid, `description` is empty, a capability is unknown, or `"http"` is declared without `http.allow`. Returns a frozen copy of the definition. TypeScript infers the capability list as a literal type, so `ctx` only has the clients you declared.
+Declares an actuator. The default export of an actuator file must be the result of this call. Validates the definition and throws [`ActuatorError`](#actuatorerror) if `name` is invalid, `description` is empty, a capability is unknown, `"http"` is declared without `http.allow`, or [`idempotencyKey`](#idempotencykey) names a field that isn't a top-level string, number, integer or boolean field of the input schema (or is empty, or lists a field twice). Returns a frozen copy of the definition. TypeScript infers the capability list as a literal type, so `ctx` only has the clients you declared.
 
 ### secret
 
@@ -109,6 +109,7 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
   http?: { allow: readonly string[] };
   cron?: readonly string[];
   hints?: ToolHints;
+  idempotencyKey?: readonly string[]; // input fields that say which request a call is
   run(ctx: Context<K, P>, input: z.output<I>, config: z.output<C>): Promise<O> | O;
 }
 ```
@@ -125,9 +126,28 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
 | `http.allow` | Hostnames `ctx.http` may reach: exact (`api.github.com`) or wildcard (`*.example.com`) |
 | `cron` | Cron schedules. Each firing starts a run with input `{}` |
 | `hints` | What calling the tool does, for MCP clients: [`ToolHints`](#toolhints). Optional |
+| `idempotencyKey` | Input fields whose values identify a request, such as `["orderId"]`. See [below](#idempotencykey). Optional; `@actuate/sdk` 0.5 or later |
 | `run` | Your code: `(ctx, input, config) => output` |
 
 `C` and `I` extend [`AnySchema`](#anyschema). `input` and `config` arrive parsed, with defaults applied.
+
+#### idempotencyKey
+
+```ts
+idempotencyKey: ["orderId"],
+```
+
+A call over MCP or the run API (`POST /run`) that sends no idempotency key of its own gets one derived from these fields' values, so a retried tool call returns the first call's run instead of starting a second one.
+
+- Each name is a top-level field of the input schema whose type is a string, number, integer or boolean, or an enum or literal of those. `defineActuator` throws `ActuatorError` otherwise, and for an empty list or a name listed twice. The [deploy checks](/docs/reference/cli/#the-deploy-checks) also require each field to be required, with no `.optional()` and no `.default()` (rule `idempotency-key`).
+- The key is `input:` and the SHA-256 of the fields' values, in the order you list them, as the caller sent them. Zod's defaults, coercion and transforms don't apply, so `"A-1"` and `"a-1"` give different keys.
+- It matches a run with the same key that is running or waiting, or that completed in the last 24 hours. A failed or cancelled run never matches.
+- A key the caller sends (MCP `_meta["run.actuate/idempotencyKey"]`, or the `Idempotency-Key` header) is used instead, and matches a run with that key whatever its status. Send a new one to force a new run.
+- Cron runs and webhooks never get a derived key. On the hosted platform, neither do runs the owner starts (the dashboard's **Start run** and **Run again**, and `actuate run`).
+- A call whose input lacks one of the fields gets no derived key. The deploy checks rule that out on the platform, but self-hosted runs and tests don't check.
+- Declaring it makes the MCP tool `idempotentHint: true`, unless `hints.idempotent` is `false`.
+
+See [key fields](/docs/concepts/mcp-and-openapi/#key-fields).
 
 ### ToolHints
 
@@ -149,7 +169,7 @@ The hosted MCP server publishes these as the MCP tool's annotations. MCP clients
 | Hint | MCP annotation | Default |
 | --- | --- | --- |
 | `readOnly` | `readOnlyHint` | `false` |
-| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool |
+| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool or one with [`idempotencyKey`](#idempotencykey) |
 | `destructive` | `destructiveHint` | `true`, or `false` for a read-only tool |
 | `openWorld` | `openWorldHint` | `true` if the actuator declares any capability, `false` otherwise |
 

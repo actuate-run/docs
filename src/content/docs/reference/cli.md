@@ -319,7 +319,8 @@ actuate.config.json:1:1  warn   actuate.config.json sets the secret field apiKey
 | `bundle-size` | The bundle is at most 5 MB | |
 | `name` | The name is lowercase letters, digits and underscores, at most 64 characters, and doesn't start with `actuate_`, which the hosted platform keeps for its built-in MCP tools (`actuate_get_run`, `actuate_list_runs`, `actuate_cancel_run`) and refuses at deploy. Self-hosted actuators may still use the prefix | |
 | `cron` | Cron syntax, the number of schedules, and how often they fire, alone and together | The plan |
-| `cron-input` | The input schema accepts `{}`, the input every cron run gets (a warning) | |
+| `cron-input` | The input schema accepts `{}`, the input every cron run gets (a warning). An actuator with [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields can't accept it, because those fields are required, and cron runs never use the key, so the warning says to move the schedule to an actuator of its own | |
+| `idempotency-key` | Every [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) field is a top-level, required field of the input schema (no `.optional()`, no `.default()`), and a string, number, integer or boolean (`@actuate/cli` 0.5 or later) | |
 | `http-allow` | `http.allow` has at most 20 hostnames, no IP addresses, no `actuate.run`, no wildcard over a shared zone such as `*.co.uk` or `*.workers.dev` | |
 | `input-regex` | No regex in the input schema with nested quantifiers, such as `(a+)+` (Zod's built-in formats are fine) | |
 | `plan-capability` | Every capability in `capabilities` is on the plan; optional capabilities that aren't get a warning | The plan |
@@ -360,7 +361,7 @@ Deploys the actuator to Actuate. It needs [`actuate login`](#actuate-login) or `
 
 1. Runs `actuate check` and stops if there are errors.
 2. Bundles the file into a single ES module, with the SDK and Zod included, and hashes it. It minifies whitespace and syntax but keeps names, so stack traces stay readable, and it leaves out Zod's non-English locales.
-3. Reads the actuator's metadata: name, description, capabilities, `http.allow`, cron schedules, and the input, config and output schemas as JSON Schema.
+3. Reads the actuator's metadata: name, description, capabilities, `http.allow`, cron schedules, hints, `idempotencyKey` when you declare it, and the input, config and output schemas as JSON Schema.
 4. Runs the [deploy checks](#the-deploy-checks), including the ones that need your account, and stops if any fails. A refused deploy would still count against your deploy budget. `--force` deploys anyway.
 5. If the deployed version already runs exactly this code, it uploads nothing and uses no deploy. It updates the configuration when `actuate.config.json` differs from the deployed one, and otherwise does nothing. It leaves secret fields out of that comparison, because the platform shows them as `null`. It sends a file that leaves every secret field out only when something else changed, and the platform keeps the stored secrets. It always sends a file that mentions a secret field at all (a value, `null`, or `""` or `[]` to clear it). See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for how the platform merges it. `--force` deploys anyway.
 6. Uploads the bundle with `actuate.config.json` as the configuration, unless you pass `--no-config`.
@@ -398,9 +399,37 @@ When a check fails, `deploy` exits with status 1 before uploading:
 
 `--dry-run` runs steps 1 to 4 and prints the metadata as JSON, without uploading. It needs no login and doesn't count against the deploy budget. When you are logged in, it reads your account to run the account checks. It exits with status 1 when a check fails.
 
+After the metadata, `--dry-run` prints the MCP tool entry that agents will see in `tools/list`, built the way the hosted MCP server builds it (`@actuate/cli` 0.5 or later). It has the name, the title (the name with underscores turned into spaces), the description, the input schema, the output schema when it describes an object, and all four [annotations](/docs/concepts/mcp-and-openapi/#tool-hints):
+
+```text
+MCP tool entry (tools/list), as agents will see it:
+{
+  "name": "refund_order",
+  "title": "refund order",
+  "description": "Refund an order.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "orderId": { "type": "string", "description": "The order to refund" },
+      "amount": { "type": "number", "exclusiveMinimum": 0 }
+    },
+    "required": ["orderId", "amount"]
+  },
+  "annotations": {
+    "title": "refund order",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false
+  }
+}
+```
+
+Here `idempotentHint` is `true` because the actuator declares `idempotencyKey: ["orderId"]` and no `hints.idempotent`.
+
 `--plan` runs the checks against another plan than [yours](#which-plan-applies). The platform still uses your account's plan.
 
-`--json` prints one object instead of text: `ok`, `name`, `diagnostics`, `bundle` (`bytes`, `sha256`), `plan` (`id`, `source`), `issues`, and `deployed` (`version`, `sameCode`) when the actuator is already deployed. Then, for a dry run, `dryRun: true` and `metadata`; for an upload, `deployedNow: true`, `version`, `urls` and `warnings`; and when the code was unchanged, `deployedNow: false`, `configUpdated` and `version`. A deploy the checks stop prints `{ "ok": false, "error", ... }` with the same fields. A deploy that replay-safety errors stop prints `{ "ok": false, "error", "diagnostics" }`.
+`--json` prints one object instead of text: `ok`, `name`, `diagnostics`, `bundle` (`bytes`, `sha256`), `plan` (`id`, `source`), `issues`, and `deployed` (`version`, `sameCode`) when the actuator is already deployed. Then, for a dry run, `dryRun: true`, `metadata` and `mcpTool`, the MCP tool entry; for an upload, `deployedNow: true`, `version`, `urls` and `warnings`; and when the code was unchanged, `deployedNow: false`, `configUpdated` and `version`. A deploy the checks stop prints `{ "ok": false, "error", ... }` with the same fields. A deploy that replay-safety errors stop prints `{ "ok": false, "error", "diagnostics" }`.
 
 ## actuate run
 
@@ -432,6 +461,7 @@ Next
 
 - `--json` prints the run record as `POST /run` returned it instead (`runId`, `status`, `output`, `error`, `passes`, and `usage` under `actuate dev`), whatever its status. For its steps and logs, use `actuate logs <runId> --json`. Before `@actuate/cli` 0.3, `actuate run` printed the record by default; scripts that read its output need `--json` now.
 - `--idempotency-key <key>` sends an [`Idempotency-Key`](/docs/concepts/triggers/#idempotency-key), so a retry with the same key returns the first run instead of starting another.
+- On the hosted platform, `actuate run` without `--idempotency-key` always starts a new run, even when the actuator declares [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields. With `--local`, it calls `POST /run` on `actuate dev` like any other client, so a repeat of the same key fields' values returns the first run while it is running or waiting, or for 24 hours after it completed. Pass a new `--idempotency-key` to start another.
 - `run` exits with status 1 if the run ended `FAILED`, and when the input fails the schema, which prints each problem, for example `name: Too small: expected string to have >=1 characters`.
 - With `--local` it targets `actuate dev` on `localhost:<port>`, and otherwise the deployed actuator.
 

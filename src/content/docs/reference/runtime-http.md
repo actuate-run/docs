@@ -156,7 +156,7 @@ The route needs no admin token, because verification is your function's job.
 | Response | When |
 | --- | --- |
 | `201` + run record | A new run was started. The record reflects the end of its first pass |
-| `200` + run record | The `Idempotency-Key` header matched an existing run; nothing new was started |
+| `200` + run record | The `Idempotency-Key` header (or `X-GitHub-Delivery`) matched an existing run, or, without one, the actuator's [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields matched a run that is running, waiting or completed in the last 24 hours. Nothing new was started |
 | `400 {"error":"Request body must be JSON."}` | The body is not JSON |
 | `400 {"error":"Invalid input","issues":[...]}` | The body failed the input schema; `issues` are Zod issues |
 
