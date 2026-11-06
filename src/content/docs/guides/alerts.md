@@ -103,7 +103,7 @@ On Maker and Agency you can also send them to one messaging channel. Alerts use 
 | Email (Resend) | An email address, such as `ops@yourcompany.com` |
 | Custom webhook | Whatever your endpoint expects in `to`, such as `me`. Most services ignore it. Use it to get alerts in ntfy, Google Chat, Teams, Zapier or your own server; see [Send messages to any URL](/docs/guides/custom-webhook/) |
 
-The recipient is one ID or address, at most 200 characters, with no spaces. Messages to a channel are cut at about 1,900 characters (Discord's limit). If you later remove that provider, alerts go to email only until you pick another channel. If sending to the channel fails, the email still goes out.
+The recipient is one ID or address, at most 200 characters, with no spaces. A message to a channel is the subject, a blank line and the text, cut at 1,900 characters to stay under Discord's limit of 2,000. If you later remove that provider, alerts go to email only until you pick another channel. If sending to the channel fails, the email still goes out.
 
 **Send test alert** sends a test message to your email and the channel, whatever your toggles and mutes say, and shows what happened to each, including the provider's error if the channel failed. You can send one every 30 seconds, and ten a day.
 

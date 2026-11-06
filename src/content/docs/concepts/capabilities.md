@@ -110,9 +110,9 @@ To set it up, point the provider at the actuator's provider webhook URL, which t
 | --- | --- | --- |
 | WhatsApp | In your Meta app, open WhatsApp, then Configuration, then Webhook. Paste the URL, enter your **Webhook verify token**, and subscribe to `messages` | The **App secret**. Actuate checks every delivery's `X-Hub-Signature-256`, and only messages to your configured phone number ID count |
 | Telegram | Call `setWebhook` with the URL and `secret_token` set to your **Webhook secret token** | The **Webhook secret token**, which Actuate checks on every update |
-| Custom webhook | Nothing to paste: each message carries the URL as `replyUrl`, and the dashboard shows it as **Reply URL**. POST `{"from": "...", "text": "..."}` to it. See [Replies](/docs/guides/custom-webhook/#replies) | The **Signing secret**, as a bearer token, a Standard Webhooks signature or `?secret=` |
+| Custom webhook | Nothing to paste. Each message carries the URL as `replyUrl`, and the actuator's **Connect** tab shows it as **Reply URL**. POST `{"from": "...", "text": "..."}` to it. See [Replies](/docs/guides/custom-webhook/#replies) | The **Signing secret**, as a bearer token or a Standard Webhooks signature. Never in the URL, because URLs end up in logs |
 
-Without the app secret, secret token or signing secret, Actuate ignores inbound messages rather than trusting them. A WhatsApp number or Telegram bot has one webhook, so it delivers to one actuator; use a bot or number per actuator if several need replies. A custom webhook has no such limit, because each message carries the reply URL of the actuator that sent it. Locally, `actuate dev` serves the same route at `http://localhost:8787/providers/<kind>/webhook`; expose it with a tunnel.
+Without the app secret, secret token or signing secret, Actuate ignores inbound messages rather than trusting them. A WhatsApp number or Telegram bot has one webhook, so it delivers to one actuator; use a bot or number per actuator if several need replies. A custom webhook has no such limit. One endpoint can serve several actuators, because each message carries the reply URL of the actuator that sent it. Locally, `actuate dev` serves the same route at `http://localhost:8787/providers/<kind>/webhook`; expose it with a tunnel.
 
 ## payment
 
