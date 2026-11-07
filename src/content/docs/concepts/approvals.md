@@ -5,7 +5,7 @@ description: Pause a run until a person approves, rejects or answers a question 
 
 Two steps pause a run until a person acts on a signed link: `waitForApproval` for a yes or no, and [`waitForInput`](#asking-for-input) for a short written answer.
 
-`ctx.step.waitForApproval` pauses a run until a person clicks **Approve** or **Reject** on a signed link or, in Telegram, Slack and Discord, on a [button in the chat](/docs/guides/approval-buttons/), or until the timeout passes. Use it for money above a threshold, a message to a customer, or anything you want a human to sign off.
+`ctx.step.waitForApproval` pauses a run until a person clicks **Approve** or **Reject** on a signed link, or until the timeout passes. Use it for money above a threshold, a message to a customer, or anything you want a human to sign off. In Telegram, Slack and Discord, the person can also click a [button in the chat](/docs/guides/approval-buttons/).
 
 ```ts
 const decision = await ctx.step.waitForApproval("manager-ok", {
@@ -79,7 +79,7 @@ Every decision and answer records `via` (`"link"`, `"dashboard"`, `"api"` or, fo
 - For a dashboard decision, `by` is the signed-in account's email.
 - For an API decision, it is the account email and the token's name, for example `aina@kedai.example (token "ops-cli")`.
 - For a link decision, it is the name the person typed in the optional "Your name" field. Anyone holding the link can type anything there, so treat it as self-reported, not verified identity. If you need verified approvers, decide in the dashboard or with chat buttons.
-- For a [chat button](/docs/guides/approval-buttons/), it is the channel and the clicker's user ID, with their display name when the chat app gives one, for example `telegram:123456789 (Wei Tan)`. The chat app's signature proves the ID. The name is whatever the person set. A custom webhook's receiver [asserts](/docs/guides/approval-buttons/#decide-from-your-own-server) both, as `custom-webhook:<id> (<name>)`, with `via: "chat"` too. So `via: "chat"` alone doesn't mean a verified person. Where that matters, also check that `by` doesn't start with `custom-webhook:`.
+- For a [chat button](/docs/guides/approval-buttons/), it is the channel and the clicker's user ID, with their display name when the chat app gives one, for example `telegram:123456789 (Wei Tan)`. The chat app's signature proves the ID. The name is whatever the person set. A custom webhook's receiver [asserts](/docs/guides/approval-buttons/#decide-from-your-own-server) both, as `custom-webhook:<id> (<name>)`. Its decisions have `via: "chat"` too, so `via: "chat"` alone doesn't mean a verified person. Where that matters, also check that `by` doesn't start with `custom-webhook:`.
 
 ```ts
 const decision = await ctx.step.waitForApproval("manager", { message: "Refund RM 480?", notify: "@shop_manager" });
@@ -137,7 +137,7 @@ It works like an approval:
 
 On the platform, when `notify` is a recipient, Actuate sends the links through your actuator's messaging provider (Telegram, WhatsApp, Slack, Discord, email through Resend or a [custom webhook](/docs/guides/custom-webhook/)), depending on which one you configured. With `notify: "owner"`, Actuate [sends them to you](#send-the-links-to-yourself) instead, by email and to your alert channel when it is Telegram, Slack, Discord or email, with no messaging provider needed. This is how you get them on the Sandbox plan, which has no messaging providers. Without `notify`, take them from the dashboard's approval queue or the links route above. When you run locally with `actuate dev`, they appear in the terminal. In a self-hosted runtime, they go through the messaging provider you configured when `notify` is a recipient, to your owner notifier with `"owner"`, and to the console otherwise.
 
-Through Telegram, Slack and Discord, an approval also gets **Approve** and **Reject** buttons, and a question gets an **Answer** button. With the right credentials the approval's buttons decide in the chat, check who clicked and edit the message to say who decided. Otherwise they open the confirm page. The links stay in the text either way. See [Approve from chat](/docs/guides/approval-buttons/), which also covers approver lists.
+Through Telegram, Slack and Discord, an approval also gets **Approve** and **Reject** buttons, and a question gets an **Answer** button. With the right credentials, a click on an approval's button decides in the chat, and Actuate checks who clicked and edits the message to say who decided. Otherwise the buttons open the confirm page. The links stay in the text either way. See [Approve from chat](/docs/guides/approval-buttons/), which also covers approver lists.
 
 Through a custom webhook, the request also arrives as data. The standard body carries an `approval` object with the step and its links. An **Approval JSON template** can turn an approval into a Microsoft Teams or Google Chat card with **Approve** and **Reject** buttons, which open the confirm page. With a signing secret, your receiver can also [decide the approval itself](/docs/guides/approval-buttons/#decide-from-your-own-server). See [approval requests](/docs/guides/custom-webhook/#approval-requests).
 

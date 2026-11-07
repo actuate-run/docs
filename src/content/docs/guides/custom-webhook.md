@@ -210,7 +210,7 @@ In the `standard` format, the body carries an `approval` object:
 | `approveUrl`, `rejectUrl` | The signed links, for an approval |
 | `answerUrl` | The signed answer link, for a question |
 | `expiresAt` | When the links stop working, in ISO 8601 |
-| `decide` | On approvals, when a signing secret is set. `{ approve, reject, url }`, for [deciding from your server](#decide-from-the-receiver) |
+| `decide` | `{ approve, reject, url }`, for [deciding from your server](#decide-from-the-receiver), on approvals when a signing secret is set |
 
 Only Actuate's own approval and input requests set `approval`. The runtime drops it from messages your code sends with `ctx.messaging.send`, so an actuator can't fake an approval card. The other messaging providers ignore it, and the text carries the same links either way.
 
@@ -236,7 +236,7 @@ Send approvals only to an endpoint that shows them to a person. Anyone who holds
 
 ### Decide from the receiver
 
-With a signing secret, your endpoint can decide an approval itself, for example from **Approve** and **Reject** buttons in your own UI, without opening a link. The `approval` object carries `decide`, with two opaque values, `approve` and `reject`, and `url`, the Reply URL:
+With a signing secret, your endpoint can decide an approval itself, for example from **Approve** and **Reject** buttons in your own UI, without opening a link. The `approval` object then carries `decide`. It holds two opaque values, `approve` and `reject`, and `url`, which is the Reply URL:
 
 ```json
 "decide": {
@@ -246,7 +246,7 @@ With a signing secret, your endpoint can decide an approval itself, for example 
 }
 ```
 
-On the platform the values name the actuator's ID, as here, and self-hosted they say `local`. POST one of them to `url`, with the same auth as a [reply](#replies), and say who decided:
+On the platform the values name the actuator's ID, as here. Self-hosted, they say `local`. POST one of them to `url`, with the same auth as a [reply](#replies), and say who decided:
 
 ```bash
 curl -X POST "$REPLY_URL" \
@@ -255,7 +255,7 @@ curl -X POST "$REPLY_URL" \
   -d '{"decision":"ap1:act_9fQ2xLm0Rk3TzW7a:q3Jx8Kd0Lm2Pz7Yw:a","by":{"id":"alice","name":"Alice Tan"}}'
 ```
 
-Actuate answers with JSON, such as `{"status": "decided", "decision": "approved", "by": "custom-webhook:alice (Alice Tan)", "at": "...", "message": "Approved by Alice Tan at 14:02 UTC"}`, and the run resumes with `via: "chat"` and `by: "custom-webhook:alice (Alice Tan)"`. Your server asserts `by`, because Actuate can check the secret but not the person, so let it decide only for people it has signed in. **Approvers** limits which `by.id` values may decide. A body without `decision` is an ordinary reply. Every field and answer is in [Decide from your own server](/docs/guides/approval-buttons/#decide-from-your-own-server).
+Actuate answers with JSON, such as `{"status": "decided", "decision": "approved", "by": "custom-webhook:alice (Alice Tan)", "at": "...", "message": "Approved by Alice Tan at 14:02 UTC"}`. The run resumes with `via: "chat"` and `by: "custom-webhook:alice (Alice Tan)"`. Actuate can check the secret but not the person, so your server asserts `by`. Let it decide only for people it has signed in. **Approvers** limits which `by.id` values may decide. A body without `decision` is an ordinary reply. [Decide from your own server](/docs/guides/approval-buttons/#decide-from-your-own-server) lists every field and answer.
 
 ## Extra headers
 

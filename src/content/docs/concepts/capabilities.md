@@ -83,7 +83,7 @@ await ctx.step.do("tell-customer", () => ctx.messaging.send(input.phone, "Your r
 await ctx.step.do("tell-team", () => ctx.messaging.send("C0123456789", `Refunded ${input.orderId}`, { channel: "slack" }));
 ```
 
-On the platform, connect each one under **Settings**, then **Providers**, and use **Make default** to choose the default. You can connect up to five channels. Locally, list them in `.dev.vars`, default first: `ACTUATE_MESSAGING=whatsapp,slack`. Sending on a channel that isn't configured fails the step with `No "slack" messaging channel is configured. Configured: whatsapp.`, even when only one channel is configured, so a message meant for one channel never goes out through another. Before 0.5, with a single channel, `channel` was ignored. Approvals and questions can [pick the channel](/docs/concepts/approvals/#pick-the-channel) the same way. You can still have only one payment provider and one LLM provider.
+On the platform, connect each one under **Settings**, then **Providers**, and use **Make default** to choose the default. You can connect up to five channels. Locally, list them in `.dev.vars`, default first: `ACTUATE_MESSAGING=whatsapp,slack`. Sending on a channel that isn't configured fails the step with `No "slack" messaging channel is configured. Configured: whatsapp.`. This happens even when only one channel is configured, so a message meant for one channel never goes out through another. Before 0.5, `ctx.messaging.send` ignored `channel` when only one channel was configured. Approvals and questions can [pick the channel](/docs/concepts/approvals/#pick-the-channel) the same way. You can still have only one payment provider and one LLM provider.
 
 ### Receiving messages
 

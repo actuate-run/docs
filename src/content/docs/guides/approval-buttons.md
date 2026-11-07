@@ -32,7 +32,7 @@ Each provider sends interactive buttons when it can verify the clicks, and link 
 | Slack | A **Signing secret**, and the app's **Interactivity** Request URL. The bot token and the incoming webhook URL both work | Link buttons |
 | Discord | The **Bot token** and the **Public key**, and the application's **Interactions Endpoint URL** | Link buttons, when every link is at most 512 characters, and the links as text only otherwise. A channel webhook can only send link buttons |
 
-On Slack and Discord, **Approve** is green and **Reject** is red. Slack messages are Block Kit, with the plain text as the notification. When a chat app refuses the buttons, Actuate sends the message again without them in these cases. Telegram answers `400` about a button or its URL, for link buttons. Slack answers `invalid_blocks`, `invalid_blocks_format` or `msg_blocks_too_long`. Discord answers `400` to a message with buttons. Any other error fails the delivery as usual.
+On Slack and Discord, **Approve** is green and **Reject** is red. Actuate sends Slack messages as Block Kit, with the plain text as the notification. When a chat app refuses the buttons, Actuate sends the message again without them. It does this when Telegram answers `400` about a link button or its URL, when Slack answers `invalid_blocks`, `invalid_blocks_format` or `msg_blocks_too_long`, and when Discord answers `400` to a message with buttons. Any other error fails the delivery as usual.
 
 Buttons only appear on approvals sent to a `notify` recipient through your messaging channels. With [`notify: "owner"`](/docs/concepts/approvals/#send-the-links-to-yourself), the links reach you by email and on your alert channel, without buttons. WhatsApp and email (Resend) carry the links as text.
 
@@ -48,7 +48,7 @@ A question from [`waitForInput`](/docs/concepts/approvals/#asking-for-input) get
 2. Under the Telegram provider, pick an actuator in **Connect the bot to** and click **Connect**. Actuate calls Telegram's `setWebhook` for you, with your secret token and with both the `message` and `callback_query` updates.
 3. Optionally, fill in **Approvers** with Telegram user IDs. See [Approver lists](#approver-lists).
 
-A Telegram bot has one webhook, so the bot's messages reach only the actuator you connected. Button clicks for your other actuators arrive there too, and Actuate forwards them to the actuator that sent the message, so one bot serves the buttons of all your actuators. To move the bot to another actuator, pick it and click **Connect** again.
+A Telegram bot has one webhook, so the bot's messages reach only the actuator you connected. Button clicks for your other actuators arrive there too. Actuate forwards each click to the actuator that sent the message, so one bot serves the buttons of all your actuators. To move the bot to another actuator, pick it and click **Connect** again.
 
 **Connect** refuses when the provider has no webhook secret token. Update the provider with one first.
 
@@ -83,7 +83,7 @@ Under `actuate dev`, expose port 8787 with a tunnel and set `ACTUATE_PUBLIC_URL`
 Approver lists take numeric user IDs, not @usernames or group chat IDs.
 
 - In a private chat with your bot, your user ID is the same number as the chat ID, which you may already pass as `notify`.
-- In a group, send the bot a command meant for it, such as `/start@<bot username>`, before you set its webhook. In a group, Telegram's [privacy mode](https://core.telegram.org/bots/features#privacy-mode) gives a bot only commands for it and replies to its messages, so an ordinary message won't show. Then open `https://api.telegram.org/bot<bot token>/getUpdates` and read `message.from.id`. Telegram answers `getUpdates` only while the bot has no webhook.
+- In a group, send the bot a command meant for it, such as `/start@<bot username>`, before you set its webhook. Then open `https://api.telegram.org/bot<bot token>/getUpdates` and read `message.from.id`. Telegram answers `getUpdates` only while the bot has no webhook. An ordinary message won't show, because in a group Telegram's [privacy mode](https://core.telegram.org/bots/features#privacy-mode) gives a bot only commands for it and replies to its messages.
 - Once someone has clicked, the run's result names them, as in `telegram:123456789 (Wei Tan)`. The number is their user ID.
 
 ## Set up Slack
@@ -98,7 +98,7 @@ Use a Slack app that only Actuate uses. A Slack app has one Interactivity Reques
 4. In your Slack app, open **Interactivity & Shortcuts**, turn **Interactivity** on, paste the URL as the **Request URL** and save.
 5. Optionally, fill in **Approvers** with member IDs.
 
-The Interactivity Request URL belongs to your account, not to one actuator. One Slack app serves all your actuators, and Actuate sends each click to the actuator that sent the message. The URL keeps working when you delete an actuator, and stays the same when you update the provider. If you remove the provider and add it again, it gets a new URL and the old one answers `404`, so paste the new one into the app. Anyone may know it. It grants nothing, because Actuate checks every request's signature with your signing secret.
+The Interactivity Request URL belongs to your account, not to one actuator. One Slack app serves all your actuators, and Actuate sends each click to the actuator that sent the message. The URL keeps working when you delete an actuator, and stays the same when you update the provider. If you remove the provider and add it again, it gets a new URL and the old one answers `404`, so paste the new one into the app. The URL isn't a secret. Knowing it grants nothing, because Actuate checks every request's signature with your signing secret.
 
 ### Self-hosted and locally
 
@@ -112,17 +112,17 @@ In Slack, open the person's profile, click the **⋯** button, then **Copy membe
 
 Interactive buttons need a bot token. Through a channel webhook, Discord shows only link buttons.
 
-Once an application has an **Interactions Endpoint URL**, Discord sends all its interactions there and stops sending them over the Gateway. Slash commands and buttons that another bot handles on the same application stop reaching it, so use an application that only Actuate uses. Actuate answers any other interaction of the application with "This app only handles Actuate approval buttons."
+Once an application has an **Interactions Endpoint URL**, Discord sends all its interactions there and stops sending them over the Gateway. Slash commands and buttons that another bot handles on the same application stop reaching that bot, so use an application that only Actuate uses. Actuate answers any other interaction for the application with "This app only handles Actuate approval buttons."
 
 ### On the platform
 
 1. In the [Discord Developer Portal](https://discord.com/developers/applications), open your application's **General Information** and copy the **Public Key**.
-2. In the dashboard, open **Settings**, then **Providers**, and add or update **Discord** with the **Bot token** and the **Public key**. Save it before the next step, because Discord checks the URL as soon as you save it there.
+2. In the dashboard, open **Settings**, then **Providers**, and add or update **Discord** with the **Bot token** and the **Public key**. Save it before the next step, because Discord checks the URL as soon as you save it in the Developer Portal.
 3. Under the Discord provider, copy the **Interactions Endpoint URL**. It looks like `https://run.actuate.run/t/<route id>/providers/discord/interactions`.
-4. Back in **General Information**, paste it into **Interactions Endpoint URL** and save. Discord sends a signed test request, which Actuate answers. That needs at least one active actuator in your account.
+4. Back in **General Information**, paste it into **Interactions Endpoint URL** and save. Discord sends a signed test request, and Actuate answers it when your account has at least one active actuator.
 5. Optionally, fill in **Approvers** with user and role IDs.
 
-As for Slack, the URL belongs to your account and serves all your actuators. Removing the provider and adding it again makes a new URL, which you paste into the application again.
+As with Slack, the URL belongs to your account and serves all your actuators. Removing the provider and adding it again makes a new URL, which you paste into the application again.
 
 ### Self-hosted and locally
 
@@ -171,7 +171,7 @@ On the platform, a click for a paused actuator gets "This request has expired or
 
 ### A click reaches the right actuator
 
-On the platform, Slack and Discord send every click to your account's Interactions URL, and Telegram sends it to the connected actuator. Whichever actuator receives a click checks it with your credentials, and forwards it once to the actuator that sent the message, if that actuator is in your account and active. That actuator checks the click again before it decides. A button from another account's actuator is never decided.
+On the platform, Slack and Discord send every click to your account's Interactions URL, and Telegram sends it to the connected actuator. The actuator that receives a click checks it with your credentials. It then forwards the click once to the actuator that sent the message, if that actuator is in your account and active. That actuator checks the click again before it decides. A click on a button from another account's actuator decides nothing.
 
 Self-hosted, each actuator has its own URL and takes only its own clicks.
 
@@ -251,7 +251,7 @@ curl -X POST "$REPLY_URL" \
 | `by.id` | Yes | Who decided, as your server knows them. 1 to 64 characters, with no spaces or commas. A number becomes a string |
 | `by.name` | No | Their name, at most 60 characters |
 
-The answer is always JSON. Show `message` to the person, or use `status` and `decision` to update your own UI. It never holds a link or a decision value.
+The answer is always JSON. Show `message` to the person, or use `status` and `decision` to update your own UI. The answer never holds a link or a decision value.
 
 | Status | Body |
 | --- | --- |
@@ -267,13 +267,13 @@ The run resumes with `{ approved, at, by: "custom-webhook:alice (Alice Tan)", vi
 
 **Your server asserts `by`.** Actuate checks the signing secret, so it knows the request came from your server, but it can't check who the person was. Let your server decide only for people it has signed in itself, and keep the secret on the server. **Approvers** (`CUSTOM_WEBHOOK_APPROVERS`) lists the `by.id` values allowed to decide this way. Without it, any `by.id` your server sends can decide.
 
-A body without `decision` is an ordinary reply. On the platform, a decision for another actuator in your account is forwarded to it, as for chat buttons. Approvals with `notify: "owner"` never go to a custom webhook, so nobody can decide your own approvals this way.
+A body without `decision` is an ordinary reply. On the platform, Actuate forwards a decision for another actuator in your account to that actuator, as for chat buttons. Approvals with `notify: "owner"` never go to a custom webhook, so nobody can decide your own approvals this way.
 
 ## Security
 
-- **Every click is verified.** Telegram must send your secret token in `X-Telegram-Bot-Api-Secret-Token`. Slack must sign the request with your signing secret (`X-Slack-Signature`), and Discord with your application's key (`X-Signature-Ed25519`), both within 5 minutes. A custom webhook decision needs your signing secret, as a bearer token or a Standard Webhooks signature. Anything else gets `401` and decides nothing.
-- **The links still decide.** Buttons add a way to decide. They don't remove the links. An agent that reads the chat, or anyone who can see the message, can open a link and decide, whatever the approver list says. Send approvals only to chats that no agent reads.
+- **Actuate verifies every click.** Telegram must send your secret token in `X-Telegram-Bot-Api-Secret-Token`. Slack must sign the request with your signing secret (`X-Slack-Signature`), and Discord with your application's key (`X-Signature-Ed25519`), both within 5 minutes. A custom webhook decision needs your signing secret, as a bearer token or a Standard Webhooks signature. Anything else gets `401` and decides nothing.
+- **The links still decide.** Buttons add a way to decide without removing the links. An agent that reads the chat, or anyone who can see the message, can open a link and decide, whatever the approver list says. Send approvals only to chats that no agent reads.
 - **Agents never see the buttons' values.** Each approval gets a random value that works once and expires with the links. Actuate hands it only to the messaging provider. It never appears in run logs, step outputs, receipts or anything a run token reads. Your code can't send approval buttons either, because the runtime removes `approval` from messages sent with `ctx.messaging`.
-- **A button decides only through the channel that sent it.** A value copied from a Slack message can't be replayed through the custom webhook's Reply URL, where your server asserts `by`, so it can't get around Slack's approver list. If the message couldn't be sent, its buttons decide nothing.
+- **A button decides only through the channel that sent it.** Nobody can replay a value copied from a Slack message through the custom webhook's Reply URL, where your server asserts `by`, so the value can't get around Slack's approver list. If the message couldn't be sent, its buttons decide nothing.
 - **Display names aren't verified.** Only the user ID in `by` is. Write approver lists with IDs, and match on IDs in your code.
-- **The Interactions URL isn't a secret.** It only says which account a request is for. The signature checks are what keep fake clicks out.
+- **The Interactions URL isn't a secret.** It only says which account a request is for. The signature checks keep fake clicks out.

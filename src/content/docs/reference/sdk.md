@@ -432,7 +432,7 @@ Telegram, Slack and Discord can put **Approve** and **Reject** buttons on the me
 type Notify = string | { to: string; channel?: string };
 ```
 
-Who a `waitForApproval` or `waitForInput` notifies. A string is a messaging recipient, or `"owner"`. `{ to, channel }` sends to `to` through the messaging channel you name, such as `"slack"` or `"telegram"`, when you have several. Without `channel`, the default channel sends, as with a string. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
+`Notify` says who a `waitForApproval` or `waitForInput` notifies. A string is a messaging recipient, or `"owner"`. `{ to, channel }` sends to `to` through the messaging channel you name, such as `"slack"` or `"telegram"`, when you have several. Without `channel`, the default channel sends, as with a string. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
 
 ```ts
 const decision = await ctx.step.waitForApproval("manager-ok", {
@@ -671,7 +671,7 @@ interface MessageReceipt {
 
 `to` is a phone number, chat ID or email address, depending on the provider. The [custom webhook](/docs/guides/custom-webhook/) passes it to your endpoint unchanged.
 
-`approval` lets a provider render a request as a card with link buttons, as the custom webhook's [approval requests](/docs/guides/custom-webhook/#approval-requests) do. The runtime sets it on the messages it sends for `waitForApproval` and `waitForInput` with a `notify` recipient, and removes it from sends made through `ctx.messaging`, so actuator code can't fake an approval card. Providers that don't know it ignore it, and the text always carries the same links. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later. `buttons` is set only on approvals sent to a `notify` recipient, never on questions or `notify: "owner"`. Telegram, Slack and Discord put it on interactive [approval buttons](/docs/guides/approval-buttons/), and the custom webhook turns it into [`approval.decide`](/docs/guides/approval-buttons/#decide-from-your-own-server). It decides nothing alone, because a click must also be verified by the provider that sent it.
+`approval` lets a provider render a request as a card with link buttons, as the custom webhook's [approval requests](/docs/guides/custom-webhook/#approval-requests) do. The runtime sets it on the messages it sends for `waitForApproval` and `waitForInput` with a `notify` recipient, and removes it from sends made through `ctx.messaging`, so actuator code can't fake an approval card. Providers that don't know it ignore it, and the text always carries the same links. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later. The runtime sets `buttons` only on approvals sent to a `notify` recipient, never on questions or `notify: "owner"`. Telegram, Slack and Discord put it on interactive [approval buttons](/docs/guides/approval-buttons/), and the custom webhook turns it into [`approval.decide`](/docs/guides/approval-buttons/#decide-from-your-own-server). It decides nothing alone, because the provider that sent it must also verify the click.
 
 ### PaymentProvider
 
