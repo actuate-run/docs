@@ -424,6 +424,8 @@ interface WaitForApprovalOptions {
 
 `notify: "owner"` (reserved, never a default) sends the links to the actuator's owner the way [`ctx.notifyOwner`](#notifyowner) does, with no messaging provider needed. On the hosted platform that is an email to the account, and the account's alert channel when it is Telegram, Slack, Discord or email (never a custom webhook, so the links never reach another agent). Self-hosted, it is the `notifyOwner` notifier given to `createRuntime`, or the worker's console without one. Under `actuate dev`, it is the terminal. When the links can't go out (a daily cap reached), the step still waits, the request is in the approval queue, and the run's log gets a `warn` line. Any other value is a messaging recipient, as before. See [send the links to yourself](/docs/concepts/approvals/#send-the-links-to-yourself).
 
+Telegram, Slack and Discord can put **Approve** and **Reject** buttons on the message when their credentials allow it, and the links stay in the text. A button decision resolves with `via: "chat"`. See [Approve from chat](/docs/guides/approval-buttons/).
+
 ### Notify
 
 ```ts
@@ -452,12 +454,17 @@ interface ApprovalResult {
   at: string;
   /** Optional note typed by the approver (on the approval page or in the dashboard). */
   note?: string;
-  /** Who decided: the signed-in account (dashboard: email; API: email and token name), or the name typed on the link page (self-reported). */
+  /**
+   * Who decided: the signed-in account (dashboard: email; API: email and token name), the name typed on the link
+   * page (self-reported), or for a chat button `<channel>:<user id> (<display name>)`.
+   */
   by?: string;
-  /** Where it came from. */
-  via?: "link" | "dashboard" | "api";
+  /** Where it came from: a signed link, the dashboard, the API, or a chat button. */
+  via?: "link" | "dashboard" | "api" | "chat";
 }
 ```
+
+`via: "chat"` means someone clicked **Approve** or **Reject** in Telegram, Slack or Discord, or a custom webhook's receiver decided. `by` is then the channel and the clicker's user ID, with their display name in brackets when the chat app gives one, such as `telegram:123456789 (Wei Tan)` or `slack:U01ABC2DEF (alice)`. The chat app's signature proves the user ID, and the name is whatever the person chose. A custom webhook's receiver asserts both, as `custom-webhook:<id> (<name>)`. Chat decisions have no `note`. See [who decided](/docs/guides/approval-buttons/#who-decided). `"chat"` is new in `@actuate/sdk` 0.5.
 
 ### WaitForInputOptions
 
@@ -652,6 +659,8 @@ interface ApprovalPrompt {
   answerUrl?: string;
   /** When the links stop working, epoch ms. */
   expiresAt: number;
+  /** On approvals, when the runtime made a button nonce: what a provider puts on Approve and Reject buttons. */
+  buttons?: { route: string; nonce: string };
 }
 
 interface MessageReceipt {
@@ -662,7 +671,7 @@ interface MessageReceipt {
 
 `to` is a phone number, chat ID or email address, depending on the provider. The [custom webhook](/docs/guides/custom-webhook/) passes it to your endpoint unchanged.
 
-`approval` lets a provider render a request as a card with link buttons, as the custom webhook's [approval requests](/docs/guides/custom-webhook/#approval-requests) do. The runtime sets it on the messages it sends for `waitForApproval` and `waitForInput` with a `notify` recipient, and removes it from sends made through `ctx.messaging`, so actuator code can't fake an approval card. Providers that don't know it ignore it, and the text always carries the same links. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
+`approval` lets a provider render a request as a card with link buttons, as the custom webhook's [approval requests](/docs/guides/custom-webhook/#approval-requests) do. The runtime sets it on the messages it sends for `waitForApproval` and `waitForInput` with a `notify` recipient, and removes it from sends made through `ctx.messaging`, so actuator code can't fake an approval card. Providers that don't know it ignore it, and the text always carries the same links. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later. `buttons` is set only on approvals sent to a `notify` recipient, never on questions or `notify: "owner"`. Telegram, Slack and Discord put it on interactive [approval buttons](/docs/guides/approval-buttons/), and the custom webhook turns it into [`approval.decide`](/docs/guides/approval-buttons/#decide-from-your-own-server). It decides nothing alone, because a click must also be verified by the provider that sent it.
 
 ### PaymentProvider
 

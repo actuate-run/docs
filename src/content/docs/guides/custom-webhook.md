@@ -81,6 +81,8 @@ CUSTOM_WEBHOOK_SECRET=whsec_...
 # Optional: a JSON body for approval requests only, on one line, such as
 # one of the cards under "Approval requests"
 # CUSTOM_WEBHOOK_APPROVAL_TEMPLATE={"type":"message","attachments":[...]}
+# Optional: the by.id values allowed to decide approvals from your server
+# CUSTOM_WEBHOOK_APPROVERS=alice bob
 # Optional: one extra header, for example for an API gateway in front of your server:
 # CUSTOM_WEBHOOK_HEADERS="X-Api-Key: AbCdEf123"
 ```
@@ -105,6 +107,7 @@ Self-hosted, set `ACTUATE_PUBLIC_URL` to the actuator's origin, as in [step 3 of
 | Body format | `CUSTOM_WEBHOOK_FORMAT` | No | `standard`, `text` or `template`. Empty (**Automatic** in the dashboard) means `template` when a JSON template is set, and `standard` otherwise. See [Body formats](#body-formats) |
 | JSON template | `CUSTOM_WEBHOOK_TEMPLATE` | With `template` | The JSON body to send, with placeholders. The dashboard offers starting points for common services |
 | Approval JSON template | `CUSTOM_WEBHOOK_APPROVAL_TEMPLATE` | No | A JSON body used for approval requests only, whatever the body format, such as a card with **Approve** and **Reject** buttons. Questions use the body format. Empty means approvals use the body format too. See [Approval requests](#approval-requests) |
+| Approvers | `CUSTOM_WEBHOOK_APPROVERS` | No | The `by.id` values allowed to [decide approvals from your server](#decide-from-the-receiver), separated by spaces or commas. Empty means any `by.id` your server sends. The links still work for whoever holds them |
 
 ## Body formats
 
@@ -153,6 +156,7 @@ The `template` format sends your own JSON body, for services that expect particu
 | `{{approveUrl}}`, `{{rejectUrl}}` | An [approval request](#approval-requests)'s signed links. Empty on other messages |
 | `{{answerUrl}}` | A question's signed answer link. Empty on other messages |
 | `{{expiresAt}}` | When an approval request's or question's links expire, in ISO 8601 (`2026-11-07T09:00:00.000Z`). Empty on other messages |
+| `{{approvePayload}}`, `{{rejectPayload}}` | The values that [decide an approval from your server](#decide-from-the-receiver), when a signing secret is set. Empty on other messages |
 
 Actuate escapes each value for JSON, without adding quotes, so put each placeholder inside a JSON string, as in `"{{text}}"` or `"Order update: {{text}}"`. A missing value becomes an empty string. Actuate checks the template when you save it, and refuses it with the reason if it has an unknown placeholder or isn't valid JSON once filled in.
 
@@ -206,6 +210,7 @@ In the `standard` format, the body carries an `approval` object:
 | `approveUrl`, `rejectUrl` | The signed links, for an approval |
 | `answerUrl` | The signed answer link, for a question |
 | `expiresAt` | When the links stop working, in ISO 8601 |
+| `decide` | On approvals, when a signing secret is set. `{ approve, reject, url }`, for [deciding from your server](#decide-from-the-receiver) |
 
 Only Actuate's own approval and input requests set `approval`. The runtime drops it from messages your code sends with `ctx.messaging.send`, so an actuator can't fake an approval card. The other messaging providers ignore it, and the text carries the same links either way.
 
@@ -228,6 +233,29 @@ For Google Chat, use the space's incoming webhook URL and a `cardsV2` card with 
 The dashboard offers both under **Start from**, next to the field.
 
 Send approvals only to an endpoint that shows them to a person. Anyone who holds a link can decide, so an agent behind the URL, like the one in the [example below](#example-an-agent-on-your-own-machine), could approve its own request. For approvals meant for you, [`notify: "owner"`](/docs/concepts/approvals/#send-the-links-to-yourself) emails them and never sends them to a custom webhook.
+
+### Decide from the receiver
+
+With a signing secret, your endpoint can decide an approval itself, for example from **Approve** and **Reject** buttons in your own UI, without opening a link. The `approval` object carries `decide`, with two opaque values, `approve` and `reject`, and `url`, the Reply URL:
+
+```json
+"decide": {
+  "approve": "ap1:local:q3Jx8Kd0Lm2Pz7Yw:a",
+  "reject": "ap1:local:q3Jx8Kd0Lm2Pz7Yw:r",
+  "url": "https://run.actuate.run/a/<id>/providers/custom-webhook/webhook"
+}
+```
+
+POST one of them to `url`, with the same auth as a [reply](#replies), and say who decided:
+
+```bash
+curl -X POST "$REPLY_URL" \
+  -H "Authorization: Bearer $CUSTOM_WEBHOOK_SECRET" \
+  -H "content-type: application/json" \
+  -d '{"decision":"ap1:local:q3Jx8Kd0Lm2Pz7Yw:a","by":{"id":"alice","name":"Alice Tan"}}'
+```
+
+Actuate answers with JSON, such as `{"status": "decided", "decision": "approved", "by": "custom-webhook:alice (Alice Tan)", "at": "...", "message": "Approved by Alice Tan at 14:02 UTC"}`, and the run resumes with `via: "chat"`. Your server asserts `by`, because Actuate can check the secret but not the person, so let it decide only for people it has signed in. **Approvers** limits which `by.id` values may decide. A body without `decision` is an ordinary reply. Every field and answer is in [Decide from your own server](/docs/guides/approval-buttons/#decide-from-your-own-server).
 
 ## Extra headers
 

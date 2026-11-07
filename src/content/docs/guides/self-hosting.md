@@ -100,16 +100,19 @@ The quickest way is the open-source adapters in `@actuate/providers`. They read 
 
 ```ts
 import { createRuntime } from "@actuate/runtime/worker";
-import { parseProviderWebhookFromEnv, providersFromEnv } from "@actuate/providers";
+import { parseProviderWebhookFromEnv, providerInteractionsFromEnv, providersFromEnv } from "@actuate/providers";
 import actuator from "./actuator";
 
 const runtime = createRuntime(actuator, {
   providers: (env, publicUrl) => providersFromEnv(env, publicUrl),
   providerWebhook: (kind, request, env) => parseProviderWebhookFromEnv(env, kind, request),
+  providerInteractions: (kind, env) => providerInteractionsFromEnv(env, kind),
 });
 export default runtime.worker;
 export const ActuatorObject = runtime.ActuatorObject;
 ```
+
+`providerInteractions` takes the **Approve** and **Reject** clicks of Telegram, Slack and Discord, and decisions from a custom webhook's receiver, on the same `POST /providers/<kind>/webhook`. Pass it whenever a chat provider has the credentials for interactive buttons, or the clicks on them go unanswered. `actuate dev` does this for you. See [Approve from chat](/docs/guides/approval-buttons/).
 
 With `ACTUATE_PAYMENT=billplz` (for example), bills carry `https://<your origin>/providers/billplz/webhook` as their callback, and signed callbacks resume the waiting run with a `PaymentEvent`.
 

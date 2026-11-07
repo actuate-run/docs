@@ -220,8 +220,10 @@ Lists every provider and the variables it reads. Choose one per capability in `.
 # .dev.vars (never commit this file)
 ACTUATE_MESSAGING=telegram
 TELEGRAM_BOT_TOKEN=123456:ABC...
-# Only to receive messages: any random string, also passed to setWebhook
+# Only to receive messages and button clicks: 1 to 256 characters of A-Z, a-z, 0-9, _ and -, also passed to setWebhook
 TELEGRAM_WEBHOOK_SECRET_TOKEN=...
+# Optional: the Telegram user IDs that may press Approve and Reject
+TELEGRAM_APPROVERS=123456789
 
 ACTUATE_PAYMENT=billplz
 BILLPLZ_API_KEY=...
@@ -238,7 +240,7 @@ ANTHROPIC_API_KEY=...
 | `payment` | `ACTUATE_PAYMENT` | `stripe`, `toyyibpay`, `billplz`, `chip` |
 | `llm` | `ACTUATE_LLM` | `anthropic`, `openai`, `google`, `openai-compatible` |
 
-Credential variable names are `<KIND>_<FIELD>`, with any hyphen in the kind written as an underscore, for example `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`, `CUSTOM_WEBHOOK_URL`. The custom webhook reads `CUSTOM_WEBHOOK_URL`, and optionally `CUSTOM_WEBHOOK_SECRET`, `CUSTOM_WEBHOOK_HEADERS`, `CUSTOM_WEBHOOK_FORMAT`, `CUSTOM_WEBHOOK_TEMPLATE` and `CUSTOM_WEBHOOK_APPROVAL_TEMPLATE`; see [Send messages to any URL](/docs/guides/custom-webhook/#locally-and-self-hosted). `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (under Providers in Settings).
+Credential variable names are `<KIND>_<FIELD>`, with any hyphen in the kind written as an underscore, for example `TELEGRAM_BOT_TOKEN`, `BILLPLZ_X_SIGNATURE_KEY`, `CUSTOM_WEBHOOK_URL`. The custom webhook reads `CUSTOM_WEBHOOK_URL`, and optionally `CUSTOM_WEBHOOK_SECRET`, `CUSTOM_WEBHOOK_HEADERS`, `CUSTOM_WEBHOOK_FORMAT`, `CUSTOM_WEBHOOK_TEMPLATE`, `CUSTOM_WEBHOOK_APPROVAL_TEMPLATE` and `CUSTOM_WEBHOOK_APPROVERS`; see [Send messages to any URL](/docs/guides/custom-webhook/#locally-and-self-hosted). For [approval buttons](/docs/guides/approval-buttons/), Telegram also reads `TELEGRAM_APPROVERS`, Slack reads `SLACK_SIGNING_SECRET` and `SLACK_APPROVERS`, and Discord reads `DISCORD_PUBLIC_KEY` and `DISCORD_APPROVERS`, all optional. `--json` prints each provider's kind, capability, label and variables. On the hosted platform you set providers in the dashboard instead (under Providers in Settings).
 
 ## actuate test
 
