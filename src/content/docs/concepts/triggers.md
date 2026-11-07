@@ -39,6 +39,8 @@ Send an `Idempotency-Key` header to make retries safe. The first request with a 
 
 Use a key that names the thing you are doing (an order ID, a webhook delivery ID), not a random value per attempt.
 
+When the actuator declares [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields, a `/run` request without the header gets a key derived from those fields' values. A repeat returns the run that is still running or waiting, or that completed in the last 24 hours, with `200 OK`. An `Idempotency-Key` header you send replaces the derived key. `/webhook` and cron never derive a key, and on the hosted platform neither do runs you start yourself from the dashboard or with `actuate run`. See [key fields](/docs/concepts/mcp-and-openapi/#key-fields).
+
 `actuate run '<json>'` starts a run through the API from the command line.
 
 ## Webhook
@@ -55,6 +57,8 @@ Point a third-party webhook at it when the sender's JSON body can be your input.
 If the secret leaks, rotate it with **Rotate secret** in the Connect tab, or with `POST /v1/actuators/<name>/webhook-secret` and a full API token. The new secret works at once; the old one stops within 30 seconds. See [Runtime HTTP API](/docs/reference/runtime-http/#webhook) for the self-hosted route.
 
 Provider webhooks are different. They do not start runs. They become [events](/docs/concepts/sleeping-and-waiting/#posting-events) that waiting runs resume on, such as `payment.<referenceId>` for payments and `message.whatsapp.<phone>` for [inbound messages](/docs/concepts/capabilities/#receiving-messages).
+
+The [custom webhook](/docs/guides/custom-webhook/) messaging channel is one of these provider webhooks, not this trigger. It sends messages out to a URL you choose, and replies to its reply URL become `message.custom-webhook.<from>` events. It has its own signing secret, separate from the webhook secret and `ACTUATE_WEBHOOK_SECRET`.
 
 ## Cron
 
@@ -91,7 +95,7 @@ Locally, `actuate dev` registers the schedules. To fire one without waiting, cal
 
 ## MCP tool calls
 
-On the platform every actuator is also an MCP tool. The platform validates an agent's tool call against the input schema, and the call starts a run with `trigger.kind = "mcp"` and `trigger.agent` set to the calling token. A retried tool call with the same `_meta` idempotency key (or, for session-based clients, the same JSON-RPC `id` in the same session) returns the first call's receipt instead of running twice; see [idempotent receipts](/docs/concepts/mcp-and-openapi/#idempotent-receipts). Use the streamable HTTP endpoint. The platform caps legacy SSE sessions per account (Sandbox 2, Maker 5, Agency 20 open at once), and refuses a session over the cap with `429`. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
+On the platform every actuator is also an MCP tool. The platform validates an agent's tool call against the input schema, and the call starts a run with `trigger.kind = "mcp"` and `trigger.agent` set to the calling token. A retried tool call returns the first call's receipt instead of running twice when it has the same `_meta` idempotency key, the same values in the actuator's [key fields](/docs/concepts/mcp-and-openapi/#key-fields), or, for session-based clients, the same JSON-RPC `id` in the same session. See [idempotent receipts](/docs/concepts/mcp-and-openapi/#idempotent-receipts). Use the streamable HTTP endpoint. The platform caps legacy SSE sessions per account (Sandbox 2, Maker 5, Agency 20 open at once), and refuses a session over the cap with `429`. See [MCP and OpenAPI](/docs/concepts/mcp-and-openapi/).
 
 ## Events are not triggers
 

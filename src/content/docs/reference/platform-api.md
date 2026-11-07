@@ -145,7 +145,7 @@ Retries every run that failed at or after `since` (epoch milliseconds or an ISO 
 
 ### Run again
 
-`POST /v1/actuators/:name/runs/:runId/rerun` takes an optional `Idempotency-Key` header. It starts a **new** run (new run ID, trigger `api`, current version) with the input of `:runId`, which can be in any state. The platform validates the input against the current schema, like `POST /run`. It returns the new run record with `rerunOf` set to the old run ID, `201` for a new run.
+`POST /v1/actuators/:name/runs/:runId/rerun` takes an optional `Idempotency-Key` header. It starts a **new** run (new run ID, trigger `api`, current version) with the input of `:runId`, which can be in any state. It never uses the actuator's [key fields](/docs/concepts/mcp-and-openapi/#key-fields), which would return the run it repeats. `POST /v1/actuators/:name/run` doesn't either. Both use a key you send in `Idempotency-Key`. The platform validates the input against the current schema, like `POST /run`. It returns the new run record with `rerunOf` set to the old run ID, `201` for a new run.
 
 ### Versions
 

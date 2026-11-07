@@ -25,7 +25,7 @@ function defineActuator<C, I, O, K extends Capability = never>(
 ): Actuator<C, I, O, K>;
 ```
 
-Declares an actuator. The default export of an actuator file must be the result of this call. Validates the definition and throws [`ActuatorError`](#actuatorerror) if `name` is invalid, `description` is empty, a capability is unknown, or `"http"` is declared without `http.allow`. Returns a frozen copy of the definition. TypeScript infers the capability list as a literal type, so `ctx` only has the clients you declared.
+Declares an actuator. The default export of an actuator file must be the result of this call. Validates the definition and throws [`ActuatorError`](#actuatorerror) if `name` is invalid, `description` is empty, a capability is unknown, `"http"` is declared without `http.allow`, or [`idempotencyKey`](#idempotencykey) names a field that isn't a top-level string, number, integer or boolean field of the input schema (or is empty, or lists a field twice). Returns a frozen copy of the definition. TypeScript infers the capability list as a literal type, so `ctx` only has the clients you declared.
 
 ### secret
 
@@ -93,6 +93,14 @@ const NOTIFY_OWNER_MAX_SUBJECT = 200;
 
 The longest text and subject [`ctx.notifyOwner`](#notifyowner) accepts, in characters.
 
+### NOTIFY_OWNER
+
+```ts
+const NOTIFY_OWNER = "owner";
+```
+
+The reserved `notify` value of [`waitForApproval`](#waitforapprovaloptions) and [`waitForInput`](#waitforinputoptions) that sends the signed links to the actuator's owner instead of through `ctx.messaging`. See [send the links to yourself](/docs/concepts/approvals/#send-the-links-to-yourself). Requires `@actuate/sdk` 0.5 or later.
+
 ## Definition types
 
 ### ActuatorDefinition
@@ -109,6 +117,7 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
   http?: { allow: readonly string[] };
   cron?: readonly string[];
   hints?: ToolHints;
+  idempotencyKey?: readonly string[]; // input fields that say which request a call is
   run(ctx: Context<K, P>, input: z.output<I>, config: z.output<C>): Promise<O> | O;
 }
 ```
@@ -125,9 +134,28 @@ interface ActuatorDefinition<C, I, O, K extends Capability> {
 | `http.allow` | Hostnames `ctx.http` may reach: exact (`api.github.com`) or wildcard (`*.example.com`) |
 | `cron` | Cron schedules. Each firing starts a run with input `{}` |
 | `hints` | What calling the tool does, for MCP clients: [`ToolHints`](#toolhints). Optional |
+| `idempotencyKey` | Input fields whose values identify a request, such as `["orderId"]`. See [below](#idempotencykey). Optional; `@actuate/sdk` 0.5 or later |
 | `run` | Your code: `(ctx, input, config) => output` |
 
 `C` and `I` extend [`AnySchema`](#anyschema). `input` and `config` arrive parsed, with defaults applied.
+
+#### idempotencyKey
+
+```ts
+idempotencyKey: ["orderId"],
+```
+
+A call over MCP or the run API (`POST /run`) that sends no idempotency key of its own gets one derived from these fields' values, so a retried tool call returns the first call's run instead of starting a second one.
+
+- Each name is a top-level field of the input schema whose type is a string, number, integer or boolean, or an enum or literal of those. `defineActuator` throws `ActuatorError` otherwise, and for an empty list or a name listed twice. The [deploy checks](/docs/reference/cli/#the-deploy-checks) also require each field to be required, with no `.optional()` and no `.default()` (rule `idempotency-key`).
+- The key is `input:` and the SHA-256 of the fields' values, in the order you list them, as the caller sent them. Zod's defaults, coercion and transforms don't apply, so `"A-1"` and `"a-1"` give different keys.
+- It matches a run with the same key that is running or waiting, or that completed in the last 24 hours. A failed or cancelled run never matches.
+- A key the caller sends (MCP `_meta["run.actuate/idempotencyKey"]`, or the `Idempotency-Key` header) is used instead, and matches a run with that key whatever its status. Send a new one to force a new run.
+- Cron runs and webhooks never get a derived key. On the hosted platform, neither do runs the owner starts (the dashboard's **Start run** and **Run again**, and `actuate run`).
+- A call whose input lacks one of the fields gets no derived key. The deploy checks rule that out on the platform, but self-hosted runs and tests don't check.
+- Declaring it makes the MCP tool `idempotentHint: true`, unless `hints.idempotent` is `false`.
+
+See [key fields](/docs/concepts/mcp-and-openapi/#key-fields).
 
 ### ToolHints
 
@@ -149,7 +177,7 @@ The hosted MCP server publishes these as the MCP tool's annotations. MCP clients
 | Hint | MCP annotation | Default |
 | --- | --- | --- |
 | `readOnly` | `readOnlyHint` | `false` |
-| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool |
+| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool or one with [`idempotencyKey`](#idempotencykey) |
 | `destructive` | `destructiveHint` | `true`, or `false` for a read-only tool |
 | `openWorld` | `openWorldHint` | `true` if the actuator declares any capability, `false` otherwise |
 
@@ -387,12 +415,35 @@ Passing both `timeout` and `until` throws `ActuatorError`.
 interface WaitForApprovalOptions {
   /** Shown to the approver. */
   message?: string;
-  /** Who gets the signed links: a chat ID, phone or email understood by the messaging provider. */
-  notify?: string;
+  /** Who gets the signed links: a recipient the messaging provider understands, "owner", or { to, channel }. */
+  notify?: Notify;
   /** Give up after this long and resolve to `null`. Default "7 days". */
   timeout?: Duration;
 }
 ```
+
+`notify: "owner"` (reserved, never a default) sends the links to the actuator's owner the way [`ctx.notifyOwner`](#notifyowner) does, with no messaging provider needed. On the hosted platform that is an email to the account, and the account's alert channel when it is Telegram, Slack, Discord or email (never a custom webhook, so the links never reach another agent). Self-hosted, it is the `notifyOwner` notifier given to `createRuntime`, or the worker's console without one. Under `actuate dev`, it is the terminal. When the links can't go out (a daily cap reached), the step still waits, the request is in the approval queue, and the run's log gets a `warn` line. Any other value is a messaging recipient, as before. See [send the links to yourself](/docs/concepts/approvals/#send-the-links-to-yourself).
+
+Telegram, Slack and Discord can put **Approve** and **Reject** buttons on the message when their credentials allow it, and the links stay in the text. A button decision resolves with `via: "chat"`. See [Approve from chat](/docs/guides/approval-buttons/).
+
+### Notify
+
+```ts
+type Notify = string | { to: string; channel?: string };
+```
+
+`Notify` says who a `waitForApproval` or `waitForInput` notifies. A string is a messaging recipient, or `"owner"`. `{ to, channel }` sends to `to` through the messaging channel you name, such as `"slack"` or `"telegram"`, when you have several. Without `channel`, the default channel sends, as with a string. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
+
+```ts
+const decision = await ctx.step.waitForApproval("manager-ok", {
+  message: "Refund RM480?",
+  notify: { to: "C0123456789", channel: "slack" },
+});
+```
+
+- A channel that isn't configured always fails the delivery, even when you have only one messaging channel, so a recipient meant for one channel never goes out through another. The run's log gets an `error` line, `Could not deliver approval link for "<step>"`, and the step still waits. Decide it from the approval queue.
+- `channel` is a channel name of 1 to 32 letters, digits and hyphens, and `to` a non-empty string. `{ to: "owner" }` isn't allowed, so write `notify: "owner"` instead. `waitForApproval` and `waitForInput` throw `ActuatorError` for a `notify` they can't use.
+- [`ctx.messaging.send(to, text, { channel })`](#messagingprovider) follows the same rule. See [Several channels](/docs/concepts/capabilities/#several-channels).
 
 ### ApprovalResult
 
@@ -403,12 +454,17 @@ interface ApprovalResult {
   at: string;
   /** Optional note typed by the approver (on the approval page or in the dashboard). */
   note?: string;
-  /** Who decided: the signed-in account (dashboard: email; API: email and token name), or the name typed on the link page (self-reported). */
+  /**
+   * Who decided: the signed-in account (dashboard: email; API: email and token name), the name typed on the link
+   * page (self-reported), or for a chat button `<channel>:<user id> (<display name>)`.
+   */
   by?: string;
-  /** Where it came from. */
-  via?: "link" | "dashboard" | "api";
+  /** Where it came from: a signed link, the dashboard, the API, or a chat button. */
+  via?: "link" | "dashboard" | "api" | "chat";
 }
 ```
+
+`via: "chat"` means someone clicked **Approve** or **Reject** in Telegram, Slack or Discord, or a custom webhook's receiver decided. `by` is then the channel and the clicker's user ID, with their display name in brackets when the chat app gives one, such as `telegram:123456789 (Wei Tan)` or `slack:U01ABC2DEF (alice)`. The chat app's signature proves the user ID, and the name is whatever the person chose. A custom webhook's receiver asserts both, as `custom-webhook:<id> (<name>)`, so `via: "chat"` alone doesn't mean a verified person. Where that matters, also check that `by` doesn't start with `custom-webhook:`. Chat decisions have no `note`. See [who decided](/docs/guides/approval-buttons/#who-decided). `"chat"` is new in `@actuate/sdk` 0.5.
 
 ### WaitForInputOptions
 
@@ -416,8 +472,8 @@ interface ApprovalResult {
 interface WaitForInputOptions {
   /** The question shown on the form. */
   prompt: string;
-  /** Who gets the signed link: a chat ID, phone or email understood by the messaging provider. */
-  notify?: string;
+  /** Who gets the signed link, as for waitForApproval. */
+  notify?: Notify;
   /** Pre-filled text, e.g. a draft to edit. */
   initial?: string;
   /** Longest answer accepted, characters. Default 4,000, at most 20,000. */
@@ -427,7 +483,7 @@ interface WaitForInputOptions {
 }
 ```
 
-`prompt` is required; without it `waitForInput` throws `ActuatorError`.
+`prompt` is required; without it `waitForInput` throws `ActuatorError`. `notify` works as for [`waitForApproval`](#waitforapprovaloptions), including `"owner"` and [`{ to, channel }`](#notify).
 
 ### InputResult
 
@@ -575,16 +631,36 @@ interface MessagingProvider {
 }
 
 interface MessagingSendOptions {
-  /** Provider-specific channel override, e.g. "telegram" | "whatsapp" | "email". */
-  /** "html" sends <b>, <i>, <a href>, <code>, <pre> where supported (Telegram, email); other channels get plain text. Default "text". */
+  /** "html" sends <b>, <i>, <a href>, <code>, <pre> where supported (Telegram, email; the custom webhook adds it as `html`); other channels get plain text. Default "text". */
   format?: "text" | "html";
+  /** Which configured channel sends: "telegram", "whatsapp", "slack", "discord", "custom-webhook" or "email". Default: the first. A channel that isn't configured is refused, even when only one is. */
   channel?: string;
-  /** Email subject, when the channel is email. */
+  /** Email subject, when the channel is email. The custom webhook sends it as `subject`. */
   subject?: string;
   /** WhatsApp template for messages outside the 24-hour service window. */
   template?: { name: string; language: string; variables?: string[] };
-  /** Passed to providers that deduplicate (Resend; Discord with a bot token, for a few minutes). Defaults to a key for this call, derived from the step's key. */
+  /** Passed to providers that deduplicate (Resend; Discord with a bot token, for a few minutes; the custom webhook's message ID). Defaults to a key for this call, derived from the step's key. */
   idempotencyKey?: string;
+  /** Set only by Actuate's own approval and input notifications; removed from sends your code makes. */
+  approval?: ApprovalPrompt;
+}
+
+/** A step waiting for a person, as an approval notification describes it to the messaging provider. */
+interface ApprovalPrompt {
+  /** "approval" carries approveUrl and rejectUrl; "input" carries answerUrl. */
+  kind: "approval" | "input";
+  actuator: string;
+  step: string;
+  /** The approval message, or the question for input (secret config values redacted). */
+  message?: string;
+  /** Signed links to the confirm page: opening one shows the page (GET), and only its button decides (POST). */
+  approveUrl?: string;
+  rejectUrl?: string;
+  answerUrl?: string;
+  /** When the links stop working, epoch ms. */
+  expiresAt: number;
+  /** On approvals, when the runtime made a button nonce: what a provider puts on Approve and Reject buttons. */
+  buttons?: { route: string; nonce: string };
 }
 
 interface MessageReceipt {
@@ -593,7 +669,9 @@ interface MessageReceipt {
 }
 ```
 
-`to` is a phone number, chat ID or email address, depending on the provider.
+`to` is a phone number, chat ID or email address, depending on the provider. The [custom webhook](/docs/guides/custom-webhook/) passes it to your endpoint unchanged.
+
+`approval` lets a provider render a request as a card with link buttons, as the custom webhook's [approval requests](/docs/guides/custom-webhook/#approval-requests) do. The runtime sets it on the messages it sends for `waitForApproval` and `waitForInput` with a `notify` recipient, and removes it from sends made through `ctx.messaging`, so actuator code can't fake an approval card. Providers that don't know it ignore it, and the text always carries the same links. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later. The runtime sets `buttons` only on approvals sent to a `notify` recipient, never on questions or `notify: "owner"`. Telegram, Slack and Discord put it on interactive [approval buttons](/docs/guides/approval-buttons/), and the custom webhook turns it into [`approval.decide`](/docs/guides/approval-buttons/#decide-from-your-own-server). It decides nothing alone, because the provider that sent it must also verify the click.
 
 ### PaymentProvider
 
@@ -665,8 +743,8 @@ Before acting on it, check `status`, and that `billId`, `amount` and `currency` 
 
 ```ts
 interface InboundMessage {
-  channel: string;  // "whatsapp" | "telegram"
-  from: string;     // phone number (digits) or Telegram chat ID: pass it to messaging.send to reply
+  channel: string;  // "whatsapp" | "telegram" | "custom-webhook"
+  from: string;     // phone number (digits), Telegram chat ID, or the custom webhook reply's `from`: pass it to messaging.send to reply
   text: string;     // the text, a button's title, or a media caption ("" for media without one)
   type: string;     // "text", "button", "interactive", "image", ... as the provider reports it
   id: string;       // the provider's message ID

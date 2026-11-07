@@ -254,6 +254,7 @@ Agents and webhook senders retry. Give the call a key that names the action, and
 - Over HTTP, send an `Idempotency-Key` header to `/run` or `/webhook`. See [Idempotency-Key](/docs/concepts/triggers/#idempotency-key).
 - Over MCP, put the key in the call's `_meta` as `run.actuate/idempotencyKey`. See [idempotent receipts](/docs/concepts/mcp-and-openapi/#idempotent-receipts).
 - Use something stable such as `refund-<orderId>` or the sender's delivery ID, not a random value per attempt.
+- For callers that send no key, such as most chat clients, declare the input fields that identify a request with [`idempotencyKey`](/docs/reference/sdk/#idempotencykey), for example `["orderId"]`. A call over MCP or the run API that repeats their values returns the run that is still running or waiting, or that completed in the last 24 hours. See [key fields](/docs/concepts/mcp-and-openapi/#key-fields).
 
 A duplicate call returns the first run's record and starts no pass. Today, on the hosted platform, it still counts as one run against your runs per month and the run rate (and against an agent's [per-token limits](/docs/concepts/agents/#limits)), because the platform admits the call before the actuator looks up the key. So keys protect you from acting twice, but they don't make retries free.
 
@@ -433,7 +434,7 @@ What the test actuator gives you:
 
 | | |
 | --- | --- |
-| `t.start(input, { trigger, idempotencyKey })` | Starts a run and returns its record after the first pass. It validates the input with your schema first, as the platform does, and rejects a bad one |
+| `t.start(input, { trigger, idempotencyKey })` | Starts a run and returns its record after the first pass. It validates the input with your schema first, as the platform does, and rejects a bad one. Without `idempotencyKey`, an `"api"` (the default) or `"mcp"` run gets the key derived from the actuator's [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields, as on the platform. So starting the same order twice returns the first run (`@actuate/cli` 0.5 or later) |
 | `t.cron(expression)` | Fires a schedule (by default the first one), which starts a run with the input `{}` |
 | `t.advance(duration)`, `t.advanceTo(time)` | Move the clock, firing every sleep, retry and timeout due on the way, in order. `t.now()` reads it |
 | `t.approve(step, opts)`, `t.reject(step, opts)` | Decide a `waitForApproval` through its signed link. Without a step, it decides the latest one waiting. `opts`: `runId`, `note`, `by`. Throws, saying what is waiting, when nothing matches |

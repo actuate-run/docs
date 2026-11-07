@@ -100,16 +100,19 @@ The quickest way is the open-source adapters in `@actuate/providers`. They read 
 
 ```ts
 import { createRuntime } from "@actuate/runtime/worker";
-import { parseProviderWebhookFromEnv, providersFromEnv } from "@actuate/providers";
+import { parseProviderWebhookFromEnv, providerInteractionsFromEnv, providersFromEnv } from "@actuate/providers";
 import actuator from "./actuator";
 
 const runtime = createRuntime(actuator, {
   providers: (env, publicUrl) => providersFromEnv(env, publicUrl),
   providerWebhook: (kind, request, env) => parseProviderWebhookFromEnv(env, kind, request),
+  providerInteractions: (kind, env) => providerInteractionsFromEnv(env, kind),
 });
 export default runtime.worker;
 export const ActuatorObject = runtime.ActuatorObject;
 ```
+
+`providerInteractions` handles the **Approve** and **Reject** clicks of Telegram, Slack and Discord, and decisions from a custom webhook's receiver. They arrive on the same `POST /providers/<kind>/webhook`. Pass it whenever a chat provider has the credentials for interactive buttons. Without it, the clicks on those buttons go unanswered. `actuate dev` passes it for you. See [Approve from chat](/docs/guides/approval-buttons/).
 
 With `ACTUATE_PAYMENT=billplz` (for example), bills carry `https://<your origin>/providers/billplz/webhook` as their callback, and signed callbacks resume the waiting run with a `PaymentEvent`.
 
@@ -235,6 +238,8 @@ export const ActuatorObject = runtime.ActuatorObject;
 - Each message carries an `idempotencyKey` that is the same on every retry of the step. Telegram doesn't deduplicate, so a step retried after a timeout can send twice. A notifier that stores the keys it has sent can skip repeats.
 - Return `{ sent: false, reason }` for a limit you chose, such as a daily cap. The call resolves to that, the runtime logs the reason as a warning, and the step continues. A notifier that throws fails the step's attempt, which is then retried if the step has `retries`.
 - Without `notifyOwner`, the runtime writes each message to the run's log as an `info` line, and `ctx.notifyOwner` resolves to `{ sent: false, reason: "No owner notifier is configured; the message was logged." }`.
+
+The same notifier gets the signed links of approvals and questions that set [`notify: "owner"`](/docs/concepts/approvals/#send-the-links-to-yourself) (`@actuate/runtime` 0.5 or later). Their `idempotencyKey` is `approval:<runId>:<step>`, and their subject is `Approval needed: <actuator>` or `Input needed: <actuator>`. The runtime shortens the message so the links always fit. The links let anyone who holds them decide, so send them only where a person reads them. A `{ sent: false, reason }` from your notifier becomes a `warn` line on the run, and the step keeps waiting. If your notifier throws, the run's log gets an error line instead, and the step keeps waiting without a retry. Without a notifier, the runtime prints the links to the worker's console and writes a `warn` line on the run, which never contains the links.
 
 Hosts that call `executePass` themselves pass the notifier as `owner`.
 

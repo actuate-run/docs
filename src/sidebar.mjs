@@ -24,7 +24,7 @@ export const sidebar = [
   },
   {
     label: "Reference",
-    items: ["reference/sdk", "reference/cli", "reference/runtime-http", "reference/platform-api", "reference/limits"],
+    items: ["reference/sdk", "reference/cli", "reference/runtime-http", "reference/platform-api", "reference/limits", "reference/changelog"],
   },
   {
     label: "Guides",
@@ -33,6 +33,8 @@ export const sidebar = [
       "guides/agent-tools",
       "guides/best-practices",
       "guides/alerts",
+      "guides/approval-buttons",
+      "guides/custom-webhook",
       "guides/retry-and-rollback",
       "guides/self-hosting",
       "guides/templates",

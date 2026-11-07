@@ -30,6 +30,7 @@ The platform generates both from the actuator definition:
 | `input` (InputSchema) | The tool's argument schema, as JSON Schema |
 | `output` | The tool's `outputSchema`, when you set one and it describes an object |
 | `hints` | The tool's [annotations](#tool-hints) |
+| `idempotencyKey` | The [key fields](#key-fields) that catch retried calls, and `idempotentHint: true` unless `hints.idempotent` is `false` |
 
 This is why `name` is restricted to lowercase letters, digits and underscores (at most 64 characters), and why `description` is required. Names starting with `actuate_` are reserved for the [built-in tools](#built-in-tools). The platform refuses to deploy them, and `actuate check --platform` and `actuate deploy` say so before you upload.
 
@@ -87,7 +88,7 @@ The hosted server always sends all four annotations, so clients and directories 
 | Hint | MCP annotation | Sent when you don't set it | Set it when |
 | --- | --- | --- | --- |
 | `readOnly` | `readOnlyHint` | `false` | The tool never changes anything |
-| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool | Calling it twice with the same arguments has the same effect as once |
+| `idempotent` | `idempotentHint` | `false`, or `true` for a read-only tool or one with [key fields](#key-fields) | Calling it twice with the same arguments has the same effect as once |
 | `destructive` | `destructiveHint` | `true`, or `false` for a read-only tool | It may delete or irreversibly change data. Set `false` for additive tools such as "create a draft" |
 | `openWorld` | `openWorldHint` | `true` if the actuator declares any capability (`messaging`, `payment`, `llm`, `http`, required or optional), `false` otherwise | It talks to the outside world, through messages, payments or other APIs. Set `false` when it only touches its own database |
 
@@ -142,7 +143,39 @@ The gateway itself picks up a deploy within about 30 seconds.
 
 Agents retry, and networks drop responses. An MCP tool call to an actuator returns an **execution receipt**, and a retried tool call can return the first run's receipt instead of running again. Combined with [steps](/docs/concepts/steps-and-replay/), a refund tool called twice refunds once.
 
-To get this, put an idempotency key in the call's `_meta`:
+There are two ways to get this. Declare the input fields that identify a request, so the server catches a retry even when the agent sends no key. Or have the caller send a key.
+
+### Key fields
+
+List the fields in `idempotencyKey` (requires `@actuate/sdk` 0.5):
+
+```ts
+export default defineActuator({
+  name: "refund_order",
+  description: "Refund part or all of a paid order. Safe to retry.",
+  input: z.object({
+    orderId: z.string().describe("The order to refund, e.g. ORD-1042"),
+    amount: z.number().positive().max(500),
+  }),
+  idempotencyKey: ["orderId"],
+  async run(ctx, input) {
+    // ...
+    return { orderId: input.orderId };
+  },
+});
+```
+
+A call that sends no key of its own gets one derived from those fields' values. A later call with the same values returns the earlier run instead of starting another, if that run is still running or waiting, or completed in the last 24 hours. A failed or cancelled run never matches, so the caller can try the same call again. More than 24 hours after a run completed, the same values start a new run.
+
+- Each field is a top-level, required field of the input schema whose type is a string, number, integer or boolean, or an enum or literal of those. `defineActuator` throws for a name that isn't a top-level field or has another type, and for an empty or repeated list. The [deploy checks](/docs/reference/cli/#the-deploy-checks) also refuse a field that is optional or has a default (rule `idempotency-key`). Schemas named with `.meta({ id })` pass.
+- Actuate computes the key from the arguments as the caller sent them, once they pass the input schema. Zod's defaults, coercion and transforms don't apply, so `"A-1"` and `"a-1"` are two orders even if your schema lowercases the field. Only the listed fields count. Other fields, and the order of the keys in the call, make no difference.
+- MCP tool calls and the run API (`POST /a/<id>/run`) get the key. Webhooks and cron never do. Neither do your own actions as the owner. **Start run** in the dashboard, [`actuate run`](/docs/reference/cli/#actuate-run) and **Run again** always start a new run.
+- Every caller of the actuator shares the key. Another agent token that sends the same values gets the same run back. It can't cancel that run, and doesn't see it in `actuate_list_runs`.
+- The server lists a tool with key fields as `idempotentHint: true`, unless you set `hints.idempotent: false`. The OpenAPI document names the key fields on the run endpoint, and the server's instructions tell agents that a repeat of those values counts as a retry.
+
+### A key from the caller
+
+The caller can also put an idempotency key in the call's `_meta`:
 
 ```json
 {
@@ -152,11 +185,12 @@ To get this, put an idempotency key in the call's `_meta`:
 }
 ```
 
-- The same key on the same tool returns the same run, across sessions and processes, for as long as the platform keeps that run: 7 days on Sandbox, 30 on Maker and 90 on Agency after it settles. A run still waiting is never deleted. The server also reads `actuate/idempotencyKey` and `idempotencyKey`, in that order, after `run.actuate/idempotencyKey`.
+- When the caller sends a key, Actuate uses it alone, in place of the key fields. The same key on the same tool returns the same run, whatever its status, across sessions and processes, for as long as the platform keeps that run, which is 7 days on Sandbox, 30 on Maker and 90 on Agency after it settles. A run still waiting is never deleted. The server also reads `actuate/idempotencyKey` and `idempotencyKey`, in that order, after `run.actuate/idempotencyKey`.
+- To run the same arguments again on purpose, send a new key. That works for an actuator with key fields too.
 - Keys are per actuator, so the same key on two tools starts two runs. The server also keeps MCP keys apart from HTTP `Idempotency-Key` values, so a key sent over MCP never matches one sent to `/run`.
-- Without a key, a session-based client (2025-11-25 and earlier) that repeats a call with the same JSON-RPC `id` in the same session gets the first call's receipt. A 2026-07-28 client has no session, and JSON-RPC IDs are reused across processes, so without a key every call starts a new run.
+- Without a key, a session-based client (2025-11-25 and earlier) that repeats a call with the same JSON-RPC `id` in the same session gets the first call's receipt. The server checks that first, then the key fields. A 2026-07-28 client has no session, and JSON-RPC IDs are reused across processes, so without a key only the key fields catch a retry. A tool without them starts a new run for every call.
 
-The same guarantee is available over plain HTTP with the [`Idempotency-Key` header](/docs/concepts/triggers/#idempotency-key).
+The same guarantees are available over plain HTTP, with the [`Idempotency-Key` header](/docs/concepts/triggers/#idempotency-key) and the same key fields. A duplicate returns the first run but still counts as a run against your plan; see [send idempotency keys](/docs/guides/best-practices/#send-idempotency-keys).
 
 ## Self-hosted
 
