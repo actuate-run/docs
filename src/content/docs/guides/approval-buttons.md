@@ -156,18 +156,19 @@ A list applies to every approval the provider sends. You can't narrow it for one
 | What happened | What people see |
 | --- | --- |
 | The first click on an approval that is still waiting | Actuate edits the message for everyone. It removes the links and the buttons, and adds "Approved by Wei Tan at 14:02 UTC" or "Rejected by Wei Tan at 14:02 UTC" |
-| A click after the step was decided, by a button, a link or the dashboard | Only the clicker sees "Already approved by Wei Tan" |
+| A click after a button decided the step | Only the clicker sees "Already approved by Wei Tan" |
+| A click after the step was decided in the dashboard, through the API or with a link | Only the clicker sees "Already approved in the dashboard", "Already approved through the API" or "Already approved with a link". It never names who decided that way |
 | A click after the step timed out, or after the run was cancelled | Only the clicker sees "This request has expired or was already decided." |
 | A click from someone not on the approver list | Only the clicker sees "You're not on the approver list for this." |
 | A click on a button another account's actuator sent | Only the clicker sees "This button belongs to another actuator." |
 
 The time is in UTC, and the name is the clicker's display name in the chat app. On Telegram, a note only the clicker sees is a short pop-up. On Slack and Discord, it is an ephemeral message.
 
-When two people click at the same moment, the first click decides, and the second person sees "Already approved by …". A step decided through a link or the dashboard keeps its buttons in the chat, and a click on them gives the same "Already" note.
+When two people click at the same moment, the first click decides, and the second person sees "Already approved by …". A step decided through a link, the dashboard or the API keeps its buttons in the chat, and a click on them gives an "Already" note that says how it was decided.
 
 Actuate records the decision at once and resumes the run in the background, so the chat app gets its answer within its deadline, which is 3 seconds for Slack and Discord. If Discord still shows "This interaction failed", the decision stands.
 
-On the platform, a click for a paused actuator gets "This request has expired or was already decided." when your account has another active actuator to answer it. With no active actuator, the platform answers `404`, and Slack or Discord shows the clicker an error. Either way the click decides nothing, and the links still work.
+On the platform, a click for a paused actuator decides nothing, and the links still work. On the paused actuator's own Telegram webhook or Reply URL, the click always gets "This request has expired or was already decided." A Slack or Discord click arrives through your account's Interactions URL. It gets the same answer when your account has another active actuator to answer it. With no active actuator, the platform answers `404`, and Slack or Discord shows the clicker an error.
 
 ### A click reaches the right actuator
 
@@ -256,7 +257,7 @@ The answer is always JSON. Show `message` to the person, or use `status` and `de
 | Status | Body |
 | --- | --- |
 | `200` | `{"status": "decided", "decision": "approved", "by": "custom-webhook:alice (Alice Tan)", "at": "2026-11-06T14:02:11.000Z", "message": "Approved by Alice Tan at 14:02 UTC"}`. `decision` is `"approved"` or `"rejected"` |
-| `200` | `status` is `"already"`, with `decision`, `by`, `at` and `message`, such as "Already approved by Alice Tan", when the step was decided before, by another decision, a link or the dashboard |
+| `200` | `status` is `"already"`, with `decision`, `by`, `at` and `message`, such as "Already approved by Alice Tan", when another decision from your server or a chat button decided the step before. After a link, the dashboard or the API, `by` is left out, and `message` is "Already approved with a link", "Already approved in the dashboard" or "Already approved through the API" |
 | `200` | `{"status": "expired"}` or `{"status": "unknown"}`, with the message "This request has expired or was already decided." |
 | `200` | `{"status": "not-approver"}`, with the message "You're not on the approver list for this.", when `by.id` isn't in **Approvers** |
 | `200` | `{"status": "foreign"}`, with the message "This button belongs to another actuator." |
