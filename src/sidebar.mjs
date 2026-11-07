@@ -33,6 +33,7 @@ export const sidebar = [
       "guides/agent-tools",
       "guides/best-practices",
       "guides/alerts",
+      "guides/approval-buttons",
       "guides/custom-webhook",
       "guides/retry-and-rollback",
       "guides/self-hosting",
