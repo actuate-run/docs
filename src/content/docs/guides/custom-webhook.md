@@ -240,22 +240,22 @@ With a signing secret, your endpoint can decide an approval itself, for example 
 
 ```json
 "decide": {
-  "approve": "ap1:local:q3Jx8Kd0Lm2Pz7Yw:a",
-  "reject": "ap1:local:q3Jx8Kd0Lm2Pz7Yw:r",
-  "url": "https://run.actuate.run/a/<id>/providers/custom-webhook/webhook"
+  "approve": "ap1:act_9fQ2xLm0Rk3TzW7a:q3Jx8Kd0Lm2Pz7Yw:a",
+  "reject": "ap1:act_9fQ2xLm0Rk3TzW7a:q3Jx8Kd0Lm2Pz7Yw:r",
+  "url": "https://run.actuate.run/a/act_9fQ2xLm0Rk3TzW7a/providers/custom-webhook/webhook"
 }
 ```
 
-POST one of them to `url`, with the same auth as a [reply](#replies), and say who decided:
+On the platform the values name the actuator's ID, as here, and self-hosted they say `local`. POST one of them to `url`, with the same auth as a [reply](#replies), and say who decided:
 
 ```bash
 curl -X POST "$REPLY_URL" \
   -H "Authorization: Bearer $CUSTOM_WEBHOOK_SECRET" \
   -H "content-type: application/json" \
-  -d '{"decision":"ap1:local:q3Jx8Kd0Lm2Pz7Yw:a","by":{"id":"alice","name":"Alice Tan"}}'
+  -d '{"decision":"ap1:act_9fQ2xLm0Rk3TzW7a:q3Jx8Kd0Lm2Pz7Yw:a","by":{"id":"alice","name":"Alice Tan"}}'
 ```
 
-Actuate answers with JSON, such as `{"status": "decided", "decision": "approved", "by": "custom-webhook:alice (Alice Tan)", "at": "...", "message": "Approved by Alice Tan at 14:02 UTC"}`, and the run resumes with `via: "chat"`. Your server asserts `by`, because Actuate can check the secret but not the person, so let it decide only for people it has signed in. **Approvers** limits which `by.id` values may decide. A body without `decision` is an ordinary reply. Every field and answer is in [Decide from your own server](/docs/guides/approval-buttons/#decide-from-your-own-server).
+Actuate answers with JSON, such as `{"status": "decided", "decision": "approved", "by": "custom-webhook:alice (Alice Tan)", "at": "...", "message": "Approved by Alice Tan at 14:02 UTC"}`, and the run resumes with `via: "chat"` and `by: "custom-webhook:alice (Alice Tan)"`. Your server asserts `by`, because Actuate can check the secret but not the person, so let it decide only for people it has signed in. **Approvers** limits which `by.id` values may decide. A body without `decision` is an ordinary reply. Every field and answer is in [Decide from your own server](/docs/guides/approval-buttons/#decide-from-your-own-server).
 
 ## Extra headers
 

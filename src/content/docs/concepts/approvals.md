@@ -79,7 +79,7 @@ Every decision and answer records `via` (`"link"`, `"dashboard"`, `"api"` or, fo
 - For a dashboard decision, `by` is the signed-in account's email.
 - For an API decision, it is the account email and the token's name, for example `aina@kedai.example (token "ops-cli")`.
 - For a link decision, it is the name the person typed in the optional "Your name" field. Anyone holding the link can type anything there, so treat it as self-reported, not verified identity. If you need verified approvers, decide in the dashboard or with chat buttons.
-- For a [chat button](/docs/guides/approval-buttons/), it is the channel and the clicker's user ID, with their display name when the chat app gives one, for example `telegram:123456789 (Wei Tan)`. The chat app's signature proves the ID. The name is whatever the person set. A custom webhook's receiver [asserts](/docs/guides/approval-buttons/#decide-from-your-own-server) both, as `custom-webhook:<id> (<name>)`.
+- For a [chat button](/docs/guides/approval-buttons/), it is the channel and the clicker's user ID, with their display name when the chat app gives one, for example `telegram:123456789 (Wei Tan)`. The chat app's signature proves the ID. The name is whatever the person set. A custom webhook's receiver [asserts](/docs/guides/approval-buttons/#decide-from-your-own-server) both, as `custom-webhook:<id> (<name>)`, with `via: "chat"` too. So `via: "chat"` alone doesn't mean a verified person. Where that matters, also check that `by` doesn't start with `custom-webhook:`.
 
 ```ts
 const decision = await ctx.step.waitForApproval("manager", { message: "Refund RM 480?", notify: "@shop_manager" });

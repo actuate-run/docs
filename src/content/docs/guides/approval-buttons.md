@@ -5,7 +5,7 @@ description: Put Approve and Reject buttons on approval messages in Telegram, Sl
 
 When a [`waitForApproval`](/docs/concepts/approvals/) sends its links through Telegram, Slack or Discord, the message can also carry **Approve** and **Reject** buttons. One click decides the step in the chat. Actuate checks the click with the chat app's signature, edits the message to say who decided, and resumes the run with a verified record of who clicked. A [custom webhook](/docs/guides/custom-webhook/) receiver can decide the same way from [your own server](#decide-from-your-own-server).
 
-Buttons are new in `@actuate/sdk`, `@actuate/runtime` and `@actuate/providers` 0.5. The signed links stay in every message, so a chat client that can't show buttons still gets them.
+Buttons are new in `@actuate/sdk`, `@actuate/runtime` and `@actuate/providers` 0.5, and need `@actuate/cli` 0.5 for clicks under `actuate dev`. The signed links stay in every message, so a chat client that can't show buttons still gets them.
 
 ```ts
 const decision = await ctx.step.waitForApproval("manager-ok", {
@@ -32,7 +32,7 @@ Each provider sends interactive buttons when it can verify the clicks, and link 
 | Slack | A **Signing secret**, and the app's **Interactivity** Request URL. The bot token and the incoming webhook URL both work | Link buttons |
 | Discord | The **Bot token** and the **Public key**, and the application's **Interactions Endpoint URL** | Link buttons, when every link is at most 512 characters, and the links as text only otherwise. A channel webhook can only send link buttons |
 
-On Slack and Discord, **Approve** is green and **Reject** is red. Slack messages are Block Kit, with the plain text as the notification. If Telegram, Slack or Discord refuses the buttons, Actuate sends the message again without them, so the links always arrive.
+On Slack and Discord, **Approve** is green and **Reject** is red. Slack messages are Block Kit, with the plain text as the notification. When a chat app refuses the buttons, Actuate sends the message again without them in these cases. Telegram answers `400` about a button or its URL, for link buttons. Slack answers `invalid_blocks`, `invalid_blocks_format` or `msg_blocks_too_long`. Discord answers `400` to a message with buttons. Any other error fails the delivery as usual.
 
 Buttons only appear on approvals sent to a `notify` recipient through your messaging channels. With [`notify: "owner"`](/docs/concepts/approvals/#send-the-links-to-yourself), the links reach you by email and on your alert channel, without buttons. WhatsApp and email (Resend) carry the links as text.
 
@@ -44,7 +44,7 @@ A question from [`waitForInput`](/docs/concepts/approvals/#asking-for-input) get
 
 ### On the platform
 
-1. In the dashboard, open **Settings**, then **Providers**, and open **Telegram** in the **messaging** group. Paste the **Bot token** from [@BotFather](https://t.me/BotFather). Click **Generate** next to **Webhook secret token**, then save.
+1. In the dashboard, open **Settings**, then **Providers**, and open **Telegram Bot** in the **messaging** group. Paste the **Bot token** from [@BotFather](https://t.me/BotFather). Click **Generate** next to **Webhook secret token**, then save.
 2. Under the Telegram provider, pick an actuator in **Connect the bot to** and click **Connect**. Actuate calls Telegram's `setWebhook` for you, with your secret token and with both the `message` and `callback_query` updates.
 3. Optionally, fill in **Approvers** with Telegram user IDs. See [Approver lists](#approver-lists).
 
@@ -83,7 +83,7 @@ Under `actuate dev`, expose port 8787 with a tunnel and set `ACTUATE_PUBLIC_URL`
 Approver lists take numeric user IDs, not @usernames or group chat IDs.
 
 - In a private chat with your bot, your user ID is the same number as the chat ID, which you may already pass as `notify`.
-- In a group, send the bot a message before you set its webhook, open `https://api.telegram.org/bot<bot token>/getUpdates` and read `message.from.id`. Telegram answers `getUpdates` only while the bot has no webhook.
+- In a group, send the bot a command meant for it, such as `/start@<bot username>`, before you set its webhook. In a group, Telegram's [privacy mode](https://core.telegram.org/bots/features#privacy-mode) gives a bot only commands for it and replies to its messages, so an ordinary message won't show. Then open `https://api.telegram.org/bot<bot token>/getUpdates` and read `message.from.id`. Telegram answers `getUpdates` only while the bot has no webhook.
 - Once someone has clicked, the run's result names them, as in `telegram:123456789 (Wei Tan)`. The number is their user ID.
 
 ## Set up Slack
@@ -98,7 +98,7 @@ Use a Slack app that only Actuate uses. A Slack app has one Interactivity Reques
 4. In your Slack app, open **Interactivity & Shortcuts**, turn **Interactivity** on, paste the URL as the **Request URL** and save.
 5. Optionally, fill in **Approvers** with member IDs.
 
-The Interactivity Request URL belongs to your account, not to one actuator. One Slack app serves all your actuators, and Actuate sends each click to the actuator that sent the message. The URL keeps working when you delete an actuator, and stays the same when you update the provider. Anyone may know it. It grants nothing, because Actuate checks every request's signature with your signing secret.
+The Interactivity Request URL belongs to your account, not to one actuator. One Slack app serves all your actuators, and Actuate sends each click to the actuator that sent the message. The URL keeps working when you delete an actuator, and stays the same when you update the provider. If you remove the provider and add it again, it gets a new URL and the old one answers `404`, so paste the new one into the app. Anyone may know it. It grants nothing, because Actuate checks every request's signature with your signing secret.
 
 ### Self-hosted and locally
 
@@ -122,7 +122,7 @@ Once an application has an **Interactions Endpoint URL**, Discord sends all its 
 4. Back in **General Information**, paste it into **Interactions Endpoint URL** and save. Discord sends a signed test request, which Actuate answers. That needs at least one active actuator in your account.
 5. Optionally, fill in **Approvers** with user and role IDs.
 
-As for Slack, the URL belongs to your account and serves all your actuators.
+As for Slack, the URL belongs to your account and serves all your actuators. Removing the provider and adding it again makes a new URL, which you paste into the application again.
 
 ### Self-hosted and locally
 
@@ -130,7 +130,7 @@ Set `DISCORD_PUBLIC_KEY` (64 hex characters, not a secret) next to `DISCORD_BOT_
 
 ### Find user and role IDs
 
-In Discord, open **User Settings**, then **Advanced**, and turn on **Developer Mode**. Then right-click a user and click **Copy User ID**, or right-click a role and click **Copy Role ID**. Write a role as `role:<role ID>`, for example `role:1201122334455667788`. Discord sends the clicker's roles only for messages in a server, so role entries don't match in direct messages.
+In Discord, open **User Settings**, then **Advanced**, and turn on **Developer Mode**. Then right-click a user and click **Copy User ID**, or right-click a role and click **Copy Role ID**. Find roles in **Server Settings**, then **Roles**, or right-click a role mention in a message. Write a role as `role:<role ID>`, for example `role:1201122334455667788`. Discord sends the clicker's roles only for messages in a server, so role entries don't match in direct messages.
 
 ## Approver lists
 
@@ -167,7 +167,7 @@ When two people click at the same moment, the first click decides, and the secon
 
 Actuate records the decision at once and resumes the run in the background, so the chat app gets its answer within its deadline, which is 3 seconds for Slack and Discord. If Discord still shows "This interaction failed", the decision stands.
 
-On the platform, a click for a paused actuator gets "This request has expired or was already decided." Its links still work.
+On the platform, a click for a paused actuator gets "This request has expired or was already decided." when your account has another active actuator to answer it. With no active actuator, the platform answers `404`, and Slack or Discord shows the clicker an error. Either way the click decides nothing, and the links still work.
 
 ### A click reaches the right actuator
 
@@ -184,7 +184,9 @@ const decision = await ctx.step.waitForApproval("manager-ok", {
   message: `Refund RM${input.amount} on ${input.orderId}?`,
   notify: config.managerChatId,
 });
-if (decision?.via === "chat") {
+// A custom webhook decision is "chat" too, but its receiver asserts `by`.
+const verified = decision?.via === "chat" && !decision.by?.startsWith("custom-webhook:");
+if (verified) {
   await ctx.step.do("audit", () =>
     ctx.db.sql`INSERT INTO approvals (run_id, approved, by) VALUES (${ctx.runId}, ${decision.approved}, ${decision.by ?? null})`,
   );
@@ -200,7 +202,7 @@ if (decision?.via === "chat") {
 | Discord | `discord:80351110224678912 (Alice)` | Their display name, or their username |
 | Custom webhook | `custom-webhook:alice (Alice Tan)` | The `by.name` your server sent |
 
-The chat app's signature proves the user ID. The name is whatever the person chose in the chat app, so match on the ID. Through a custom webhook, your server asserts both, as [below](#decide-from-your-own-server). Actuate cuts the ID at 64 characters and the name at 60.
+The chat app's signature proves the user ID. The name is whatever the person chose in the chat app, so match on the ID. Through a custom webhook, your server asserts both, as [below](#decide-from-your-own-server), so `via: "chat"` alone doesn't mean a verified person. Where that matters, also check that `by` doesn't start with `custom-webhook:`, as the sample does. Actuate cuts the ID at 64 characters and the name at 60.
 
 Decisions through a link, the dashboard or the API keep their `via` values, `"link"`, `"dashboard"` and `"api"`. See [Who decided](/docs/concepts/approvals/#who-decided). Answers to questions never have `via: "chat"`, because they come from the form.
 
@@ -224,15 +226,15 @@ With a signing secret, the `approval` object in an approval request's `standard`
     "rejectUrl": "https://...",
     "expiresAt": "2026-11-07T09:00:00.000Z",
     "decide": {
-      "approve": "ap1:local:q3Jx8Kd0Lm2Pz7Yw:a",
-      "reject": "ap1:local:q3Jx8Kd0Lm2Pz7Yw:r",
-      "url": "https://run.actuate.run/a/<id>/providers/custom-webhook/webhook"
+      "approve": "ap1:act_9fQ2xLm0Rk3TzW7a:q3Jx8Kd0Lm2Pz7Yw:a",
+      "reject": "ap1:act_9fQ2xLm0Rk3TzW7a:q3Jx8Kd0Lm2Pz7Yw:r",
+      "url": "https://run.actuate.run/a/act_9fQ2xLm0Rk3TzW7a/providers/custom-webhook/webhook"
     }
   }
 }
 ```
 
-`approve` and `reject` are opaque values of at most 47 characters. `url` is the actuator's Reply URL. In a [template](/docs/guides/custom-webhook/#your-own-json-template), the values are `{{approvePayload}}` and `{{rejectPayload}}`, which are empty without a signing secret. Questions never carry `decide`.
+`approve` and `reject` are opaque values of at most 47 characters. `url` is the actuator's Reply URL. This example is from the platform, where the values name the actuator's ID. Self-hosted, they say `local` instead, as in `ap1:local:q3Jx8Kd0Lm2Pz7Yw:a`. In a [template](/docs/guides/custom-webhook/#your-own-json-template), the values are `{{approvePayload}}` and `{{rejectPayload}}`, which are empty without a signing secret. Questions never carry `decide`.
 
 To decide, POST one of the two values to `url`, with the same auth as a [reply](/docs/guides/custom-webhook/#replies), and name the person who decided:
 
@@ -240,7 +242,7 @@ To decide, POST one of the two values to `url`, with the same auth as a [reply](
 curl -X POST "$REPLY_URL" \
   -H "Authorization: Bearer $CUSTOM_WEBHOOK_SECRET" \
   -H "content-type: application/json" \
-  -d '{"decision":"ap1:local:q3Jx8Kd0Lm2Pz7Yw:a","by":{"id":"alice","name":"Alice Tan"}}'
+  -d '{"decision":"ap1:act_9fQ2xLm0Rk3TzW7a:q3Jx8Kd0Lm2Pz7Yw:a","by":{"id":"alice","name":"Alice Tan"}}'
 ```
 
 | Field | Required | Meaning |
@@ -254,11 +256,11 @@ The answer is always JSON. Show `message` to the person, or use `status` and `de
 | Status | Body |
 | --- | --- |
 | `200` | `{"status": "decided", "decision": "approved", "by": "custom-webhook:alice (Alice Tan)", "at": "2026-11-06T14:02:11.000Z", "message": "Approved by Alice Tan at 14:02 UTC"}`. `decision` is `"approved"` or `"rejected"` |
-| `200` | `{"status": "already", "decision", "by", "at", "message": "Already approved by Alice Tan"}`, when the step was decided before, by another decision, a link or the dashboard |
+| `200` | `status` is `"already"`, with `decision`, `by`, `at` and `message`, such as "Already approved by Alice Tan", when the step was decided before, by another decision, a link or the dashboard |
 | `200` | `{"status": "expired"}` or `{"status": "unknown"}`, with the message "This request has expired or was already decided." |
 | `200` | `{"status": "not-approver"}`, with the message "You're not on the approver list for this.", when `by.id` isn't in **Approvers** |
 | `200` | `{"status": "foreign"}`, with the message "This button belongs to another actuator." |
-| `400` | `{"status": "invalid", "message"}`, for a `decision` that isn't one of the two values, or a missing or malformed `by` |
+| `400` | `status` is `"invalid"`, with a `message` that says what is wrong, for a `decision` that isn't one of the two values, or a missing or malformed `by` |
 | `401` | The auth is wrong or missing |
 
 The run resumes with `{ approved, at, by: "custom-webhook:alice (Alice Tan)", via: "chat" }`.

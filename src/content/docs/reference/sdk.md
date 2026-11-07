@@ -464,7 +464,7 @@ interface ApprovalResult {
 }
 ```
 
-`via: "chat"` means someone clicked **Approve** or **Reject** in Telegram, Slack or Discord, or a custom webhook's receiver decided. `by` is then the channel and the clicker's user ID, with their display name in brackets when the chat app gives one, such as `telegram:123456789 (Wei Tan)` or `slack:U01ABC2DEF (alice)`. The chat app's signature proves the user ID, and the name is whatever the person chose. A custom webhook's receiver asserts both, as `custom-webhook:<id> (<name>)`. Chat decisions have no `note`. See [who decided](/docs/guides/approval-buttons/#who-decided). `"chat"` is new in `@actuate/sdk` 0.5.
+`via: "chat"` means someone clicked **Approve** or **Reject** in Telegram, Slack or Discord, or a custom webhook's receiver decided. `by` is then the channel and the clicker's user ID, with their display name in brackets when the chat app gives one, such as `telegram:123456789 (Wei Tan)` or `slack:U01ABC2DEF (alice)`. The chat app's signature proves the user ID, and the name is whatever the person chose. A custom webhook's receiver asserts both, as `custom-webhook:<id> (<name>)`, so `via: "chat"` alone doesn't mean a verified person. Where that matters, also check that `by` doesn't start with `custom-webhook:`. Chat decisions have no `note`. See [who decided](/docs/guides/approval-buttons/#who-decided). `"chat"` is new in `@actuate/sdk` 0.5.
 
 ### WaitForInputOptions
 
