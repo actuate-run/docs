@@ -31,7 +31,7 @@ The only exception is `ACTUATE_DEV=1`, which `actuate dev` sets for you. Routes 
 | `GET` | [`/approve?token=`](#approve) | public | The page behind an approval or input link |
 | `POST` | [`/approve`](#approve) | public | Apply an approval decision or an answer |
 | `POST` | [`/webhook`](#webhook) | webhook secret | Start a run (trigger `webhook`) |
-| `POST` | [`/providers/:kind/webhook`](#provider-webhooks) | your verifier | A provider webhook, delivered as an event. Only with `providerWebhook` |
+| `POST` | [`/providers/:kind/webhook`](#provider-webhooks) | your verifier | A provider webhook, delivered as an event, or a button click. Only with `providerWebhook` or `providerInteractions` |
 | `GET` | [`/`](#describe) | run | Describe the actuator |
 | `POST` | [`/run`](#run) | run | Start a run (trigger `api`) |
 | `GET` | [`/runs`](#runs) | admin | List runs |
@@ -114,14 +114,16 @@ The request must prove it knows `ACTUATE_WEBHOOK_SECRET`, or it gets `401`. If t
 
 ## Provider webhooks
 
-`/providers/:kind/webhook` (any method) exists only when you pass a `providerWebhook` function to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#5-providers)). `:kind` is lowercase letters, digits and hyphens, for example `stripe`. Your function verifies the request and returns what to do. `parseProviderWebhookFromEnv` from `@actuate/providers` does this for the built-in providers:
+`/providers/:kind/webhook` (any method) exists when you pass a `providerWebhook` function, a `providerInteractions` function or both to `createRuntime` (see [Self-hosting](/docs/guides/self-hosting/#5-providers)). `:kind` is lowercase letters, digits and hyphens, for example `stripe`. On a `POST`, the provider's `parseInteraction` (from `providerInteractions`) reads the request first. It answers a button click or a reply the chat app needs, such as Discord's PING. Anything else goes to `providerWebhook`, which verifies the request and returns what to do. `parseProviderWebhookFromEnv` and `providerInteractionsFromEnv` from `@actuate/providers` do this for the built-in providers:
 
 | Your function | Response |
 | --- | --- |
+| `parseInteraction` finds an Approve or Reject click | The runtime checks the clicker against the provider's approver list, decides the step and answers with the provider's reply. See [Approval buttons](/docs/guides/approval-buttons/) |
 | Returns `{ event, payload }` | The runtime delivers the event as [`POST /events/:key`](#events) does, and responds `{ "event", "resumed", "buffered" }` |
 | Returns an array of them | The runtime delivers each in order, and responds `{ "events": [ ... ] }` |
 | Returns `{ reply: "<text>" }` | `200` with that text as `text/plain`, for subscription handshakes such as Meta's `hub.challenge` |
-| Returns `null` | `{ "ignored": true }` |
+| Returns `{ reply: { status, contentType, body } }` | That status, content type and body. `contentType` defaults to `text/plain` |
+| Returns `null`, or there is no `providerWebhook` | `{ "ignored": true }` |
 | Throws an error named `WebhookVerificationError` | `401 {"error": "<message>"}` |
 
 The route needs no admin token, because verification is your function's job.
@@ -156,7 +158,7 @@ The route needs no admin token, because verification is your function's job.
 | Response | When |
 | --- | --- |
 | `201` + run record | A new run was started. The record reflects the end of its first pass |
-| `200` + run record | The `Idempotency-Key` header matched an existing run; nothing new was started |
+| `200` + run record | The `Idempotency-Key` header (or `X-GitHub-Delivery`) matched an existing run, or, without one, the actuator's [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields matched a run that is running, waiting or completed in the last 24 hours. Nothing new was started |
 | `400 {"error":"Request body must be JSON."}` | The body is not JSON |
 | `400 {"error":"Invalid input","issues":[...]}` | The body failed the input schema; `issues` are Zod issues |
 

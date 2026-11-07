@@ -135,6 +135,7 @@ Only some providers can use the key:
 | Stripe | `createBill`, `refund` | `Idempotency-Key` header, kept for 24 hours |
 | Resend (email) | `send` | `Idempotency-Key` header, kept for 24 hours |
 | Discord with a bot token | `send` | A nonce with `enforce_nonce`, checked for a few minutes only |
+| Custom webhook | `send`, if your endpoint checks | Actuate derives the message `id` and `webhook-id` header from the key, so they stay the same on every retry. Your endpoint [skips repeats](/docs/guides/custom-webhook/#skip-repeats) |
 | Discord webhooks, Telegram, WhatsApp, Slack | No | Their APIs take no key. A retried send can arrive twice |
 | Chip, ToyyibPay, Billplz | No | Their APIs take no key. A retried call can create a second, unpaid bill (or, at Chip, repeat a partial refund) |
 

@@ -82,7 +82,7 @@ Windows are per actuator and per kind, so a failing actuator never hides an aler
 
 ### Daily email cap
 
-Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual. [Run completed](#runs-that-finish-after-waiting) alerts may use only half of the day's emails. Messages your actuators send with [`ctx.notifyOwner`](/docs/concepts/actuators/#on-the-platform) count as alert emails too, and may also use only half.
+Alert emails, test alerts included, are capped per account per day (UTC): 20 on Sandbox, 100 on Maker, 300 on Agency. The last email of the day says so. After it, alerts still go to your messaging channel, if you have one, and the dashboard shows every failed run and waiting approval as usual. [Run completed](#runs-that-finish-after-waiting) alerts may use only half of the day's emails. Messages your actuators send with [`ctx.notifyOwner`](/docs/concepts/actuators/#on-the-platform) count as alert emails too, and so do approval and input links sent with [`notify: "owner"`](/docs/concepts/approvals/#send-the-links-to-yourself). Together they may also use only half.
 
 ## Where alerts go
 
@@ -101,8 +101,9 @@ On Maker and Agency you can also send them to one messaging channel. Alerts use 
 | Discord | A channel ID. Turn on Developer Mode, right-click the channel and choose **Copy Channel ID** |
 | WhatsApp | A phone number in international format, such as `60123456789` |
 | Email (Resend) | An email address, such as `ops@yourcompany.com` |
+| Custom webhook | Whatever your endpoint expects in `to`, such as `me`. Most services ignore it. Use it to get alerts in ntfy, Google Chat, Teams, Zapier or your own server; see [Send messages to any URL](/docs/guides/custom-webhook/) |
 
-The recipient is one ID or address, at most 200 characters, with no spaces. Messages to a channel are cut at about 1,900 characters (Discord's limit). If you later remove that provider, alerts go to email only until you pick another channel. If sending to the channel fails, the email still goes out.
+The recipient is one ID or address, at most 200 characters, with no spaces. A message to a channel is the subject, a blank line and the text, cut at 1,900 characters to stay under Discord's limit of 2,000. If you later remove that provider, alerts go to email only until you pick another channel. If sending to the channel fails, the email still goes out.
 
 **Send test alert** sends a test message to your email and the channel, whatever your toggles and mutes say, and shows what happened to each, including the provider's error if the channel failed. You can send one every 30 seconds, and ten a day.
 

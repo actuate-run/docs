@@ -8,6 +8,7 @@
     "build": "node -e \"require('node:fs').rmSync('node_modules/.astro',{recursive:true,force:true})\" && astro build && node scripts/llms.mjs && node scripts/check-links.mjs",
     "preview": "astro preview",
     "check-links": "node scripts/check-links.mjs",
+    "changelog": "node scripts/changelog.mjs",
     "build:worker": "pnpm build && node scripts/worker-assets.mjs"
   },
   "dependencies": {

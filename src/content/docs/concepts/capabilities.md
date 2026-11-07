@@ -23,7 +23,7 @@ There are four capabilities:
 
 | Capability | Client | Launch providers | Credentials held by |
 | --- | --- | --- | --- |
-| `messaging` | `ctx.messaging` | Telegram Bot API (the default, free and live in two minutes), WhatsApp Cloud API (your own Meta app and WABA), Slack, Discord, email through Resend | You |
+| `messaging` | `ctx.messaging` | Telegram Bot API (the default, free and live in two minutes), WhatsApp Cloud API (your own Meta app and WABA), Slack, Discord, email through Resend, or a [custom webhook](/docs/guides/custom-webhook/) to any URL (your own server, Zapier, n8n, ntfy, Google Chat and others) | You |
 | `payment` | `ctx.payment` | Stripe, Chip, ToyyibPay, Billplz | You |
 | `llm` | `ctx.llm` | Anthropic, OpenAI, Google, or any OpenAI-compatible API (OpenRouter, Groq, Together, DeepSeek, Mistral, Workers AI, a local Ollama), with your API key | You |
 | `http` | `ctx.http` | Outbound `fetch` to domains you allow-list | You, per domain |
@@ -62,16 +62,17 @@ await ctx.step.do("notify", () =>
 | Slack | A channel ID, for example `C0123456789` (the bot must be in the channel). With an incoming webhook instead of a bot token, Actuate ignores `to` |
 | Discord | A channel ID. With a channel webhook instead of a bot token, Actuate ignores `to`. Messages are at most 2,000 characters, and never ping `@everyone` or roles |
 | Email (Resend) | An email address |
+| Custom webhook | Anything your endpoint understands, passed through unchanged, for example `me`. Most services ignore it. See [Send messages to any URL](/docs/guides/custom-webhook/) |
 
 Slack and Discord suit messages to you or your team, such as approval requests, alerts and reports. The options are:
 
 | Option | Meaning |
 | --- | --- |
-| `channel` | Which channel sends, when several are configured: `"telegram"`, `"whatsapp"`, `"slack"`, `"discord"` or `"email"`. Without it, the default channel sends. See [Several channels](#several-channels) |
-| `subject` | Email subject, when the channel is email |
+| `channel` | Which channel sends, when several are configured: `"telegram"`, `"whatsapp"`, `"slack"`, `"discord"`, `"email"` or `"custom-webhook"`. Without it, the default channel sends. See [Several channels](#several-channels) |
+| `subject` | Email subject, when the channel is email. The custom webhook sends it too |
 | `template` | A WhatsApp template, `{ name, language, variables? }`, required for messages outside the 24-hour service window |
-| `format` | `"text"` (default) or `"html"`. HTML means a small subset (`<b>`, `<i>`, `<a href>`, `<code>`, `<pre>`), used where the channel supports it (Telegram, email). Other channels get the text with tags removed |
-| `idempotencyKey` | Actuate passes it to providers that deduplicate (Resend, and Discord with a bot token). It defaults to a key for this call, `<runId>:<step>:send:<n>`, where `n` counts the step's sends from 0. See [Deduplication by provider](#deduplication-by-provider) |
+| `format` | `"text"` (default) or `"html"`. HTML means a small subset (`<b>`, `<i>`, `<a href>`, `<code>`, `<pre>`), used where the channel supports it (Telegram, email). Other channels get the text with tags removed. The custom webhook's standard format sends both, as `text` and `html` |
+| `idempotencyKey` | Actuate passes it to providers that deduplicate (Resend, and Discord with a bot token). The custom webhook turns it into a message ID that stays the same on retries. It defaults to a key for this call, `<runId>:<step>:send:<n>`, where `n` counts the step's sends from 0. See [Deduplication by provider](#deduplication-by-provider) |
 
 ### Several channels
 
@@ -82,11 +83,11 @@ await ctx.step.do("tell-customer", () => ctx.messaging.send(input.phone, "Your r
 await ctx.step.do("tell-team", () => ctx.messaging.send("C0123456789", `Refunded ${input.orderId}`, { channel: "slack" }));
 ```
 
-On the platform, connect each one under **Settings**, then **Providers**, and use **Make default** to choose the default. You can connect up to five channels. Locally, list them in `.dev.vars`, default first: `ACTUATE_MESSAGING=whatsapp,slack`. Sending on a channel that isn't configured fails the step with `No "slack" messaging channel is configured`. You can still have only one payment provider and one LLM provider.
+On the platform, connect each one under **Settings**, then **Providers**, and use **Make default** to choose the default. You can connect up to five channels. Locally, list them in `.dev.vars`, default first: `ACTUATE_MESSAGING=whatsapp,slack`. Sending on a channel that isn't configured fails the step with `No "slack" messaging channel is configured. Configured: whatsapp.`. This happens even when only one channel is configured, so a message meant for one channel never goes out through another. Before 0.5, `ctx.messaging.send` ignored `channel` when only one channel was configured. Approvals and questions can [pick the channel](/docs/concepts/approvals/#pick-the-channel) the same way. You can still have only one payment provider and one LLM provider.
 
 ### Receiving messages
 
-With WhatsApp or Telegram, a run can wait for the customer's reply. Each inbound message becomes the event `message.<channel>.<from>`, with an [`InboundMessage`](/docs/reference/sdk/#inboundmessage) payload:
+With WhatsApp, Telegram or the custom webhook, a run can wait for the reply. Each inbound message becomes the event `message.<channel>.<from>`, with an [`InboundMessage`](/docs/reference/sdk/#inboundmessage) payload:
 
 ```ts
 import type { InboundMessage } from "@actuate/sdk";
@@ -108,9 +109,10 @@ To set it up, point the provider at the actuator's provider webhook URL, which t
 | Provider | Setup | Needed so messages can't be forged |
 | --- | --- | --- |
 | WhatsApp | In your Meta app, open WhatsApp, then Configuration, then Webhook. Paste the URL, enter your **Webhook verify token**, and subscribe to `messages` | The **App secret**. Actuate checks every delivery's `X-Hub-Signature-256`, and only messages to your configured phone number ID count |
-| Telegram | Call `setWebhook` with the URL and `secret_token` set to your **Webhook secret token** | The **Webhook secret token**, which Actuate checks on every update |
+| Telegram | Click **Connect** under the Telegram provider in **Settings**, then **Providers**. Or call `setWebhook` with the URL, `secret_token` set to your **Webhook secret token** and `allowed_updates` set to `["message","callback_query"]` | The **Webhook secret token**, which Actuate checks on every update |
+| Custom webhook | Nothing to paste. Each message carries the URL as `replyUrl`, and the actuator's **Connect** tab shows it as **Reply URL**. POST `{"from": "...", "text": "..."}` to it. See [Replies](/docs/guides/custom-webhook/#replies) | The **Signing secret**, as a bearer token or a Standard Webhooks signature. The secret never goes in the URL, because URLs end up in logs |
 
-Without the app secret or secret token, Actuate ignores inbound messages rather than trusting them. A WhatsApp number or Telegram bot has one webhook, so it delivers to one actuator; use a bot or number per actuator if several need replies. Locally, `actuate dev` serves the same route at `http://localhost:8787/providers/<kind>/webhook`; expose it with a tunnel.
+Without the app secret, secret token or signing secret, Actuate ignores inbound messages rather than trusting them. A WhatsApp number or Telegram bot has one webhook, so it delivers messages to one actuator; use a bot or number per actuator if several need replies. On the platform, a Telegram bot's [approval button](/docs/guides/approval-buttons/) clicks still reach all your actuators. A custom webhook has no such limit. One endpoint can serve several actuators, because each message carries the reply URL of the actuator that sent it. Locally, `actuate dev` serves the same route at `http://localhost:8787/providers/<kind>/webhook`; expose it with a tunnel.
 
 ## payment
 
@@ -174,6 +176,7 @@ Inside a step, `send`, `createBill` and `refund` get a key per call when you pas
 | Stripe | Returns the first checkout session or refund. Keys last 24 hours |
 | Resend | Returns the first email instead of sending again. Keys last 24 hours |
 | Discord with a bot token | Returns the first message, but only within a few minutes |
+| Custom webhook | Sends the same message `id` on every retry, so your endpoint can [skip repeats](/docs/guides/custom-webhook/#skip-repeats) |
 | Discord webhooks, Telegram, WhatsApp, Slack | Nothing, so the message can be sent twice |
 | Chip, ToyyibPay, Billplz | Nothing, so a second bill can be created, and a Chip partial refund can repeat |
 | `actuate dev` fake payment | Returns the first bill or refund, like Stripe |
