@@ -28,7 +28,7 @@ return { status: "REFUNDED" };
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `message` | `Approval needed: <actuator> / <step>` | The text the approver sees |
-| `notify` | none | Who gets the links, as a chat ID, phone number or email address that your messaging provider understands, or `"owner"` to [send them to yourself](#send-the-links-to-yourself) |
+| `notify` | none | Who gets the links, as a chat ID, phone number or email address that your messaging provider understands, `"owner"` to [send them to yourself](#send-the-links-to-yourself), or `{ to, channel }` to [pick the channel](#pick-the-channel) |
 | `timeout` | `"7 days"` | Give up after this long and resolve to `null`. The links expire at the same time |
 
 ## Result
@@ -139,6 +139,22 @@ On the platform, when `notify` is a recipient, Actuate sends the links through y
 Through a custom webhook, the request also arrives as data. The standard body carries an `approval` object with the step and its links. An **Approval JSON template** can turn an approval into a Microsoft Teams or Google Chat card with **Approve** and **Reject** buttons, which open the confirm page. See [approval requests](/docs/guides/custom-webhook/#approval-requests).
 
 If delivery fails, the runtime writes the error to the run's log and the run keeps waiting; fetch the links from the dashboard or the links route instead.
+
+### Pick the channel
+
+With several messaging channels, `notify: { to, channel }` sends the links through the one you name. A string `notify` goes through the default channel.
+
+```ts
+const decision = await ctx.step.waitForApproval("manager-ok", {
+  message: `Refund RM${input.amount} on ${input.orderId}?`,
+  notify: { to: "C0123456789", channel: "slack" },
+  timeout: "1 day",
+});
+```
+
+`channel` is `"telegram"`, `"whatsapp"`, `"slack"`, `"discord"`, `"email"` or `"custom-webhook"`, as for [`ctx.messaging.send`](/docs/concepts/capabilities/#several-channels). It works for `waitForInput` too, and needs `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
+
+A channel that isn't configured always fails the delivery, even when you have only one messaging channel, so a Slack channel ID never goes out through Telegram. The run's log gets the error `Could not deliver approval link for "manager-ok"`, and the step waits as for any failed delivery. `{ to: "owner" }` isn't allowed, so write `notify: "owner"`. For a `notify` that isn't a string or `{ to, channel }`, `waitForApproval` and `waitForInput` throw `ActuatorError`.
 
 On the platform, the owner also gets an [alert](/docs/guides/alerts/) one hour before an approval or question times out, for waits of two hours or more.
 

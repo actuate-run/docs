@@ -415,14 +415,33 @@ Passing both `timeout` and `until` throws `ActuatorError`.
 interface WaitForApprovalOptions {
   /** Shown to the approver. */
   message?: string;
-  /** Who gets the signed links: a chat ID, phone or email understood by the messaging provider, or "owner". */
-  notify?: string;
+  /** Who gets the signed links: a recipient the messaging provider understands, "owner", or { to, channel }. */
+  notify?: Notify;
   /** Give up after this long and resolve to `null`. Default "7 days". */
   timeout?: Duration;
 }
 ```
 
 `notify: "owner"` (reserved, never a default) sends the links to the actuator's owner the way [`ctx.notifyOwner`](#notifyowner) does, with no messaging provider needed. On the hosted platform that is an email to the account, and the account's alert channel when it is Telegram, Slack, Discord or email (never a custom webhook, so the links never reach another agent). Self-hosted, it is the `notifyOwner` notifier given to `createRuntime`, or the worker's console without one. Under `actuate dev`, it is the terminal. When the links can't go out (a daily cap reached), the step still waits, the request is in the approval queue, and the run's log gets a `warn` line. Any other value is a messaging recipient, as before. See [send the links to yourself](/docs/concepts/approvals/#send-the-links-to-yourself).
+
+### Notify
+
+```ts
+type Notify = string | { to: string; channel?: string };
+```
+
+Who a `waitForApproval` or `waitForInput` notifies. A string is a messaging recipient, or `"owner"`. `{ to, channel }` sends to `to` through the messaging channel you name, such as `"slack"` or `"telegram"`, when you have several. Without `channel`, the default channel sends, as with a string. Requires `@actuate/sdk` and `@actuate/runtime` 0.5 or later.
+
+```ts
+const decision = await ctx.step.waitForApproval("manager-ok", {
+  message: "Refund RM480?",
+  notify: { to: "C0123456789", channel: "slack" },
+});
+```
+
+- A channel that isn't configured always fails the delivery, even when you have only one messaging channel, so a recipient meant for one channel never goes out through another. The run's log gets an `error` line, `Could not deliver approval link for "<step>"`, and the step still waits. Decide it from the approval queue.
+- `channel` is a channel name of 1 to 32 letters, digits and hyphens, and `to` a non-empty string. `{ to: "owner" }` isn't allowed, so write `notify: "owner"` instead. `waitForApproval` and `waitForInput` throw `ActuatorError` for a `notify` they can't use.
+- [`ctx.messaging.send(to, text, { channel })`](#messagingprovider) follows the same rule. See [Several channels](/docs/concepts/capabilities/#several-channels).
 
 ### ApprovalResult
 
@@ -446,8 +465,8 @@ interface ApprovalResult {
 interface WaitForInputOptions {
   /** The question shown on the form. */
   prompt: string;
-  /** Who gets the signed link: a chat ID, phone or email understood by the messaging provider, or "owner". */
-  notify?: string;
+  /** Who gets the signed link, as for waitForApproval. */
+  notify?: Notify;
   /** Pre-filled text, e.g. a draft to edit. */
   initial?: string;
   /** Longest answer accepted, characters. Default 4,000, at most 20,000. */
@@ -457,7 +476,7 @@ interface WaitForInputOptions {
 }
 ```
 
-`prompt` is required; without it `waitForInput` throws `ActuatorError`. `notify: "owner"` works as for [`waitForApproval`](#waitforapprovaloptions).
+`prompt` is required; without it `waitForInput` throws `ActuatorError`. `notify` works as for [`waitForApproval`](#waitforapprovaloptions), including `"owner"` and [`{ to, channel }`](#notify).
 
 ### InputResult
 
@@ -605,9 +624,9 @@ interface MessagingProvider {
 }
 
 interface MessagingSendOptions {
-  /** Provider-specific channel override, e.g. "telegram" | "whatsapp" | "email" | "custom-webhook". */
   /** "html" sends <b>, <i>, <a href>, <code>, <pre> where supported (Telegram, email; the custom webhook adds it as `html`); other channels get plain text. Default "text". */
   format?: "text" | "html";
+  /** Which configured channel sends: "telegram", "whatsapp", "slack", "discord", "custom-webhook" or "email". Default: the first. A channel that isn't configured is refused, even when only one is. */
   channel?: string;
   /** Email subject, when the channel is email. The custom webhook sends it as `subject`. */
   subject?: string;
