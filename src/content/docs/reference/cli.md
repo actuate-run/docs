@@ -473,6 +473,14 @@ Next
 - `--json` prints the run record as `POST /run` returned it instead (`runId`, `status`, `output`, `error`, `passes`, and `usage` under `actuate dev`), whatever its status. For its steps and logs, use `actuate logs <runId> --json`. Before `@actuate/cli` 0.3, `actuate run` printed the record by default; scripts that read its output need `--json` now.
 - `--idempotency-key <key>` sends an [`Idempotency-Key`](/docs/concepts/triggers/#idempotency-key), so a retry with the same key returns the first run instead of starting another.
 - On the hosted platform, `actuate run` without `--idempotency-key` always starts a new run, even when the actuator declares [`idempotencyKey`](/docs/reference/sdk/#idempotencykey) fields. With `--local`, it calls `POST /run` on `actuate dev` like any other client, so a repeat of the same key fields' values returns the first run while it is running or waiting, or for 24 hours after it completed. Pass a new `--idempotency-key` to start another.
+- For a run that failed with a [`ToolError`](/docs/reference/sdk/#toolerror), the error line leads with its code, adds `(retryable)` when it is, and prints its details as JSON on the next line. Other errors show their name, unless it is plain `Error`, and message. Requires `@actuate/cli` 0.6 or later:
+
+  ```text
+    step  FAILED           book  (Slot S-14 is already booked.)
+    error  SLOT_TAKEN: Slot S-14 is already booked.
+           {"slotId":"S-14"}
+  ```
+
 - `run` exits with status 1 if the run ended `FAILED`, and when the input fails the schema, which prints each problem, for example `name: Too small: expected string to have >=1 characters`.
 - With `--local` it targets `actuate dev` on `localhost:<port>`, and otherwise the deployed actuator.
 

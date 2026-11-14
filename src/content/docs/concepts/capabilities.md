@@ -133,7 +133,7 @@ const bill = await ctx.step.do("create-bill", () =>
 | --- | --- |
 | `createBill(request)` | Create a payment link. Returns a `Bill` with `id`, `url`, `status`, `amount`, `currency` and `referenceId` |
 | `getBill(id)` | Look up a bill's current status: `pending`, `paid`, `failed`, `expired` or `refunded` |
-| `refund?(request)` | Refund a paid bill in full, or in part with `amount`. It is optional, because not every provider supports it, so call it as `ctx.payment.refund?.(...)` |
+| `refund(request)` | Refund a paid bill in full, or in part with `amount`. Billplz and ToyyibPay have no refund API, so there it throws [`NotSupportedError`](/docs/reference/sdk/#notsupportederror), which fails the step without retrying. It is always defined, so `ctx.payment.refund?.(...)` doesn't detect such a provider; see [`PaymentProvider`](/docs/reference/sdk/#paymentprovider) for how to fall back |
 
 `amount` is always in major units. Other `createBill` fields are `returnUrl` (where the payer goes after paying) and `idempotencyKey`.
 
@@ -201,6 +201,8 @@ const summary = await ctx.step.do("summarise", async () => {
 **Any OpenAI-compatible API.** Choose **OpenAI-compatible API** and give its base URL (the part before `/chat/completions`, for example `https://openrouter.ai/api/v1`, `https://api.groq.com/openai/v1`), an API key and a default model. That covers OpenRouter, Groq, Together, DeepSeek, Mistral, Fireworks, Cloudflare Workers AI, and a local Ollama or vLLM server under `actuate dev` (`http://localhost:11434/v1`). The base URL must be `https://` (plain `http://` only for `localhost`) and use a hostname, not an IP address.
 
 `complete` takes `model`, `system`, `prompt` or `messages` (`{ role: "user" | "assistant", content }[]`), `maxTokens` and `temperature`, and returns `{ text, model, usage? }`. Because the call is in a step, the journal stores its answer, and replays reuse the same text instead of asking again.
+
+`llm` is experimental. It has no tool calls, structured output or streaming yet, and its shape may change in a minor release when they arrive, so it is outside the [compatibility policy](/docs/reference/compatibility/#what-is-not-covered).
 
 ## http
 

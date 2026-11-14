@@ -8,7 +8,7 @@ npm install @actuate/sdk
 ```
 
 ```ts
-import { defineActuator, secret, z, NonRetryableError } from "@actuate/sdk";
+import { defineActuator, secret, z, NonRetryableError, ToolError } from "@actuate/sdk";
 ```
 
 `@actuate/sdk` is ESM-only and has one dependency, Zod 4.6 or later, which it re-exports as `z`. Use that `z` so your schemas and the SDK agree on the Zod version.
@@ -74,6 +74,22 @@ function isSuspendSignal(err: unknown): err is SuspendSignal;
 
 Returns true for the internal signal that ends a pass when a run sleeps or waits. Use it to rethrow in a `catch` around waits. See [The suspend signal](/docs/concepts/steps-and-replay/#the-suspend-signal).
 
+### toolErrorInfo
+
+```ts
+function toolErrorInfo(err: unknown): { code: string; retryable: boolean; details?: unknown } | null;
+```
+
+Returns the code, retryable flag and details of a [`ToolError`](#toolerror), or `null` for anything else. It goes by the error's shape (`name` is `"ToolError"` and `code` is well formed), not by `instanceof`, so it also works for an error from another copy of the SDK, or one rebuilt after crossing an RPC boundary. Requires `@actuate/sdk` 0.6 or later.
+
+### isNonRetryable
+
+```ts
+function isNonRetryable(err: unknown): boolean;
+```
+
+Returns true for an error that ends a step without using its retries: a [`NonRetryableError`](#nonretryableerror) (a [`NotSupportedError`](#notsupportederror) is one) or a [`ToolError`](#toolerror). Like `toolErrorInfo`, it goes by name as well as by class. Requires `@actuate/sdk` 0.6 or later.
+
 ### z
 
 This is the Zod 4 namespace, re-exported from `zod`.
@@ -92,6 +108,15 @@ const NOTIFY_OWNER_MAX_SUBJECT = 200;
 ```
 
 The longest text and subject [`ctx.notifyOwner`](#notifyowner) accepts, in characters.
+
+### TOOL_ERROR_CODE, TOOL_ERROR_MAX_DETAILS
+
+```ts
+const TOOL_ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+const TOOL_ERROR_MAX_DETAILS = 4_096;
+```
+
+What a [`ToolError`](#toolerror) code must look like, and the longest `details` the runtime keeps with a run, in characters of JSON.
 
 ### NOTIFY_OWNER
 
@@ -206,10 +231,12 @@ type AnySchema = z.ZodType;
 ### Context
 
 ```ts
-type Context<K extends Capability = never> = BaseContext & Pick<Providers, K>;
+type Context<K extends Capability = never, P extends Capability = never> = BaseContext &
+  Pick<Clients, K> &
+  Partial<Pick<Clients, P>>;
 ```
 
-The `ctx` passed to `run`, which is the base context plus one client per declared capability.
+The `ctx` passed to `run`, which is the base context plus one client per declared capability ([`Clients`](#clients)), and one that may be `undefined` per optional capability.
 
 ### BaseContext
 
@@ -365,6 +392,7 @@ Rules for every method:
 - `name` is 1 to 200 characters and **unique within a run**. A repeated name throws `ActuatorError`.
 - Steps cannot be nested. Calling any `ctx.step.*` inside a `do` function throws `ActuatorError`.
 - Timeouts resolve to `null`; they never throw. But a timeout longer than the plan's longest wait throws `ActuatorError` when the wait starts.
+- A wait resolves to `null` only when it timed out. An event with no payload, or a `null` one, arrives as `{}`. Test for a timeout with `=== null`, not with `!result`, because an event's payload can be `0`, `false` or `""`.
 
 ### StepOptions
 
@@ -582,7 +610,65 @@ class NonRetryableError extends Error {
 }
 ```
 
-Throw it from a step to fail immediately, skipping any remaining retries.
+Throw it from a step to fail immediately, skipping any remaining retries. [`NotSupportedError`](#notsupportederror) is one, and [`ToolError`](#toolerror) also ends a step without retries. [`isNonRetryable`](#isnonretryable) tells you whether an error does.
+
+### ToolError
+
+```ts
+class ToolError extends Error {
+  readonly code: string;
+  readonly retryable: boolean;
+  readonly details?: unknown;
+  constructor(code: string, message: string, options?: ToolErrorOptions);
+}
+
+interface ToolErrorOptions {
+  /** Whether the caller may make the same call again later and expect a different result. Default false. */
+  retryable?: boolean;
+  /** Small, JSON-serialisable facts the caller can act on, such as { limit: 500 }. */
+  details?: unknown;
+  cause?: unknown;
+}
+```
+
+Fails the run with an error the caller can act on: a code you choose, a message, whether calling again may help, and optional details. Throw it from `run`, inside or outside a step. Requires `@actuate/sdk` and `@actuate/runtime` 0.6 or later.
+
+```ts
+const booking = await ctx.step.do("book", { retries: 3 }, async () => {
+  const res = await ctx.http.fetch(`https://api.example.com/slots/${input.slotId}/book`, { method: "POST" });
+  if (res.status === 409) {
+    // Calling again with the same slot won't help, so the step doesn't retry.
+    throw new ToolError("SLOT_TAKEN", `Slot ${input.slotId} is already booked.`, { details: { slotId: input.slotId } });
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`); // retried up to 3 times
+  return (await res.json()) as { bookingId: string };
+});
+```
+
+- `code` is upper-case letters, digits and underscores, starting with a letter, at most 64 characters ([`TOOL_ERROR_CODE`](#tool_error_code-tool_error_max_details)), such as `CARD_DECLINED`. Anything else throws `TypeError` where you create the error. An empty `message` becomes the code.
+- `retryable` is advice to the caller: `true` means the same call may succeed later with nobody changing anything, for example when a downstream service was busy. It defaults to `false`, so an agent doesn't loop on the call. It doesn't make the step retry.
+- `details` is stored as JSON, up to 4,096 characters ([`TOOL_ERROR_MAX_DETAILS`](#tool_error_code-tool_error_max_details)). Larger details, or details that can't be serialised, are left out, and the code and message stay.
+- Thrown inside `ctx.step.do`, it fails the step at once, whatever its `retries` and whatever `retryable` says, because your code has already decided the outcome. Throw an ordinary `Error` for a failure worth retrying.
+- The run ends `FAILED`, and its error carries `name: "ToolError"`, `message`, `code`, `retryable` and `details`. Secret config values in the message and the details become `[secret]`. See [the run record](/docs/reference/runtime-http/#the-run-record) and [`actuate run`](/docs/reference/cli/#actuate-run). Other errors get no `code`, even if they have a `code` property.
+- You can catch it around `ctx.step.do` and return an outcome instead. On a later replay, the step throws a generic step failure with the same message but no `code` (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)), so don't branch on `code` there.
+
+For an outcome that is not a failure, such as "no such order" or "over the limit", return it in the output instead. A failed run shows as failed and, on the hosted platform, [alerts](/docs/guides/alerts/) the owner. See [errors an agent can act on](/docs/guides/agent-tools/#errors-an-agent-can-act-on).
+
+:::note
+In 0.6.0, `code`, `retryable` and `details` reach callers through the open-source runtime's HTTP API, `actuate dev`, and `actuate run` and `actuate logs`. Hosted MCP tool errors and the dashboard show them once the hosted platform runs 0.6.
+:::
+
+### NotSupportedError
+
+```ts
+class NotSupportedError extends NonRetryableError {
+  readonly provider: string;   // "Billplz"
+  readonly operation: string;  // "refund"
+  constructor(provider: string, operation: string);
+}
+```
+
+Thrown by a provider method that the configured provider's API doesn't offer, such as [`ctx.payment.refund`](#paymentprovider) on Billplz or ToyyibPay. The message is `<operation> is not supported by <provider>`. Because it is a `NonRetryableError`, it fails the step at once, whatever the step's `retries`. Before 0.6 it was a plain `Error`, and a step with `retries` retried it. Requires `@actuate/sdk` 0.6 or later; `@actuate/providers` re-exports the same class.
 
 ### ActuatorError
 
@@ -622,6 +708,23 @@ type Capability = keyof Providers; // "messaging" | "payment" | "llm" | "http"
 ```
 
 Call every provider method inside `ctx.step.do`. See [Capabilities and providers](/docs/concepts/capabilities/).
+
+`Providers` is what an adapter implements. `ctx` holds [`Clients`](#clients).
+
+### Clients
+
+```ts
+interface Clients {
+  messaging: MessagingProvider;
+  payment: PaymentClient;
+  llm: LlmProvider;
+  http: HttpProvider;
+}
+
+type PaymentClient = Required<PaymentProvider>;
+```
+
+What `ctx` holds for each capability: the same as `Providers`, with the methods an adapter may leave out always present. Every method on `ctx.messaging`, `ctx.payment` and `ctx.http` is callable; one the provider's API doesn't offer throws [`NotSupportedError`](#notsupportederror). Requires `@actuate/sdk` 0.6 or later.
 
 ### MessagingProvider
 
@@ -716,7 +819,25 @@ interface RefundRequest {
 }
 ```
 
-`refund` is optional because not every provider supports it. Call it as `ctx.payment.refund?.(...)`.
+`refund` is optional in `PaymentProvider`, so an adapter for an API without refunds may leave it out. On `ctx.payment` it is always there, because `ctx.payment` is a [`PaymentClient`](#clients): call it as `ctx.payment.refund(...)`. On a provider without refunds (Billplz and ToyyibPay), or an adapter that leaves it out, it throws [`NotSupportedError`](#notsupportederror), and the step fails without retrying. Before `@actuate/sdk` 0.6 you had to write `ctx.payment.refund!(...)` or `ctx.payment.refund?.(...)`; both still compile.
+
+**Behaviour change in 0.6:** code that checked `if (!ctx.payment.refund)`, or called `ctx.payment.refund?.(...)`, to detect a provider without refunds no longer takes that branch under the open-source runtime, `actuate dev` and `actuate test`. It never did on the hosted platform, where `ctx.payment.refund` has always been defined. To fall back, for example to ask a person, catch the error inside the step and return something the journal can store:
+
+```ts
+const refund = await ctx.step.do("refund", async ({ idempotencyKey }) => {
+  try {
+    return await ctx.payment.refund({ billId: input.billId, amount: input.amount, idempotencyKey });
+  } catch (err) {
+    if ((err as Error).name === "NotSupportedError") return null; // no refund API: handle it below
+    throw err;
+  }
+});
+if (refund === null) {
+  // ask a person to refund it by hand
+}
+```
+
+Check the error's `name` rather than `instanceof`, because an error that crossed from the host may not be an instance of your copy of the class. Catch it inside the step, not around `ctx.step.do`: on replay a failed step throws a generic step failure instead (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)). On the hosted platform, until it runs 0.6, `refund` on a provider without refunds throws a plain `Error` (`This payment provider does not support refunds.`), so this check doesn't match there yet and the step fails.
 
 ### PaymentEvent
 
@@ -756,6 +877,10 @@ interface InboundMessage {
 The payload of the `message.<channel>.<from>` event an inbound message delivers. See [Receiving messages](/docs/concepts/capabilities/#receiving-messages).
 
 ### LlmProvider
+
+:::caution[Experimental]
+The `llm` capability is outside the [compatibility policy](/docs/reference/compatibility/#what-is-not-covered). It is one text completion today, with no tool calls, structured output or streaming, and its shape may change in a minor release when those arrive.
+:::
 
 ```ts
 interface LlmProvider {
