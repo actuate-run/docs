@@ -80,7 +80,7 @@ Returns true for the internal signal that ends a pass when a run sleeps or waits
 function toolErrorInfo(err: unknown): { code: string; retryable: boolean; details?: unknown } | null;
 ```
 
-Returns the code, retryable flag and details of a [`ToolError`](#toolerror), or `null` for anything else. It goes by the error's shape (`name` is `"ToolError"` and `code` is well formed), not by `instanceof`, so it also works for an error from another copy of the SDK, or one rebuilt after crossing an RPC boundary. Requires `@actuate/sdk` 0.6 or later.
+Returns the code, retryable flag and details of a [`ToolError`](#toolerror), or `null` for anything else. It goes by the error's shape (`name` is `"ToolError"` and `code` is well formed), not by `instanceof`, so it also works for an error from another copy of the SDK and for a step's failure met again on replay. Requires `@actuate/sdk` 0.6 or later.
 
 ### isNonRetryable
 
@@ -650,7 +650,7 @@ const booking = await ctx.step.do("book", { retries: 3 }, async () => {
 - `details` is stored as JSON, up to 4,096 characters ([`TOOL_ERROR_MAX_DETAILS`](#tool_error_code-tool_error_max_details)). Larger details, or details that can't be serialised, are left out, and the code and message stay.
 - Thrown inside `ctx.step.do`, it fails the step at once, whatever its `retries` and whatever `retryable` says, because your code has already decided the outcome. Throw an ordinary `Error` for a failure worth retrying.
 - The run ends `FAILED`, and its error carries `name: "ToolError"`, `message`, `code`, `retryable` and `details`. Secret config values in the message and the details become `[secret]`. See [the run record](/docs/reference/runtime-http/#the-run-record) and [`actuate run`](/docs/reference/cli/#actuate-run). Other errors get no `code`, even if they have a `code` property.
-- You can catch it around `ctx.step.do` and return an outcome instead. On a later replay, the step throws a generic step failure with the same message but no `code` (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)), so don't branch on `code` there.
+- You can catch it around `ctx.step.do` and return an outcome instead, or clean up and throw it again. On a later replay the step throws a stand-in with the same `name`, `code`, `retryable` and `details` (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)), so branch on `toolErrorInfo(err)?.code`, not on `instanceof ToolError`.
 
 For an outcome that is not a failure, such as "no such order" or "over the limit", return it in the output instead. A failed run shows as failed and, on the hosted platform, [alerts](/docs/guides/alerts/) the owner. See [errors an agent can act on](/docs/guides/agent-tools/#errors-an-agent-can-act-on).
 
@@ -837,7 +837,7 @@ if (refund === null) {
 }
 ```
 
-Check the error's `name` rather than `instanceof`, because an error that crossed from the host may not be an instance of your copy of the class. Catch it inside the step, not around `ctx.step.do`: on replay a failed step throws a generic step failure instead (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)). On the hosted platform, until it runs 0.6, `refund` on a provider without refunds throws a plain `Error` (`This payment provider does not support refunds.`), so this check doesn't match there yet and the step fails.
+Check the error's `name` rather than `instanceof`: an error that crossed from the host may not be an instance of your copy of the class, and neither is the stand-in a replay throws when you catch around `ctx.step.do` instead (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)). On the hosted platform, until it runs 0.6, `refund` on a provider without refunds throws a plain `Error` (`This payment provider does not support refunds.`), so this check doesn't match there yet and the step fails.
 
 ### PaymentEvent
 

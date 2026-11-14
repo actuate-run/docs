@@ -98,7 +98,7 @@ When the caller should learn what went wrong and decide what to do, throw [`Tool
 
 ### Catching a failed step
 
-You can catch a step failure and take another path. The journal records the failure, so on every replay the same step throws again with the same message and your code takes the same path. Catch it broadly, because on replays the runtime rethrows the error as a generic step failure that carries the original message, not as the original error class.
+You can catch a step failure and take another path. The journal records the failure, so on every replay the same step throws again and your code takes the same path. What a replay throws stands in for the original error: it has the same message and the same `name`, and for a [`ToolError`](/docs/reference/sdk/#toolerror) the same `code`, `retryable` and `details`, but it is not an instance of the original class. So decide on `err.name` or [`toolErrorInfo(err)`](/docs/reference/sdk/#toolerrorinfo), never on `instanceof`. This requires `@actuate/runtime` 0.6 or later: a step that failed under an earlier runtime replays with the name `StepFailedError` and only its message.
 
 ## Idempotency keys
 
