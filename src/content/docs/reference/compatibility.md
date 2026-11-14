@@ -66,7 +66,7 @@ Each actuator's database holds the runtime's own tables next to yours. They carr
 
 - **Upgrades are automatic and in place.** Opening a database with a newer runtime brings its tables up to date before anything else happens. Runs that were sleeping or waiting carry on, with their completed steps.
 - **A runtime reads databases from its own major version and the one before.** A run that slept through an upgrade from 1.x to 2.x wakes on 2.x. To cross two majors, deploy the one in between first.
-- **Downgrades are refused, not attempted.** A runtime that opens a database written by a newer one stops with `JournalVersionError` before changing anything. Deploy the newer runtime again and the database is as it was.
+- **Downgrades are refused, not attempted.** A runtime that opens a database written by a newer one stops with `JournalVersionError` before changing anything. Deploy the newer runtime again and the database is as it was; a wake-up that came due in between is set again the next time the actuator is called. Runtimes before 0.6 don't make this check.
 - **The version only goes up with a release that says so** in its changelog.
 
 Databases written by 0.1 to 0.5 have no version stamp. 0.6 and later upgrade and stamp them when first opened. See [upgrading the runtime](/docs/guides/self-hosting/#upgrading-the-runtime).
