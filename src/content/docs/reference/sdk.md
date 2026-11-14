@@ -837,7 +837,7 @@ if (refund === null) {
 }
 ```
 
-Check the error's `name` rather than `instanceof`: an error that crossed from the host may not be an instance of your copy of the class, and neither is the stand-in a replay throws when you catch around `ctx.step.do` instead (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)). On the hosted platform, until it runs 0.6, `refund` on a provider without refunds throws a plain `Error` (`This payment provider does not support refunds.`), so this check doesn't match there yet and the step fails.
+Check the error's `name` rather than `instanceof`: an error that crossed from the host may not be an instance of your copy of the class, and neither is the stand-in a replay throws when you catch around `ctx.step.do` instead (see [catching a failed step](/docs/concepts/steps-and-replay/#catching-a-failed-step)). On the hosted platform the error has the same name and message, so the same check works there.
 
 ### PaymentEvent
 

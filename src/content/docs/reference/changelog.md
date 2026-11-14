@@ -121,6 +121,8 @@ These notes cover the hosted platform itself: the gateway, the MCP server, the d
 ### Not merged yet
 
 - A call that an idempotency key answers with an existing run no longer counts against runs per month or an agent's [per-token limits](/docs/concepts/agents/#limits). It still counts against the run rate and shows as a call in analytics. See [send idempotency keys](/docs/guides/best-practices/#send-idempotency-keys).
+- A run that failed with the actuator's own `ToolError` carries its code and details in [tool errors](/docs/guides/connect-your-agent/#tool-errors) as `tool: { code, details }`, beside `RUN_FAILED`, and the run page shows them. This takes effect once the platform runs 0.6.
+- `ctx.payment.refund` on a provider without refunds (Billplz, ToyyibPay) throws an error named `NotSupportedError`, which your code can catch; it used to arrive as a plain `Error`.
 - A run pinned to an earlier version whose configuration no longer fits that version's schema fails with an error that names both versions and says to fix the configuration or [retry the run](/docs/guides/retry-and-rollback/#retry-a-failed-run).
 
 ### Merged 7 November 2026, with 0.5.0
