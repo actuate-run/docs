@@ -256,7 +256,7 @@ Agents and webhook senders retry. Give the call a key that names the action, and
 - Use something stable such as `refund-<orderId>` or the sender's delivery ID, not a random value per attempt.
 - For callers that send no key, such as most chat clients, declare the input fields that identify a request with [`idempotencyKey`](/docs/reference/sdk/#idempotencykey), for example `["orderId"]`. A call over MCP or the run API that repeats their values returns the run that is still running or waiting, or that completed in the last 24 hours. See [key fields](/docs/concepts/mcp-and-openapi/#key-fields).
 
-A duplicate call returns the first run's record and starts no pass. Today, on the hosted platform, it still counts as one run against your runs per month and the run rate (and against an agent's [per-token limits](/docs/concepts/agents/#limits)), because the platform admits the call before the actuator looks up the key. So keys protect you from acting twice, but they don't make retries free.
+A duplicate call returns the first run's record and starts no pass. On the hosted platform it doesn't count against your runs per month or an agent's [per-token limits](/docs/concepts/agents/#limits), but it still takes a place in the plan's run rate, so a loop of retries is refused at that rate. The platform admits a call before the actuator looks up the key, so a duplicate that arrives while the run rate is full or the month's runs are used up is refused (`RATE_LIMITED` or `BUDGET_EXHAUSTED`) instead of returning its run.
 
 A key only matches the same key. When separate calls for the same thing can arrive with different keys, or none, check for earlier work in a step before acting:
 

@@ -235,6 +235,8 @@ The same object is in the result's `_meta["run.actuate/error"]`, for clients tha
 | `NOT_CANCELLABLE` | From `actuate_cancel_run`, when the run already finished, or another agent started it | `false` |
 | `INTERNAL` | Actuate could not complete the call | `true` |
 
+When the hosted platform runs 0.6, a run that failed with the actuator's own [`ToolError`](/docs/reference/sdk/#toolerror) will carry the actuator's code beside the platform's: the error stays `RUN_FAILED`, and the actuator's code never replaces it.
+
 Paused, suspended and full are not retryable. Only the owner can change them, so an agent should stop and say so rather than loop. A call to a tool that doesn't exist on the endpoint is a protocol error (`-32602`, "Unknown tool"), not a tool error.
 
 ## Find and cancel runs

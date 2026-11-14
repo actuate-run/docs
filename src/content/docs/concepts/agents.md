@@ -76,7 +76,7 @@ Agent "support-bot" reached its limit of 5 runs per hour of refund_order. Try ag
 The second line is the [tool error's](/docs/guides/connect-your-agent/#tool-errors) JSON, so an agent can wait `retryAfterSeconds` instead of retrying blindly. Over HTTP the same fields are in the body, and `retryAfterSeconds` is also sent as a `Retry-After` header.
 
 - The window slides. A call counts for the next 60 to 61 minutes, so a limit never lets through more than its value in any 60 minutes.
-- The platform checks agent limits after the plan's run rate and monthly budget, and only calls that pass all of them count toward the agent's limits.
+- The platform checks agent limits after the plan's run rate and monthly budget, and only calls that pass all of them count toward the agent's limits. A call that an idempotency key answers with an existing run doesn't count toward them either, though analytics show it as a call.
 - Changes take up to 30 seconds to reach every region.
 - An MCP connection keeps its limits for as long as it stays connected. If the app signs in again from scratch, the new connection starts with none.
 

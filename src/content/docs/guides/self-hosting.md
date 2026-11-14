@@ -316,6 +316,16 @@ Two helpers in `@actuate/runtime` 0.3 and later bring your own host closer to th
 
 `manager.pruneRuns(before, limit = 500)` deletes settled runs (`COMPLETED`, `FAILED`, `CANCELLED`) last updated before `before` (epoch ms), with their steps and logs, and returns how many it removed. It never touches your tables. Call it on a schedule to keep the journal small.
 
+## Upgrading the runtime
+
+The runtime keeps its own tables (the journal) in the actuator's database, next to yours, and from `@actuate/runtime` 0.6 they carry a version (`JOURNAL_SCHEMA_VERSION`, stored in `_actuate_meta`).
+
+- **Upgrading** is a deploy. The first time the new runtime opens the database, it brings the journal up to date in place, before anything else happens. Runs that were sleeping or waiting carry on, with their completed steps. Databases written by 0.1 to 0.5 have no version, and 0.6 upgrades and stamps them.
+- **Rolling back** to an older runtime after the database was upgraded doesn't work: the older runtime stops with `JournalVersionError` (`This actuator's database was written by a newer @actuate/runtime ...`) before it changes anything. Deploy the newer runtime again, and the database is as it was; runs whose wake-up came due in between wake the next time the actuator is called. A rollback from 0.6 to 0.5 isn't refused, because 0.5 doesn't check the version.
+- A runtime opens databases from its own major version and the one before. To cross two major versions, deploy the one in between first.
+
+See [the journal](/docs/reference/compatibility/#the-journal) in the compatibility policy.
+
 ## Backups
 
 Your data is in the Durable Object's SQLite storage on your account. Read it through `GET /tables/:name?format=csv`, or use your platform's backup tooling for Durable Objects.

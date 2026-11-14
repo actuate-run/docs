@@ -90,9 +90,15 @@ await ctx.step.do("charge", { retries: 5 }, async () => {
 });
 ```
 
+[`NotSupportedError`](/docs/reference/sdk/#notsupportederror) is a `NonRetryableError` too, so a provider method the provider doesn't offer, such as `ctx.payment.refund` on Billplz, fails the step on its first attempt.
+
+### ToolError
+
+When the caller should learn what went wrong and decide what to do, throw [`ToolError`](/docs/reference/sdk/#toolerror) instead, as in `throw new ToolError("CARD_DECLINED", "The card was declined.")`. Like `NonRetryableError`, it fails the step at once, without retries, and the run unless you catch it. The run's error also carries your code, whether calling again may help (`retryable`), and optional details. `retryable: true` is advice to the caller; it doesn't make the step retry. Requires `@actuate/sdk` and `@actuate/runtime` 0.6 or later.
+
 ### Catching a failed step
 
-You can catch a step failure and take another path. The journal records the failure, so on every replay the same step throws again with the same message and your code takes the same path. Catch it broadly, because on replays the runtime rethrows the error as a generic step failure that carries the original message, not as the original error class.
+You can catch a step failure and take another path. The journal records the failure, so on every replay the same step throws again and your code takes the same path. What a replay throws stands in for the original error: it has the same message and the same `name`, and for a [`ToolError`](/docs/reference/sdk/#toolerror) the same `code`, `retryable` and `details`, but it is not an instance of the original class. So decide on `err.name` or [`toolErrorInfo(err)`](/docs/reference/sdk/#toolerrorinfo), never on `instanceof`. This requires `@actuate/runtime` 0.6 or later: a step that failed under an earlier runtime replays with the name `StepFailedError` and only its message.
 
 ## Idempotency keys
 
@@ -101,7 +107,7 @@ Every step function receives a `StepInfo`:
 ```ts
 await ctx.step.do("refund", async ({ idempotencyKey, attempt }) => {
   ctx.log.info(`refund attempt ${attempt} (${idempotencyKey})`);
-  return ctx.payment.refund?.({ billId });
+  return ctx.payment.refund({ billId });
 });
 ```
 

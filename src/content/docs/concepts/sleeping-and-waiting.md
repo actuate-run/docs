@@ -78,7 +78,7 @@ As with a sleep, the runtime fixes the deadline the first time the run reaches t
 
 **Plan limits.** On a plan with a longest wait (the Sandbox allows 7 days), a `timeout` or `until` beyond it throws `ActuatorError` when the wait starts, so you find out instead of the run waking early. A wait with neither is open-ended and gets the plan's maximum. The same rule applies to the timeouts of `waitForApproval` and `waitForInput`.
 
-**On timeout `waitForEvent` resolves to `null`; it does not throw.** Always handle the `null` case. The runtime never delivers an event as `null`. An event posted with no body, or a `null` body, arrives as `{}`. So `null` from a wait always means the timeout passed.
+**On timeout `waitForEvent` resolves to `null`; it does not throw.** Always handle the `null` case. The runtime never delivers an event as `null`. An event posted with no body, or a `null` body, arrives as `{}`. So `null` from a wait always means the timeout passed. Test for it with `=== null`, as above, rather than `!payment`, because an event's payload can be `0`, `false` or `""`. The same holds for `waitForApproval` and `waitForInput`, and the [compatibility policy](/docs/reference/compatibility/#behaviour-you-can-rely-on) keeps it that way.
 
 ### Posting events
 

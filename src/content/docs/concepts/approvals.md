@@ -18,7 +18,7 @@ if (decision === null) return { status: "TIMED_OUT" };
 if (!decision.approved) return { status: "REJECTED" };
 
 await ctx.step.do("refund", ({ idempotencyKey }) =>
-  ctx.payment.refund?.({ billId: input.billId, amount: input.amount, idempotencyKey }),
+  ctx.payment.refund({ billId: input.billId, amount: input.amount, idempotencyKey }),
 );
 return { status: "REFUNDED" };
 ```

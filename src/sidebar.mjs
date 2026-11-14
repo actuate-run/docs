@@ -24,7 +24,7 @@ export const sidebar = [
   },
   {
     label: "Reference",
-    items: ["reference/sdk", "reference/cli", "reference/runtime-http", "reference/platform-api", "reference/limits", "reference/changelog"],
+    items: ["reference/sdk", "reference/cli", "reference/runtime-http", "reference/platform-api", "reference/limits", "reference/compatibility", "reference/changelog"],
   },
   {
     label: "Guides",

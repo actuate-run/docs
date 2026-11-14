@@ -75,7 +75,7 @@ There is no `/mcp` route, because the hosted platform's gateway serves the MCP e
 | --- | --- |
 | `status` | `RUNNING`, `WAITING`, `COMPLETED`, `FAILED` or `CANCELLED` |
 | `output` | The value `run` returned, once `COMPLETED` |
-| `error` | `{ name, message, stack? }`, once `FAILED` |
+| `error` | `{ name, message, stack?, code?, retryable?, details? }`, once `FAILED`. `code`, `retryable` and `details` are there when the actuator threw a [`ToolError`](/docs/reference/sdk/#toolerror) (`details` only when it had details that fit), and missing for any other error. Requires `@actuate/runtime` 0.6 or later |
 | `idempotencyKey` | The `Idempotency-Key` the run was started with, or `null` |
 | `wakeAt` | Epoch ms of the next scheduled wake (sleep, timeout, retry), or `null` |
 | `passes` | How many times `run` has executed |
@@ -84,6 +84,18 @@ There is no `/mcp` route, because the hosted platform's gateway serves the MCP e
 ### Secret values
 
 These routes hide config fields wrapped in [`secret()`](/docs/reference/sdk/#secret) (JSON Schema `"writeOnly": true`) in what they return about runs. Each occurrence of their values becomes `[secret]` in run records (`/run`, `/webhook`, `/runs`, `/runs/:runId`, including `output`, `error`, `steps` and `logs`), the approval queue, the approval and input pages, and the message sent to an approver. The values come from the config schema and `ACTUATE_CONFIG`, and there is nothing to set up. Stored step results keep the real values, so replays see them. The runtime redacts reads with the values configured now, and doesn't redact [`/tables`](#tables) at all. See [keys and tokens](/docs/concepts/capabilities/#keys-and-tokens) for what is caught.
+
+A run that failed with a `ToolError` reads like this, on `/run` and on every later read:
+
+```json
+"error": {
+  "name": "ToolError",
+  "message": "Slot S-14 is already booked.",
+  "code": "SLOT_TAKEN",
+  "retryable": false,
+  "details": { "slotId": "S-14" }
+}
+```
 
 On the hosted platform, run records also have `version` and, for runs an API token started, `trigger.agent`. See [Platform API](/docs/reference/platform-api/#run-records).
 

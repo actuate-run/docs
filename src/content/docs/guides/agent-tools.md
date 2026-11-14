@@ -47,7 +47,7 @@ export default defineActuator({
   // A retried call for the same order returns the first call's run, even without a key.
   idempotencyKey: ["orderId"],
   output: z.object({
-    status: z.enum(["REFUNDED", "REJECTED", "NOT_FOUND", "OVER_LIMIT", "UNSUPPORTED"]),
+    status: z.enum(["REFUNDED", "REJECTED", "NOT_FOUND", "OVER_LIMIT"]),
     refundId: z.string().optional(),
   }),
   capabilities: ["payment", "messaging"],
@@ -83,9 +83,8 @@ export default defineActuator({
 
     // Exactly once, with the provider's idempotency key as a backstop.
     const refund = await ctx.step.do("refund", ({ idempotencyKey }) =>
-      ctx.payment.refund?.({ billId: order.bill_id, amount: input.amount, reason: input.reason, idempotencyKey }) ?? null,
+      ctx.payment.refund({ billId: order.bill_id, amount: input.amount, reason: input.reason, idempotencyKey }),
     );
-    if (!refund) return { status: "UNSUPPORTED" as const };
 
     await ctx.step.do("audit-refunded", () =>
       ctx.db.sql`INSERT INTO refunds VALUES (${ctx.runId}, ${input.orderId}, ${input.amount}, ${input.reason}, ${refund.status}, ${refund.id})`,
@@ -102,6 +101,32 @@ What the model can and cannot do with this tool:
 - It cannot skip the approval. Above the threshold the run waits for a manager, and a timeout counts as a rejection.
 - It cannot refund twice for one retried call. A retry for the same order gets the first run's receipt, with or without a `_meta` idempotency key, and the `refund` step runs once per run. Some calls still start a second run for the same order. See [one action per order](#one-action-per-order).
 - Every outcome leaves a row in `refunds` that you can browse and export.
+
+On a payment provider without refunds (Billplz or ToyyibPay), `ctx.payment.refund` throws and the run fails, so use this tool with Stripe or Chip.
+
+## Errors an agent can act on
+
+The example returns `NOT_FOUND`, `OVER_LIMIT` and `REJECTED` as outcomes, in the output. Do the same for anything that is an answer rather than a failure: the agent gets a typed result, and the run is `COMPLETED`. A failed run shows as failed and, on the hosted platform, [alerts](/docs/guides/alerts/) you.
+
+When the run really can't do what was asked, and the agent should know why, throw [`ToolError`](/docs/reference/sdk/#toolerror) with a code it can branch on:
+
+```ts
+import { ToolError } from "@actuate/sdk";
+
+const bill = await ctx.step.do("check-bill", () => ctx.payment.getBill(order.bill_id));
+if (bill.status !== "paid") {
+  throw new ToolError("NOT_PAID", `Order ${input.orderId} has nothing to refund: its bill is ${bill.status}.`, {
+    details: { billStatus: bill.status },
+  });
+}
+```
+
+- The run fails, and its error carries `code`, `retryable` and `details` next to the message.
+- Set `retryable: true` only when the same call may work later with nobody changing anything, for example when a downstream service is busy. It defaults to `false`, which tells the agent not to loop on the call.
+- Thrown inside a step, it fails the step at once, without the step's retries.
+- Codes are yours, such as `CARD_DECLINED`. Say in the tool's `description` which codes it can return and what the agent should do about each.
+
+In 0.6.0 the code reaches callers of a self-hosted runtime's [run API](/docs/reference/runtime-http/#the-run-record) (`error.code`) and shows in `actuate run` and `actuate logs`. Hosted MCP tool errors carry it once the hosted platform runs 0.6, beside the platform's own `RUN_FAILED` (see [tool errors](/docs/guides/connect-your-agent/#tool-errors)).
 
 ## One action per order
 
@@ -160,5 +185,6 @@ In `run`, compute the capped amount and whether approval is needed, and return t
 - **Push rules into the schema.** Use enums over free strings, `min`/`max` on numbers, and `regex` on phone numbers and IDs. Rules the schema cannot express go in `run` before the first side effect.
 - **Look up, don't trust.** Take IDs from the model and load amounts, addresses and account details from your database or provider inside a step.
 - **Return a small, typed result.** Set `output`, so the model gets a predictable shape and the run fails if your code returns something else.
+- **Fail with a code.** For a real failure the agent can act on, throw a [`ToolError`](#errors-an-agent-can-act-on) rather than a bare `Error`.
 - **Gate what is irreversible.** For money, messages to customers and deletions, put a `waitForApproval` in front, at least above a threshold.
 - **Say when a tool can wait.** If a call may pause for a person or a payment, say so in the description so the model doesn't assume an immediate result.
