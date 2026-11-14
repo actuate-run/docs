@@ -118,6 +118,11 @@ Committed secrets.
 
 These notes cover the hosted platform itself: the gateway, the MCP server, the dashboard and the plans. actuate.run hasn't launched yet, so none of these changes is live there. The sections follow when the changes were merged into the platform. The platform runs the package version it was last updated to, so a new SDK feature works there only once the platform updates to that version.
 
+### Not merged yet
+
+- A call that an idempotency key answers with an existing run no longer counts against runs per month or an agent's [per-token limits](/docs/concepts/agents/#limits). It still counts against the run rate and shows as a call in analytics. See [send idempotency keys](/docs/guides/best-practices/#send-idempotency-keys).
+- A run pinned to an earlier version whose configuration no longer fits that version's schema fails with an error that names both versions and says to fix the configuration or [retry the run](/docs/guides/retry-and-rollback/#retry-a-failed-run).
+
 ### Merged 7 November 2026, with 0.5.0
 
 - Calls over MCP and the run API that send no key of their own get one from the actuator's [key fields](/docs/concepts/mcp-and-openapi/#key-fields). **Start run**, `actuate run` and **Run again** never use them. Deploys and rollbacks refuse key fields that aren't required, top-level scalar input fields.

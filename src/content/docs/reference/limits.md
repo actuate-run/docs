@@ -62,6 +62,7 @@ The isolate's environment contains only your declared capability clients. There 
 - The platform checks the SQLite total when a run starts, and the per-actuator size before each run and after every statement.
 - The free Sandbox has no messaging, payment or LLM providers. It is for building and exposing MCP tools, not for sending messages or taking payments.
 - The run rate is a sliding window per account.
+- A call that an [idempotency key](/docs/guides/best-practices/#send-idempotency-keys) answers with an existing run counts against the run rate, but not against runs per month. Neither does a start the platform refuses after admitting it (the actuator is paused, or its database is full).
 - **Actuators** count every actuator you have deployed, paused ones included. [Deleting one](/docs/reference/platform-api/#deleting-an-actuator) frees its place at once; its usage this month still counts.
 - A [retry](/docs/guides/retry-and-rollback/) from the failed step, each run in a bulk retry, and **Run again** each count as one run, against runs per month and the run rate. A rollback counts as a deploy.
 - The platform emails [alerts](/docs/guides/alerts/) on every plan, and Maker and Agency can also send them to one of your messaging channels. Alert emails (test alerts included) are capped per day (UTC). The last one says so, and alerts after it still reach your messaging channel and the dashboard. The platform keeps [agent analytics](/docs/concepts/agents/#analytics) for the period above.

@@ -190,7 +190,7 @@ The caller can also put an idempotency key in the call's `_meta`:
 - Keys are per actuator, so the same key on two tools starts two runs. The server also keeps MCP keys apart from HTTP `Idempotency-Key` values, so a key sent over MCP never matches one sent to `/run`.
 - Without a key, a session-based client (2025-11-25 and earlier) that repeats a call with the same JSON-RPC `id` in the same session gets the first call's receipt. The server checks that first, then the key fields. A 2026-07-28 client has no session, and JSON-RPC IDs are reused across processes, so without a key only the key fields catch a retry. A tool without them starts a new run for every call.
 
-The same guarantees are available over plain HTTP, with the [`Idempotency-Key` header](/docs/concepts/triggers/#idempotency-key) and the same key fields. A duplicate returns the first run but still counts as a run against your plan; see [send idempotency keys](/docs/guides/best-practices/#send-idempotency-keys).
+The same guarantees are available over plain HTTP, with the [`Idempotency-Key` header](/docs/concepts/triggers/#idempotency-key) and the same key fields. A duplicate returns the first run. It doesn't count against your runs per month, but it does count against the run rate; see [send idempotency keys](/docs/guides/best-practices/#send-idempotency-keys).
 
 ## Self-hosted
 
